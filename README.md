@@ -32,9 +32,73 @@ The single `@Transactional` in the entire project lives in **one decorator class
 
 ## Status
 
-✅ **Implementation complete (v0.1.0).** Build with `cargo install --path .` (or via `/install` skill in this repo). The full design spec is at:
+✅ **Implementation complete (v0.1.0).** See [Install](#install) below. The full design spec is at:
 
 - [`docs/superpowers/specs/2026-05-08-run-bob-design.md`](docs/superpowers/specs/2026-05-08-run-bob-design.md)
+
+## Install
+
+### From source (requires Rust ≥ 1.75)
+
+```bash
+git clone https://github.com/amwtke/run-bob
+cd run-bob
+cargo install --path .
+```
+
+After install, `run-bob` is on your `$PATH` (`~/.cargo/bin/run-bob`).
+
+### Update an existing install
+
+```bash
+cd run-bob
+git pull --ff-only origin master
+cargo test          # verify everything still passes
+cargo install --path .
+```
+
+### Via Claude Code `/install` skill (recommended for contributors)
+
+When you open **this repo** in Claude Code, a local skill is available:
+
+```
+/install
+```
+
+It does end-to-end in one shot:
+
+1. **Sync code** — `git pull --ff-only origin master` (only if working tree clean)
+2. **Toolchain check** — verify Rust ≥ 1.75
+3. **Build** — `cargo build --release`
+4. **Test** — `cargo test` (15 integration tests must all pass)
+5. **Install** — `cargo install --path .` → `~/.cargo/bin/run-bob`
+6. **Verify** — `run-bob --version` / `run-bob --help`
+
+**Why use the skill instead of bare `cargo install`?** The skill enforces "test before install" — it refuses to install a binary whose test suite is failing, so a broken `git pull` won't quietly land in your `$PATH`. It also handles uncommitted-local-changes safely (asks before stashing).
+
+The skill only operates inside the `run-bob` repo — it won't touch your other Rust projects, and it won't edit your shell rc. See [`.claude/skills/install/SKILL.md`](.claude/skills/install/SKILL.md) for the exact procedure.
+
+### Pre-built binary
+
+Not yet provided. Build from source for now.
+
+## Usage
+
+```bash
+cd your-new-project/    # or an empty directory
+run-bob init            # installs the harness assets
+run-bob status          # verify install
+```
+
+Then open Claude Code in that directory and start the workflow with `/bob-identify <your business description>`. See [`README-RUN-BOB.md`](src/templates/root/README-RUN-BOB.md) (installed by `run-bob init`) for the in-project guide.
+
+Flags:
+
+```bash
+run-bob init --force    # overwrite existing files
+run-bob init --minimal  # only install the 3 skills, skip anchor docs / ArchUnit / shared
+run-bob init --dir ./api  # initialize a subdirectory
+```
 
 ## Three modes
 
