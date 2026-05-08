@@ -32,11 +32,9 @@ The single `@Transactional` in the entire project lives in **one decorator class
 
 ## Status
 
-🚧 **In design phase.** The full design spec is at:
+✅ **Implementation complete (v0.1.0).** Build with `cargo install --path .` (or via `/install` skill in this repo). The full design spec is at:
 
 - [`docs/superpowers/specs/2026-05-08-run-bob-design.md`](docs/superpowers/specs/2026-05-08-run-bob-design.md)
-
-Implementation will follow via `superpowers:writing-plans` → `superpowers:executing-plans` (TDD).
 
 ## Three modes
 
