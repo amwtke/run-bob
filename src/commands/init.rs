@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 const ROOT_CLAUDE_MD: &str = include_str!("../templates/root/CLAUDE.md");
 const ROOT_ARCHITECTURE: &str = include_str!("../templates/root/ARCHITECTURE.md");
 const ROOT_README: &str = include_str!("../templates/root/README-RUN-BOB.md");
+const ROOT_ARCHUNIT_TEST: &str = include_str!("../templates/root/CleanArchitectureTest.java");
 
 pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
     let target = PathBuf::from(target_dir)
@@ -34,6 +35,7 @@ pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
         install_root_file(&target, "CLAUDE.md", ROOT_CLAUDE_MD, force)?;
         install_root_file(&target, "ARCHITECTURE.md", ROOT_ARCHITECTURE, force)?;
         install_root_file(&target, "README-RUN-BOB.md", ROOT_README, force)?;
+        install_archunit_test(&target, force)?;
     }
 
     print_next_steps(minimal);
@@ -54,6 +56,18 @@ fn install_skill(target: &Path, name: &str, content: &str, force: bool) -> Resul
 fn install_root_file(target: &Path, name: &str, content: &str, force: bool) -> Result<()> {
     let path = target.join(name);
     write_file(&path, content, force, name)
+}
+
+fn install_archunit_test(target: &Path, force: bool) -> Result<()> {
+    let path = target
+        .join("src").join("test").join("java")
+        .join("architecture").join("CleanArchitectureTest.java");
+    write_file(
+        &path,
+        ROOT_ARCHUNIT_TEST,
+        force,
+        "src/test/java/architecture/CleanArchitectureTest.java",
+    )
 }
 
 /// Install a Java file at an arbitrary path under target.

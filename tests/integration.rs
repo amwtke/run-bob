@@ -117,3 +117,44 @@ fn init_creates_readme_run_bob_with_3_modes() {
         assert!(content.contains(token), "README-RUN-BOB.md must contain {}", token);
     }
 }
+
+#[test]
+fn init_installs_archunit_test_at_correct_path() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+
+    let archunit = target
+        .join("src").join("test").join("java")
+        .join("architecture").join("CleanArchitectureTest.java");
+    assert!(archunit.is_file(), "expected ArchUnit template at {}", archunit.display());
+
+    let content = std::fs::read_to_string(&archunit).unwrap();
+    assert!(content.contains("@ArchTest"), "must contain @ArchTest");
+    assert!(content.contains("layered_dependencies"), "must include layered_dependencies");
+    assert!(
+        content.contains("entity_pure_of_frameworks"),
+        "must include entity_pure_of_frameworks rule"
+    );
+    assert!(
+        content.contains("usecase_pure_of_frameworks"),
+        "must include usecase_pure_of_frameworks rule"
+    );
+    assert!(
+        content.contains("FORBIDDEN_IN_INNER"),
+        "must use parameterized FORBIDDEN_IN_INNER array"
+    );
+    assert!(
+        content.contains("transactional_methods_only_in_decorator"),
+        "must include transactional decorator rule"
+    );
+    assert!(
+        content.contains("no_event_listener_unless_decided"),
+        "must include R10-bob no_event_listener_unless_decided rule"
+    );
+    assert!(
+        content.contains("packages = \"com.example\""),
+        "default @AnalyzeClasses must use com.example to cover shared + business"
+    );
+}

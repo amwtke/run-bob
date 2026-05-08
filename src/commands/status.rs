@@ -26,6 +26,10 @@ pub fn run(target_dir: &str) -> Result<()> {
     all_ok &= check(&target, "README-RUN-BOB.md");
 
     println!();
+    println!("{}", "ArchUnit guards".bold());
+    all_ok &= check(&target, "src/test/java/architecture/CleanArchitectureTest.java");
+
+    println!();
     if all_ok {
         println!("{} {}", "✓".green().bold(), "harness is complete.".green());
     } else {
