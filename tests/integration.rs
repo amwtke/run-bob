@@ -95,3 +95,25 @@ fn init_creates_claude_md_with_r0() {
         "CLAUDE.md must have ## 技术栈约定 section"
     );
 }
+
+#[test]
+fn init_creates_readme_run_bob_with_3_modes() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+
+    let p = target.join("README-RUN-BOB.md");
+    assert!(p.is_file(), "README-RUN-BOB.md missing");
+    let content = std::fs::read_to_string(&p).unwrap();
+    for token in &[
+        "/bob-identify",
+        "/bob-onion",
+        "/bob-spec",
+        "ARCHITECTURE.md",
+        "G(",     // G mode
+        "B1",     // B1 mode
+        "B2",     // B2 mode
+    ] {
+        assert!(content.contains(token), "README-RUN-BOB.md must contain {}", token);
+    }
+}

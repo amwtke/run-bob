@@ -23,6 +23,7 @@ pub fn run(target_dir: &str) -> Result<()> {
     println!("{}", "Harness documents".bold());
     all_ok &= check(&target, "CLAUDE.md");
     all_ok &= check(&target, "ARCHITECTURE.md");
+    all_ok &= check(&target, "README-RUN-BOB.md");
 
     println!();
     if all_ok {

@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 const ROOT_CLAUDE_MD: &str = include_str!("../templates/root/CLAUDE.md");
 const ROOT_ARCHITECTURE: &str = include_str!("../templates/root/ARCHITECTURE.md");
+const ROOT_README: &str = include_str!("../templates/root/README-RUN-BOB.md");
 
 pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
     let target = PathBuf::from(target_dir)
@@ -32,6 +33,7 @@ pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
         println!("{}", "Installing harness documents...".bold());
         install_root_file(&target, "CLAUDE.md", ROOT_CLAUDE_MD, force)?;
         install_root_file(&target, "ARCHITECTURE.md", ROOT_ARCHITECTURE, force)?;
+        install_root_file(&target, "README-RUN-BOB.md", ROOT_README, force)?;
     }
 
     print_next_steps(minimal);
