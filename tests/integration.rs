@@ -158,3 +158,60 @@ fn init_installs_archunit_test_at_correct_path() {
         "default @AnalyzeClasses must use com.example to cover shared + business"
     );
 }
+
+#[test]
+fn init_installs_shared_usecase_interface() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+
+    let p = target
+        .join("src").join("main").join("java")
+        .join("com").join("example").join("shared")
+        .join("usecase").join("UseCase.java");
+    assert!(p.is_file(), "expected UseCase.java at {}", p.display());
+
+    let content = std::fs::read_to_string(&p).unwrap();
+    assert!(
+        content.contains("package com.example.shared.usecase;"),
+        "must declare correct package"
+    );
+    assert!(
+        content.contains("public interface UseCase<C, R>"),
+        "must declare generic UseCase<C, R> interface"
+    );
+    assert!(content.contains("R execute(C cmd)"), "must declare execute method");
+    // Must NOT contain Spring or any framework import
+    assert!(!content.contains("org.springframework"), "UseCase.java must not import Spring");
+    assert!(!content.contains("@Transactional"), "UseCase.java must not have @Transactional");
+}
+
+#[test]
+fn init_installs_transactional_decorator() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+
+    let p = target
+        .join("src").join("main").join("java")
+        .join("com").join("example").join("shared")
+        .join("framework").join("transaction").join("TransactionalUseCaseDecorator.java");
+    assert!(p.is_file(), "expected decorator at {}", p.display());
+
+    let content = std::fs::read_to_string(&p).unwrap();
+    assert!(
+        content.contains("package com.example.shared.framework.transaction;"),
+        "must declare correct package"
+    );
+    assert!(content.contains("@Transactional"), "decorator must have @Transactional");
+    assert!(
+        content.contains("implements UseCase<C, R>"),
+        "decorator must implement UseCase<C, R>"
+    );
+    assert!(
+        content.contains("import org.springframework.transaction.annotation.Transactional;"),
+        "decorator must import Spring's @Transactional"
+    );
+}

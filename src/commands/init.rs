@@ -9,6 +9,8 @@ const ROOT_CLAUDE_MD: &str = include_str!("../templates/root/CLAUDE.md");
 const ROOT_ARCHITECTURE: &str = include_str!("../templates/root/ARCHITECTURE.md");
 const ROOT_README: &str = include_str!("../templates/root/README-RUN-BOB.md");
 const ROOT_ARCHUNIT_TEST: &str = include_str!("../templates/root/CleanArchitectureTest.java");
+const SHARED_USECASE: &str = include_str!("../templates/root/UseCase.java");
+const SHARED_DECORATOR: &str = include_str!("../templates/root/TransactionalUseCaseDecorator.java");
 
 pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
     let target = PathBuf::from(target_dir)
@@ -36,6 +38,11 @@ pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
         install_root_file(&target, "ARCHITECTURE.md", ROOT_ARCHITECTURE, force)?;
         install_root_file(&target, "README-RUN-BOB.md", ROOT_README, force)?;
         install_archunit_test(&target, force)?;
+
+        println!();
+        println!("{}", "Installing shared Java skeletons...".bold());
+        install_shared_usecase(&target, force)?;
+        install_shared_decorator(&target, force)?;
     }
 
     print_next_steps(minimal);
@@ -70,8 +77,28 @@ fn install_archunit_test(target: &Path, force: bool) -> Result<()> {
     )
 }
 
+fn install_shared_usecase(target: &Path, force: bool) -> Result<()> {
+    install_java_file(
+        target,
+        &["src", "main", "java", "com", "example", "shared", "usecase", "UseCase.java"],
+        SHARED_USECASE,
+        force,
+    )
+}
+
+fn install_shared_decorator(target: &Path, force: bool) -> Result<()> {
+    install_java_file(
+        target,
+        &[
+            "src", "main", "java", "com", "example", "shared",
+            "framework", "transaction", "TransactionalUseCaseDecorator.java",
+        ],
+        SHARED_DECORATOR,
+        force,
+    )
+}
+
 /// Install a Java file at an arbitrary path under target.
-#[allow(dead_code)]
 fn install_java_file(
     target: &Path,
     rel_path: &[&str],
