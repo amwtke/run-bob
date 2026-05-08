@@ -36,3 +36,28 @@ fn init_help_lists_flags() {
         assert!(stdout.contains(flag), "expected {} flag in help: {}", flag, stdout);
     }
 }
+
+#[test]
+fn init_creates_architecture_md() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    let status = Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("run run-bob init");
+    assert!(status.success(), "run-bob init failed");
+
+    let p = target.join("ARCHITECTURE.md");
+    assert!(p.is_file(), "missing {}", p.display());
+    let content = std::fs::read_to_string(&p).unwrap();
+    assert!(
+        content.contains("# 架构(Bob 4 环)"),
+        "ARCHITECTURE.md must have Bob 4-ring header"
+    );
+    assert!(
+        content.contains("Single Source of Truth"),
+        "ARCHITECTURE.md must declare itself as SSoT"
+    );
+}

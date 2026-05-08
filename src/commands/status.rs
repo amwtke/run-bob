@@ -20,10 +20,8 @@ pub fn run(target_dir: &str) -> Result<()> {
 
     let mut all_ok = true;
 
-    // Skill / harness / shared / archunit checks will be wired in subsequent tasks.
-    // For now, just print a stub.
-    println!("{}", "(no checks wired yet — bootstrap stage)".bright_black());
-    let _ = (target, &mut all_ok);
+    println!("{}", "Harness documents".bold());
+    all_ok &= check(&target, "ARCHITECTURE.md");
 
     println!();
     if all_ok {
@@ -40,7 +38,6 @@ pub fn run(target_dir: &str) -> Result<()> {
     Ok(())
 }
 
-#[allow(dead_code)]
 fn check(target: &Path, rel: &str) -> bool {
     let p = target.join(rel);
     if p.is_file() {

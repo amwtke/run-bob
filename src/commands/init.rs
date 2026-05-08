@@ -5,7 +5,7 @@ use colored::*;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-// Templates will be embedded here as include_str!() in subsequent tasks.
+const ROOT_ARCHITECTURE: &str = include_str!("../templates/root/ARCHITECTURE.md");
 
 pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
     let target = PathBuf::from(target_dir)
@@ -27,7 +27,10 @@ pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
     }
     println!();
 
-    // Skill / template installation will be wired in subsequent tasks.
+    if !minimal {
+        println!("{}", "Installing harness documents...".bold());
+        install_root_file(&target, "ARCHITECTURE.md", ROOT_ARCHITECTURE, force)?;
+    }
 
     print_next_steps(minimal);
 
@@ -44,7 +47,6 @@ fn install_skill(target: &Path, name: &str, content: &str, force: bool) -> Resul
 }
 
 /// Install a root-level file.
-#[allow(dead_code)]
 fn install_root_file(target: &Path, name: &str, content: &str, force: bool) -> Result<()> {
     let path = target.join(name);
     write_file(&path, content, force, name)
