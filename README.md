@@ -84,21 +84,114 @@ Not yet provided. Build from source for now.
 
 ## Usage
 
+### Bootstrap a project
+
 ```bash
 cd your-new-project/    # or an empty directory
-run-bob init            # installs the harness assets
-run-bob status          # verify install
+run-bob init
 ```
 
-Then open Claude Code in that directory and start the workflow with `/bob-identify <your business description>`. See [`README-RUN-BOB.md`](src/templates/root/README-RUN-BOB.md) (installed by `run-bob init`) for the in-project guide.
+This creates:
 
-Flags:
+```
+your-new-project/
+├── .claude/
+│   └── skills/
+│       ├── bob-identify/SKILL.md     # 🔍 identity test (5-question decision tree)
+│       ├── bob-onion/SKILL.md        # 🧅 4-ring design + ARCHITECTURE.md SSoT
+│       └── bob-spec/SKILL.md         # 📝 spec generation → Superpowers handoff
+├── CLAUDE.md                          # 🛡 project-level hard rules (R0-R12)
+├── ARCHITECTURE.md                    # 📘 4-ring architecture SSoT
+├── README-RUN-BOB.md                  # 📖 in-project user guide
+├── docs/
+│   ├── bob/                           # identify/onion intermediate notes
+│   └── specs/                         # bob-spec outputs
+└── src/
+    ├── main/java/com/example/shared/
+    │   ├── usecase/UseCase.java                            # generic UseCase<C, R>
+    │   └── framework/transaction/
+    │       └── TransactionalUseCaseDecorator.java          # the only @Transactional
+    └── test/java/architecture/
+        └── CleanArchitectureTest.java                      # ArchUnit guard
+```
+
+### Flags
 
 ```bash
-run-bob init --force    # overwrite existing files
-run-bob init --minimal  # only install the 3 skills, skip anchor docs / ArchUnit / shared
+run-bob init --force      # overwrite existing files
+run-bob init --minimal    # only install the 3 skills (skip anchor docs / ArchUnit / shared)
 run-bob init --dir ./api  # initialize a subdirectory
 ```
+
+### Check harness status
+
+```bash
+run-bob status
+```
+
+Prints a green/red checklist of every required asset (3 skills + 3 anchor docs + ArchUnit + 2 shared Java files + 2 working dirs).
+
+### The three skills
+
+After `run-bob init`, open Claude Code in that directory and use these in order:
+
+#### 🔍 `/bob-identify <business description>` (or `--refactor` / new-feature description)
+Identity test. Runs the **5-question decision tree** on every concept / import / annotation in your business description (or existing code, or new feature) and classifies each as **CORE / ADAPTER / FRAMEWORK / TOOL / 违规**. Auto-detects mode G (greenfield) / B1 (full refactor) / B2 (clean island for incremental new features). Output: `docs/bob/01-identity-*.md`.
+
+#### 🧅 `/bob-onion`
+4-ring architecture design. Reads the identity table, designs the 4 rings (entity / usecase / adapter / framework), lists ports + Entity state machines + decorator wiring, and **updates `ARCHITECTURE.md` (the SSoT)**. Also writes back project-specific entries to `CleanArchitectureTest.java`'s `FORBIDDEN_IN_INNER` array.
+
+#### 📝 `/bob-spec <use case>` (or `--query` / `--refactor`)
+Per-use-case spec. Reads `ARCHITECTURE.md`, produces a spec with **Given-When-Then scenarios**, full Java code stubs (Command / Result / UseCase POJO / Entity method / framework Config / Controller), Guardrails for Superpowers, and "open questions for Superpowers" (tech-stack decisions). Output: `docs/specs/spec-*.md`. Three templates: command / query / refactor.
+
+### The two anchor documents
+
+#### 🛡 `CLAUDE.md` — project-level Claude Code rules
+Hard rules **R0-R12** that constrain every code generation in this project:
+- R0: 5-question decision tree is the meta-rule (R7-R12 are its instances)
+- R7: 4-ring package structure (entity/usecase/adapter/framework)
+- R8: only one `@Transactional` (in `TransactionalUseCaseDecorator`)
+- R9: anti-pattern hard list (no Spring/SLF4J/Jakarta/Lombok in inner rings; no `LocalDateTime.now()` in Entity)
+- R10-bob: cross-context / async = upgrade trigger (refuses Domain Event by default)
+- R12: B2 clean-island rule (new feature must be γ even if surrounded by legacy)
+
+#### 📘 `ARCHITECTURE.md` — 4-ring architecture SSoT
+The Single Source of Truth: bounded context, **port inventory**, **Entity state machines**, UseCase list, project-specific gadget catalog, ADRs. **Every class name, method name, and test description in the codebase must reference this document.** Managed exclusively by `/bob-onion`.
+
+### A complete walkthrough (G mode)
+
+```bash
+# 1. Bootstrap once
+mkdir my-order-system && cd my-order-system
+run-bob init
+
+# 2. Open Claude Code in this directory, then run the skills:
+> /bob-identify 订单系统:用户支付订单,扣库存,发短信通知。已支付订单不能再支付。
+
+# Claude runs the 5-question decision tree, classifies Order/PaymentGateway/SLF4J/...
+# → docs/bob/01-identity-order.md
+
+> /bob-onion
+
+# Claude designs 4 rings + port inventory + Order state machine
+# → updates ARCHITECTURE.md (SSoT)
+
+> /bob-spec PayOrder
+
+# Claude generates Given-When-Then spec + Java code stubs
+# → docs/specs/spec-1-pay-order.md
+
+# 3. First-time tech-stack decision (Superpowers):
+> Run superpowers:brainstorming based on the open questions in spec-1.
+> Confirm the stack and write back to CLAUDE.md ## 技术栈约定.
+
+# 4. Implementation flow (Superpowers):
+> superpowers:writing-plans → executing-plans (TDD) → finishing-a-development-branch
+
+# 5. For the next use case, jump straight back to /bob-spec — the stack is decided.
+```
+
+See [`README-RUN-BOB.md`](src/templates/root/README-RUN-BOB.md) (installed by `run-bob init`) for the full in-project guide with FAQ.
 
 ## Three modes
 
