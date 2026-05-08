@@ -309,3 +309,110 @@ fn init_creates_bob_spec_skill() {
         assert!(content.contains(token), "bob-spec must mention {}", token);
     }
 }
+
+#[test]
+fn init_creates_working_directories() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+
+    assert!(target.join("docs").join("bob").is_dir(), "docs/bob/ missing");
+    assert!(target.join("docs").join("specs").is_dir(), "docs/specs/ missing");
+}
+
+#[test]
+fn init_minimal_skips_archunit_and_shared_and_anchors() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    Command::new(run_bob_bin())
+        .args(["init", "--minimal", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init --minimal");
+
+    // Skills must still be installed
+    for skill in &["bob-identify", "bob-onion", "bob-spec"] {
+        let p = target.join(".claude").join("skills").join(skill).join("SKILL.md");
+        assert!(p.is_file(), "minimal must still install skill {}", skill);
+    }
+
+    // Anchor docs must NOT be installed
+    for f in &["CLAUDE.md", "ARCHITECTURE.md", "README-RUN-BOB.md"] {
+        assert!(
+            !target.join(f).exists(),
+            "minimal must not install {}",
+            f
+        );
+    }
+
+    // ArchUnit must NOT be installed
+    assert!(
+        !target.join("src").join("test").join("java").join("architecture")
+            .join("CleanArchitectureTest.java").exists(),
+        "minimal must not install ArchUnit"
+    );
+
+    // Shared骨架 must NOT be installed
+    assert!(
+        !target.join("src").join("main").join("java").join("com").join("example")
+            .join("shared").join("usecase").join("UseCase.java").exists(),
+        "minimal must not install UseCase.java"
+    );
+    assert!(
+        !target.join("src").join("main").join("java").join("com").join("example")
+            .join("shared").join("framework").join("transaction")
+            .join("TransactionalUseCaseDecorator.java").exists(),
+        "minimal must not install TransactionalUseCaseDecorator.java"
+    );
+
+    // Working directories must NOT be created in --minimal
+    assert!(!target.join("docs").join("bob").exists(), "minimal must not create docs/bob/");
+    assert!(!target.join("docs").join("specs").exists(), "minimal must not create docs/specs/");
+}
+
+#[test]
+fn status_reports_complete_after_full_init() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+
+    let output = Command::new(run_bob_bin())
+        .args(["status", "--dir"])
+        .arg(target)
+        .output()
+        .expect("status");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert!(stdout.contains("harness is complete"), "got:\n{}", stdout);
+    for token in &[
+        "bob-identify",
+        "bob-onion",
+        "bob-spec",
+        "CLAUDE.md",
+        "ARCHITECTURE.md",
+        "README-RUN-BOB.md",
+        "CleanArchitectureTest.java",
+        "UseCase.java",
+        "TransactionalUseCaseDecorator.java",
+        "docs/bob",
+        "docs/specs",
+    ] {
+        assert!(stdout.contains(token), "status must list {}; got:\n{}", token, stdout);
+    }
+}
+
+#[test]
+fn status_flags_missing_after_minimal_init() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    Command::new(run_bob_bin()).args(["init", "--minimal", "--dir"]).arg(target).status().expect("init");
+
+    let output = Command::new(run_bob_bin())
+        .args(["status", "--dir"])
+        .arg(target)
+        .output()
+        .expect("status");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("some assets are missing"), "got:\n{}", stdout);
+}

@@ -51,6 +51,13 @@ pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
         println!("{}", "Installing shared Java skeletons...".bold());
         install_shared_usecase(&target, force)?;
         install_shared_decorator(&target, force)?;
+
+        println!();
+        println!("{}", "Creating working directories...".bold());
+        ensure_dir(&target.join("docs").join("bob"))?;
+        ensure_dir(&target.join("docs").join("specs"))?;
+        crate::success("docs/bob/   (identify & onion intermediate notes)");
+        crate::success("docs/specs/ (bob-spec outputs → Superpowers inputs)");
     }
 
     print_next_steps(minimal);

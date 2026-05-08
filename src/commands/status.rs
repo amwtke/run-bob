@@ -41,6 +41,11 @@ pub fn run(target_dir: &str) -> Result<()> {
     all_ok &= check(&target, "src/main/java/com/example/shared/framework/transaction/TransactionalUseCaseDecorator.java");
 
     println!();
+    println!("{}", "Working directories".bold());
+    all_ok &= check_dir(&target, "docs/bob");
+    all_ok &= check_dir(&target, "docs/specs");
+
+    println!();
     if all_ok {
         println!("{} {}", "✓".green().bold(), "harness is complete.".green());
     } else {
@@ -66,7 +71,6 @@ fn check(target: &Path, rel: &str) -> bool {
     }
 }
 
-#[allow(dead_code)]
 fn check_dir(target: &Path, rel: &str) -> bool {
     let p = target.join(rel);
     if p.is_dir() {
