@@ -11,6 +11,7 @@ const ROOT_README: &str = include_str!("../templates/root/README-RUN-BOB.md");
 const ROOT_ARCHUNIT_TEST: &str = include_str!("../templates/root/CleanArchitectureTest.java");
 const SHARED_USECASE: &str = include_str!("../templates/root/UseCase.java");
 const SHARED_DECORATOR: &str = include_str!("../templates/root/TransactionalUseCaseDecorator.java");
+const SKILL_BOB_IDENTIFY: &str = include_str!("../templates/skills/bob-identify.md");
 
 pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
     let target = PathBuf::from(target_dir)
@@ -32,6 +33,9 @@ pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
     }
     println!();
 
+    println!("{}", "Installing skills...".bold());
+    install_skill(&target, "bob-identify", SKILL_BOB_IDENTIFY, force)?;
+
     if !minimal {
         println!("{}", "Installing harness documents...".bold());
         install_root_file(&target, "CLAUDE.md", ROOT_CLAUDE_MD, force)?;
@@ -51,7 +55,6 @@ pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
 }
 
 /// Install a skill as `.claude/skills/<name>/SKILL.md`.
-#[allow(dead_code)]
 fn install_skill(target: &Path, name: &str, content: &str, force: bool) -> Result<()> {
     let skill_dir = target.join(".claude").join("skills").join(name);
     ensure_dir(&skill_dir)?;
@@ -130,7 +133,6 @@ fn write_file(path: &Path, content: &str, force: bool, display: &str) -> Result<
 }
 
 /// Make sure a directory exists.
-#[allow(dead_code)]
 fn ensure_dir(path: &Path) -> Result<()> {
     fs::create_dir_all(path)
         .with_context(|| format!("Failed to create directory {}", path.display()))

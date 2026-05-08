@@ -20,6 +20,10 @@ pub fn run(target_dir: &str) -> Result<()> {
 
     let mut all_ok = true;
 
+    println!("{}", "Skills".bold());
+    all_ok &= check(&target, ".claude/skills/bob-identify/SKILL.md");
+
+    println!();
     println!("{}", "Harness documents".bold());
     all_ok &= check(&target, "CLAUDE.md");
     all_ok &= check(&target, "ARCHITECTURE.md");

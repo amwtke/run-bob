@@ -215,3 +215,37 @@ fn init_installs_transactional_decorator() {
         "decorator must import Spring's @Transactional"
     );
 }
+
+#[test]
+fn init_creates_bob_identify_skill() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-identify").join("SKILL.md");
+    assert!(p.is_file(), "bob-identify SKILL.md missing");
+    let content = std::fs::read_to_string(&p).unwrap();
+
+    // YAML frontmatter
+    assert!(content.starts_with("---"), "must start with YAML frontmatter");
+    assert!(content.contains("name: bob-identify"), "frontmatter name");
+    assert!(content.contains("description:"), "frontmatter description");
+
+    // Required sections
+    for token in &[
+        "5 问决策树",
+        "Q1",
+        "Q2",
+        "Q3",
+        "Q4",
+        "Q5",
+        "G",
+        "B1",
+        "B2",
+        "推测",
+        "推荐",
+        "清洁孤岛",
+    ] {
+        assert!(content.contains(token), "bob-identify must mention {}", token);
+    }
+}
