@@ -154,7 +154,7 @@ public interface OrderRepository {
 
 > **assistant**:
 >
-> **推测装饰器形态**(沿用 ddd-run R8 + Bob 严派):
+> **推测装饰器形态**(Bob 严派 + CLAUDE.md R8):
 >
 > ```java
 > // shared/framework/transaction/TransactionalUseCaseDecorator.java —— 全工程唯一 @Transactional
