@@ -249,3 +249,33 @@ fn init_creates_bob_identify_skill() {
         assert!(content.contains(token), "bob-identify must mention {}", token);
     }
 }
+
+#[test]
+fn init_creates_bob_onion_skill() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-onion").join("SKILL.md");
+    assert!(p.is_file(), "bob-onion SKILL.md missing");
+    let content = std::fs::read_to_string(&p).unwrap();
+
+    assert!(content.starts_with("---"));
+    assert!(content.contains("name: bob-onion"));
+
+    for token in &[
+        "ARCHITECTURE.md",
+        "4 环",
+        "端口清单",
+        "状态机",
+        "TransactionalUseCaseDecorator",
+        "FORBIDDEN_IN_INNER",
+        "ADR",
+        "推测",
+        "G",
+        "B1",
+        "B2",
+    ] {
+        assert!(content.contains(token), "bob-onion must mention {}", token);
+    }
+}

@@ -22,6 +22,7 @@ pub fn run(target_dir: &str) -> Result<()> {
 
     println!("{}", "Skills".bold());
     all_ok &= check(&target, ".claude/skills/bob-identify/SKILL.md");
+    all_ok &= check(&target, ".claude/skills/bob-onion/SKILL.md");
 
     println!();
     println!("{}", "Harness documents".bold());
