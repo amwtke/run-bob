@@ -1,0 +1,25 @@
+[package]
+name = "run-bob"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jin <amwtke@github>"]
+description = "A CLI to bootstrap Bob's 4-ring Clean Architecture + Superpowers harness for Claude Code projects"
+license = "MIT"
+repository = "https://github.com/amwtke/run-bob"
+readme = "README.md"
+
+[dependencies]
+# Pinned to versions compatible with Rust 1.75+.
+# Newer clap_lex (>=1.0.1) requires edition2024 (Rust 1.85+).
+clap = { version = "=4.5.4", features = ["derive"] }
+anyhow = "1.0"
+colored = "2.1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
