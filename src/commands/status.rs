@@ -21,6 +21,7 @@ pub fn run(target_dir: &str) -> Result<()> {
     let mut all_ok = true;
 
     println!("{}", "Harness documents".bold());
+    all_ok &= check(&target, "CLAUDE.md");
     all_ok &= check(&target, "ARCHITECTURE.md");
 
     println!();

@@ -61,3 +61,37 @@ fn init_creates_architecture_md() {
         "ARCHITECTURE.md must declare itself as SSoT"
     );
 }
+
+#[test]
+fn init_creates_claude_md_with_r0() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join("CLAUDE.md");
+    assert!(p.is_file(), "CLAUDE.md missing");
+    let content = std::fs::read_to_string(&p).unwrap();
+
+    // Must declare itself a run-bob harness
+    assert!(content.contains("run-bob"), "CLAUDE.md must reference run-bob");
+    // R0 meta-rule must be present
+    assert!(content.contains("R0"), "CLAUDE.md must have R0 meta-rule");
+    assert!(
+        content.contains("通用判定优先于具体清单") || content.contains("5 问决策树"),
+        "R0 must reference the decision tree"
+    );
+    // R12 must be present (B2 mode)
+    assert!(content.contains("R12"), "CLAUDE.md must have R12 (B2 clean island)");
+    // 4-ring package names use "entity" (not "domain")
+    assert!(content.contains("entity"), "CLAUDE.md must use 'entity' not 'domain' as Ring 1");
+    // Must have technology-stack-pending warning
+    assert!(
+        content.contains("## 技术栈约定"),
+        "CLAUDE.md must have ## 技术栈约定 section"
+    );
+}

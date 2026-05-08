@@ -5,6 +5,7 @@ use colored::*;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+const ROOT_CLAUDE_MD: &str = include_str!("../templates/root/CLAUDE.md");
 const ROOT_ARCHITECTURE: &str = include_str!("../templates/root/ARCHITECTURE.md");
 
 pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
@@ -29,6 +30,7 @@ pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
 
     if !minimal {
         println!("{}", "Installing harness documents...".bold());
+        install_root_file(&target, "CLAUDE.md", ROOT_CLAUDE_MD, force)?;
         install_root_file(&target, "ARCHITECTURE.md", ROOT_ARCHITECTURE, force)?;
     }
 
