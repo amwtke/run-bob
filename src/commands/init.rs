@@ -13,6 +13,7 @@ const SHARED_USECASE: &str = include_str!("../templates/root/UseCase.java");
 const SHARED_DECORATOR: &str = include_str!("../templates/root/TransactionalUseCaseDecorator.java");
 const SKILL_BOB_IDENTIFY: &str = include_str!("../templates/skills/bob-identify.md");
 const SKILL_BOB_ONION: &str = include_str!("../templates/skills/bob-onion.md");
+const SKILL_BOB_SPEC: &str = include_str!("../templates/skills/bob-spec.md");
 
 pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
     let target = PathBuf::from(target_dir)
@@ -37,6 +38,7 @@ pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
     println!("{}", "Installing skills...".bold());
     install_skill(&target, "bob-identify", SKILL_BOB_IDENTIFY, force)?;
     install_skill(&target, "bob-onion", SKILL_BOB_ONION, force)?;
+    install_skill(&target, "bob-spec", SKILL_BOB_SPEC, force)?;
 
     if !minimal {
         println!("{}", "Installing harness documents...".bold());
