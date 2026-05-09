@@ -170,29 +170,47 @@ skill 直接渲染下面三个模板之一,**不让用户从空白开始**。用
 - **When** 调用
 - **Then** 异常向上抛;Order 状态保持 `CREATED`;装饰器事务回滚
 
-### 场景 4:事务回滚
-- **Given** Order 处于 `CREATED`,InventoryClient.decrease 抛 `InsufficientStockException`
+### 场景 4:事务回滚(checked Exception 也必须回滚)
+- **Given** Order 处于 `CREATED`,InventoryClient.decrease 抛 `InsufficientStockException`(假设 checked)
 - **When** 调用
-- **Then** 异常向上抛;Order 不被持久化为 PAID(事务回滚);装饰器事务由 Spring AOP 保证
+- **Then** 异常向上抛;Order 不被持久化为 PAID(事务回滚);装饰器 `@Transactional(rollbackFor = Exception.class)` 保证 checked 异常同样回滚
+- **额外断言**:`TransactionalUseCaseDecorator` 的单测里必须有一对孪生 case——一条抛 `RuntimeException`、一条抛 checked `Exception`,两条都断言事务回滚。少一条说明装饰器有静默 commit 漏洞
+
+### 场景 5:并发不超卖(共享计数端口的硬场景)
+> 仅当用例触达**共享可变计数端口**(Inventory / Wallet / QuotaCounter…)时必填。
+- **Given** 商品 X 库存 1,50 个线程并发请求 `PayOrderUseCase.execute(PayOrderCommand(orderId-i))`
+- **When** 全部并发执行
+- **Then** 恰好 1 个请求成功(Order PAID + 库存 = 0),其余 49 个抛"库存不足"业务异常;**不允许超卖**
+- **实现要求**:`InventoryRepository.tryDecrease` 必须是 adapter 层一条 `UPDATE ... SET qty = qty - :q WHERE qty >= :q` 的原子 SQL,UseCase 仅判 boolean——**禁止** `findByX → mutate → save` 的 read-modify-write
+
+### 场景 6:并发状态迁移(@Version 乐观锁)
+> 仅当 Entity 被**≥2 个 UseCase**触发状态迁移时必填(如 Order 经 pay/ship/cancel/complete)。
+- **Given** Order 已加载到内存(version=N),期间另一线程已经把数据库行更新到 version=N+1
+- **When** 当前线程 `repo.save(order)` 写回(仍带 version=N)
+- **Then** 抛 `OptimisticLockingFailureException`(由 JPA `@Version` 触发);上层装饰器回滚
+- **实现要求**:JPA 实体加 `@Version long version`,Entity 透传 `version` 字段,mapper 双向往返
 
 ## 8. 接口约定
 
 > 严格遵守 4 环 Clean Architecture(CLAUDE.md R7-R12)。
 
-### Command(usecase 层 record,纯 Java)
+### Command(usecase 层 record,纯 Java)— 落 `usecase/in/`
 
 ```java
-package com.example.<bizname>.usecase;
+package com.example.<bizname>.usecase.in;
 
 public record PayOrderCommand(
     String orderId
 ) {}
 ```
 
-### Result(usecase 层 record,纯 Java)
+> 包结构纪律:`*Command` / `*Query` 一律放 `usecase/in/`;`*Result` 一律放 `usecase/out/`;
+> `usecase/` 根目录只放 `*UseCase.java` 编排类与 `port/` 子包。混在根目录视为违规(CLAUDE.md R7/R9)。
+
+### Result(usecase 层 record,纯 Java)— 落 `usecase/out/`
 
 ```java
-package com.example.<bizname>.usecase;
+package com.example.<bizname>.usecase.out;
 
 public record PayOrderResult(
     String orderId,
@@ -207,6 +225,8 @@ public record PayOrderResult(
 package com.example.<bizname>.usecase;
 
 import com.example.<bizname>.entity.*;
+import com.example.<bizname>.usecase.in.PayOrderCommand;
+import com.example.<bizname>.usecase.out.PayOrderResult;
 import com.example.<bizname>.usecase.port.*;
 import com.example.shared.usecase.UseCase;
 // 严禁 import org.springframework.* / jakarta.* / org.slf4j.* / lombok.*
@@ -313,7 +333,10 @@ class OrderController {
 - ❌ UseCase 类不得加任何注解(包括 `@Service` `@Transactional`)
 - ❌ UseCase 不得调 `LoggerFactory.getLogger`(用 `LoggerPort`)
 - ❌ Entity 不得 `LocalDateTime.now()`(用注入的 `ClockPort`)
-- ❌ `@Transactional` 必须仅在 `TransactionalUseCaseDecorator`
+- ❌ `@Transactional` 必须仅在 `TransactionalUseCaseDecorator`,且形态固定为 `@Transactional(rollbackFor = Exception.class)`(裸 `@Transactional` 不接受 checked 异常回滚)
+- ❌ 共享可变计数端口(Inventory / Wallet / 配额)在 UseCase 里 `findByX → mutate → save` —— read-modify-write 在并发下超卖。改用 adapter 层原子 `UPDATE ... WHERE qty >= :q`,端口暴露 `tryDecrease(...) -> boolean` / `restore(...)`
+- ❌ 被多 UseCase 触发状态迁移的聚合(Order pay/ship/cancel/complete 类)缺失 `@Version` 乐观锁(并发 last-writer-wins 静默丢更)
+- ❌ `*Command` / `*Query` record 落在 `usecase/` 根目录(必须 `usecase/in/`);`*Result` 同理(必须 `usecase/out/`)
 - ❌ Entity 字段无 setter
 - ❌ Repository 实现不得放在 `framework/`(应在 `adapter/persistence/`)
 - ✅ TDD 节奏:每个测试场景写一个测试,先红再绿再重构
@@ -321,6 +344,9 @@ class OrderController {
   ```bash
   grep -rE "org\.springframework|jakarta\.|org\.slf4j|lombok\." \
     src/main/java/com/example/<bizname>/usecase/   # 期望零命中
+  grep -nE "@Transactional[^(]" \
+    src/main/java/com/example/shared/framework/transaction/TransactionalUseCaseDecorator.java
+    # 期望 0 命中(必须是 @Transactional(rollbackFor = Exception.class))
   ```
 - ✅ 跑 ArchUnit:`mvn test -Dtest=CleanArchitectureTest`(或 Gradle 等同) 期望全绿
 - ✅ **遇到任何新 import**(spec 没列出的)→ **停下**,跑 5 问决策树,违反 R0 必须先抽端口
@@ -495,6 +521,10 @@ Response 404: { error, message }
 - ❌ spec 里出现 ARCHITECTURE.md 之外的端口名 / Entity 名(必须先 `/bob-onion --refresh`)
 - ❌ 命令 spec 里同时引入 Domain Event(那是 DDD,不是 Bob)
 - ❌ 只有 happy path,没有状态非法 / 端口失败 / 事务回滚场景
+- ❌ 命令 spec 触达共享可变计数端口却**没有**"并发不超卖"场景(场景 5)
+- ❌ 被多 UseCase 触发状态迁移的聚合的 spec **没有**"并发版本冲突"场景(场景 6)
+- ❌ 装饰器事务回滚场景只测 `RuntimeException`,漏掉 checked `Exception`(R8 第 5 点要求孪生 case)
+- ❌ Command / Query / Result 的 package 写成 `com.example.<bizname>.usecase` 根包(必须 `usecase.in` / `usecase.out`)
 - ❌ Given-When-Then 用技术语言("调用 API"、"写入 MySQL")替代业务语言("Order 状态变 PAID")
 - ❌ 简单 GET 接口也强行跑 spec(ARCHITECTURE.md §4 有条件:跨上下文 / 分页 / 投影 才需 spec)
 - ❌ 重构 spec 把多个动作合并一步("3 个动作一次性改完" — 必须分原子步骤,每步可回滚)

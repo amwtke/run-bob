@@ -28,7 +28,11 @@
 ```
 com.example.<bizname>/
 ├── entity/        Ring 1 — 实体 + 业务规则        (零框架,纯 Java)
-├── usecase/       Ring 2 — Interactor + port/    (零框架,POJO)
+├── usecase/       Ring 2 — Interactor             (零框架,POJO)
+│   ├── *UseCase.java                              orchestration 类(本层根)
+│   ├── in/      入站 record:*Command / *Query
+│   ├── out/     出站 record:*Result
+│   └── port/    端口接口(Repository / Gateway / Clock / Logger)
 ├── adapter/       Ring 3 — Controller / Repo impl (允许 Spring/JPA/SDK)
 └── framework/     Ring 4 — 装配 + 事务装饰器 + main
 ```
@@ -99,7 +103,7 @@ com.example.<bizname>/
 
 ## 7. 装配点(framework/)
 
-- **TransactionalUseCaseDecorator**(`shared.framework.transaction`):全工程**唯一** `@Transactional`
+- **TransactionalUseCaseDecorator**(`shared.framework.transaction`):全工程**唯一** `@Transactional`,且必须 `rollbackFor = Exception.class`(R8)
 - **<Feature>UseCaseConfig**(每个上下文一个):`@Bean` 装配 + 装饰器包裹
 
 ```java
@@ -112,6 +116,22 @@ class <Feature>UseCaseConfig {
     }
 }
 ```
+
+**装饰器实现固定形态**(R8 第 2 点):
+
+```java
+@Override
+@Transactional(rollbackFor = Exception.class)   // ← 不允许写成裸 @Transactional
+public R execute(C cmd) { return inner.execute(cmd); }
+```
+
+> Spring 默认仅在 `RuntimeException`/`Error` 时回滚。checked Exception 不显式声明 `rollbackFor` 就会静默 commit 部分写入。装饰器是全工程事务唯一入口,这里必须覆盖所有异常。
+
+**并发安全装配检查清单**:
+
+- 共享可变计数端口(库存 / 余额 / 配额)是否暴露 `tryDecrease(...) -> boolean` / `restore(...)` 等**原子语义动作**?(read-modify-write 一律拒绝,具体反模式见 R9)
+- 被多 UseCase 触发状态迁移的聚合(如 Order 经 pay / ship / cancel / complete)是否在 JPA 实体上加了 `@Version`?Entity 是否透传 `version` 字段?Mapper 是否双向往返?
+- 是否补齐 3 类并发测试:checked 异常回滚 / 多线程并发条件 UPDATE 不超卖 / 旧 version 保存抛 `OptimisticLockingFailureException`?
 
 ## 8. α/β/γ 评级与重构计划(仅 B1/B2)
 

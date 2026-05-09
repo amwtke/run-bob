@@ -120,6 +120,29 @@ public interface OrderRepository {
 }
 ```
 
+#### 并发可变计数端口的特殊形态(库存 / 余额 / 配额 / 名额)
+
+凡是**多个并发请求会同时减少同一行计数**的端口,**禁止**只暴露 `findByX → mutate → save`。
+read-modify-write 在并发下产生 lost-update,直接超卖(测试中常常 happy path 全绿、生产一上量就出事)。
+
+**正解**:端口暴露**原子语义动作**,把"判断 + 改"塞进 adapter 的一条 SQL:
+
+```java
+public interface InventoryRepository {
+    Optional<Inventory> findByProductId(ProductId id);   // 读模型仍可保留
+
+    /** 原子尝试扣减;库存不足返回 false。adapter 实现用 UPDATE ... WHERE qty >= :qty。 */
+    boolean tryDecrease(ProductId id, int quantity);
+
+    /** 原子恢复;数量为正才合法。 */
+    void restore(ProductId id, int quantity);
+}
+```
+
+UseCase 侧只判 boolean、不再 `findById/save`;adapter 里写一条 `@Modifying @Query("UPDATE ... WHERE availableQuantity >= :quantity")`,数据库自己保证原子。
+
+> **assistant** 在每识别出"共享可变计数"类端口(库存/余额/票数/名额/许可…)时,**主动**把签名换成 `tryX/restore` 形态,并在 ARCHITECTURE.md §4 端口清单的"签名摘要"列里写明语义动作。
+
 ### Step O4:Entity 状态机上提(动作 3)
 
 对每个 CORE/Entity 且**身份测试标"有状态"**的候选,跑状态机推导:
@@ -161,7 +184,8 @@ public interface OrderRepository {
 > public class TransactionalUseCaseDecorator<C, R> implements UseCase<C, R> {
 >     private final UseCase<C, R> inner;
 >     public TransactionalUseCaseDecorator(UseCase<C, R> inner) { this.inner = inner; }
->     @Override @Transactional
+>     @Override
+>     @Transactional(rollbackFor = Exception.class)   // ← 不能写裸 @Transactional
 >     public R execute(C cmd) { return inner.execute(cmd); }
 > }
 > ```
@@ -170,10 +194,34 @@ public interface OrderRepository {
 > - 引入通用 `UseCase<C, R>` 接口(`shared/usecase/UseCase.java`)
 > - 每个 usecase 类 `implements UseCase<XxxCommand, XxxResult>`
 > - 在 `<feature>/framework/config/<Feature>UseCaseConfig.java` 用 `@Bean` 装配,**强制走 `TransactionalUseCaseDecorator` 包裹**
+> - 装饰器配套测试**必须覆盖**:RuntimeException 回滚 / **checked Exception 同样回滚**(Spring 默认只回滚前者,不显式声明 `rollbackFor` 会静默 commit)
 >
 > 同意吗?(由 run-bob init 已经预置 shared 骨架,只需在 framework/config 写装配)
 
 → 这一步是**关键决策点**,记入 ADR-1。
+
+### Step O5b:并发与版本号决策(防 lost-update)
+
+针对 §3 的每个 Entity / 状态机,**逐个**评估两条并发风险:
+
+> **assistant**:
+>
+> **推测并发风险**(基于 §3 状态机 + §5 UseCase 清单交叉表):
+>
+> | Entity | 触发它状态迁移的 UseCase | 是否需要 @Version | 配套测试 |
+> |---|---|---|---|
+> | `Order` | PayOrder / ShipOrder / CancelOrder / CompleteOrder(≥2 条) | **是** | 旧 version 保存 → 抛 `OptimisticLockingFailureException` |
+> | `Product` | ChangeProductStatus(仅 1 条) | 否(只一条迁移路径,可后续按需补) | — |
+> | `Inventory`(共享可变计数) | 多 UseCase 并发减扣 | 不靠 @Version,改用原子条件 UPDATE(见 Step O3) | 多线程并发 `tryDecrease` 不超卖 |
+>
+> **推荐**:
+> - 凡有**≥2 条状态迁移路径**且会被并发触发的 Entity,在 JPA 实体加 `@Version long version`,Entity 透传 `version` 字段,mapper 双向往返
+> - 共享可变计数(Inventory / Wallet / QuotaCounter)用 Step O3 的原子语义端口,不用 @Version
+> - ARCHITECTURE.md §3 每个 Entity 一行注明:**并发策略 = @Version 乐观锁 / 原子条件 UPDATE / 单写无并发**
+>
+> 同意吗?
+
+→ 这一步记入 ADR-2.5(并发策略)。漏掉这一步等于把 last-writer-wins 静默丢更埋进项目。
 
 ### Step O6:回写 ArchUnit 黑名单 + ARCHITECTURE.md 配件清单
 

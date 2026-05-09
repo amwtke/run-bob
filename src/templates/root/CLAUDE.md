@@ -57,7 +57,9 @@ _待填充(由 `superpowers:brainstorming` 产出后写回本段)_
 
 **关键铁律**(完整规则见 R7-R12):
 - usecase 层**禁止**任何 Spring / Jakarta / SLF4J / Lombok import 或注解
-- 全工程**唯一**的 `@Transactional` 在 `shared.framework.transaction.TransactionalUseCaseDecorator`
+- 全工程**唯一**的 `@Transactional` 在 `shared.framework.transaction.TransactionalUseCaseDecorator`,且**必须** `rollbackFor = Exception.class`(防 checked 异常静默 commit)
+- 共享可变计数(库存 / 余额 / 配额)**禁止** read-modify-write,只能在 adapter 层用原子条件 UPDATE,端口暴露语义动作(`tryDecrease` / `restore`)而非 `findById/save`
+- 被多个 UseCase 触发状态迁移的聚合,**必须**带 `@Version` 乐观锁(防并发 last-writer-wins)
 - Entity 不得 `LocalDateTime.now()` / `UUID.randomUUID()` (用 ClockPort / IdGenerator)
 - 跨上下文 / 异步 = 升级触发器,默认拒绝 Domain Event(R10-bob)
 
@@ -159,9 +161,12 @@ com.example.<bizname>/
 │   ├── <ValueObject>.java                  record / 不可变值对象
 │   └── <EntityName>Id.java                 强类型 ID(record)
 ├── usecase/                                Ring 2 — Interactor (POJO,零框架)
-│   ├── <Command>Command.java               record(usecase 边界,纯 Java)
-│   ├── <Command>UseCase.java               implements UseCase<C, R>
-│   ├── <Command>Result.java                record(避免泄露 Entity)
+│   ├── <Command>UseCase.java               implements UseCase<C, R>(orchestration 类放本层根)
+│   ├── in/
+│   │   ├── <Command>Command.java           入站 record(命令,usecase 边界)
+│   │   └── <Query>Query.java               入站 record(查询)
+│   ├── out/
+│   │   └── <Command>Result.java            出站 record(避免泄露 Entity)
 │   └── port/
 │       ├── <EntityName>Repository.java     端口接口(纯 Java)
 │       ├── <Gateway>.java                  出站端口(外部系统/ACL)
@@ -198,8 +203,10 @@ com.example.shared/
 ### R8. 装配规则(Spring 注解的位置)
 
 1. `@Transactional` 在全工程**有且仅有一处**:`shared.framework.transaction.TransactionalUseCaseDecorator.execute()` 方法
-2. Spring 注解(`@Service` / `@Component` / `@Repository` / `@Configuration` / `@Bean` / `@RestController` / `@EventListener` / `@Autowired` 等)**只允许**出现在 `adapter/**` 或 `framework/**`
-3. 任何 usecase 都通过 `<feature>.framework.config.<Feature>UseCaseConfig` 中的 `@Bean` 注册,**必须**经 `TransactionalUseCaseDecorator` 包装(命令、查询统一,无例外)
+2. 该 `@Transactional` **必须**写成 `@Transactional(rollbackFor = Exception.class)`。Spring 默认仅在 `RuntimeException` / `Error` 时回滚——任何 checked Exception 抛出都会静默 commit 部分写入。装饰器是全工程事务唯一入口,不允许这种漏洞
+3. Spring 注解(`@Service` / `@Component` / `@Repository` / `@Configuration` / `@Bean` / `@RestController` / `@EventListener` / `@Autowired` 等)**只允许**出现在 `adapter/**` 或 `framework/**`
+4. 任何 usecase 都通过 `<feature>.framework.config.<Feature>UseCaseConfig` 中的 `@Bean` 注册,**必须**经 `TransactionalUseCaseDecorator` 包装(命令、查询统一,无例外)
+5. **测试义务**:`TransactionalUseCaseDecorator` 必须有两条测试——抛 `RuntimeException` 回滚 / 抛 checked `Exception` 同样回滚。少一条说明 R8 第 2 点失守
 
 ### R9. 反模式硬清单(代码不得通过 review)
 
@@ -216,6 +223,10 @@ com.example.shared/
 - ❌ Entity 不得 `LocalDateTime.now()` / `UUID.randomUUID()` / `System.currentTimeMillis()`(用 ClockPort / IdGenerator)
 - ❌ 决策树判为配件的库一律不得在 inner 包(entity / usecase),即使本文件未显式列出
 - ❌ B2 模式:新功能不得 import legacy 的 `@Service` 类(必须通过 usecase/port 端口 + adapter/acl ACL 隔离)
+- ❌ 装饰器写成裸 `@Transactional` 而非 `@Transactional(rollbackFor = Exception.class)`(checked 异常会静默 commit)
+- ❌ 共享可变计数(库存 / 余额 / 配额 / 名额)在 UseCase 里 `findById → mutate → save`(read-modify-write 在并发下产生 lost-update,直接超卖)。正解:端口暴露语义动作 `tryDecrease(id, qty) -> boolean` / `restore(id, qty)`,adapter 用一条 `UPDATE ... WHERE quantity >= :qty` 原子 SQL,UseCase 只判 boolean
+- ❌ 被多个 UseCase 触发状态迁移的聚合(如 Order 的 pay/ship/cancel/complete)缺失 `@Version` 乐观锁(并发下 last-writer-wins 静默丢更)。要求 JPA 实体加 `@Version`、Entity 透传 `version` 字段、mapper 双向往返
+- ❌ `*Command` / `*Query` record 与 `*UseCase` 混在 `usecase/` 根包(必须 `usecase/in/`);`*Result` 同理(必须 `usecase/out/`)。`usecase/` 根目录只放 `*UseCase.java` orchestration 类
 
 ### R10-bob. 跨上下文 / 异步 = 升级触发器
 
