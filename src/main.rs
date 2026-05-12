@@ -4,6 +4,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::*;
 
+mod assets;
 mod commands;
 
 #[derive(Parser, Debug)]

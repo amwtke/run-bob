@@ -4,6 +4,8 @@ use anyhow::{Context, Result};
 use colored::*;
 use std::path::{Path, PathBuf};
 
+use crate::assets::{Category, HARNESS_ASSETS, HARNESS_DIRS};
+
 pub fn run(target_dir: &str) -> Result<()> {
     let target = PathBuf::from(target_dir)
         .canonicalize()
@@ -19,31 +21,24 @@ pub fn run(target_dir: &str) -> Result<()> {
     println!();
 
     let mut all_ok = true;
+    let mut current_cat: Option<Category> = None;
 
-    println!("{}", "Skills".bold());
-    all_ok &= check(&target, ".claude/skills/bob-identify/SKILL.md");
-    all_ok &= check(&target, ".claude/skills/bob-onion/SKILL.md");
-    all_ok &= check(&target, ".claude/skills/bob-spec/SKILL.md");
-
-    println!();
-    println!("{}", "Harness documents".bold());
-    all_ok &= check(&target, "CLAUDE.md");
-    all_ok &= check(&target, "ARCHITECTURE.md");
-    all_ok &= check(&target, "README-RUN-BOB.md");
-
-    println!();
-    println!("{}", "ArchUnit guards".bold());
-    all_ok &= check(&target, "src/test/java/architecture/CleanArchitectureTest.java");
-
-    println!();
-    println!("{}", "Shared Java skeletons".bold());
-    all_ok &= check(&target, "src/main/java/com/example/shared/usecase/UseCase.java");
-    all_ok &= check(&target, "src/main/java/com/example/shared/framework/transaction/TransactionalUseCaseDecorator.java");
+    for asset in HARNESS_ASSETS {
+        if Some(asset.category) != current_cat {
+            if current_cat.is_some() {
+                println!();
+            }
+            println!("{}", asset.category.status_header().bold());
+            current_cat = Some(asset.category);
+        }
+        all_ok &= check_file(&target, asset.rel_path);
+    }
 
     println!();
     println!("{}", "Working directories".bold());
-    all_ok &= check_dir(&target, "docs/bob");
-    all_ok &= check_dir(&target, "docs/specs");
+    for dir in HARNESS_DIRS {
+        all_ok &= check_dir(&target, dir.rel_path);
+    }
 
     println!();
     if all_ok {
@@ -60,24 +55,32 @@ pub fn run(target_dir: &str) -> Result<()> {
     Ok(())
 }
 
-fn check(target: &Path, rel: &str) -> bool {
-    let p = target.join(rel);
+fn check_file(target: &Path, segments: &[&str]) -> bool {
+    let mut p = target.to_path_buf();
+    for s in segments {
+        p = p.join(s);
+    }
+    let display = segments.join("/");
     if p.is_file() {
-        println!("  {} {}", "✓".green(), rel);
+        println!("  {} {}", "✓".green(), display);
         true
     } else {
-        println!("  {} {}", "✗".red(), rel.red());
+        println!("  {} {}", "✗".red(), display.red());
         false
     }
 }
 
-fn check_dir(target: &Path, rel: &str) -> bool {
-    let p = target.join(rel);
+fn check_dir(target: &Path, segments: &[&str]) -> bool {
+    let mut p = target.to_path_buf();
+    for s in segments {
+        p = p.join(s);
+    }
+    let display = format!("{}/", segments.join("/"));
     if p.is_dir() {
-        println!("  {} {}/", "✓".green(), rel);
+        println!("  {} {}", "✓".green(), display);
         true
     } else {
-        println!("  {} {}/", "✗".red(), rel.red());
+        println!("  {} {}", "✗".red(), display.red());
         false
     }
 }

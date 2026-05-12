@@ -402,6 +402,69 @@ fn status_reports_complete_after_full_init() {
     }
 }
 
+/// Drift guard: every file `init` writes must be checked by `status`.
+/// If a new template is added to the asset registry but somehow only one
+/// side observes it, this test fails.
+#[test]
+fn status_checks_every_file_init_writes() {
+    use std::collections::HashSet;
+
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    // Collect every file init produced, as forward-slash relative paths.
+    let mut init_wrote: HashSet<String> = HashSet::new();
+    fn walk(root: &std::path::Path, dir: &std::path::Path, acc: &mut HashSet<String>) {
+        for entry in std::fs::read_dir(dir).expect("read_dir") {
+            let path = entry.expect("entry").path();
+            if path.is_file() {
+                let rel = path
+                    .strip_prefix(root)
+                    .expect("strip_prefix")
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                acc.insert(rel);
+            } else if path.is_dir() {
+                walk(root, &path, acc);
+            }
+        }
+    }
+    walk(target, target, &mut init_wrote);
+
+    // Run status and pull out the relative paths it printed.
+    let output = Command::new(run_bob_bin())
+        .args(["status", "--dir"])
+        .arg(target)
+        .output()
+        .expect("status");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    let status_checks: HashSet<String> = stdout
+        .lines()
+        .filter_map(|line| {
+            let t = line.trim();
+            t.strip_prefix("✓ ")
+                .or_else(|| t.strip_prefix("✗ "))
+                .map(|s| s.to_string())
+        })
+        // exclude directory entries (they end with '/')
+        .filter(|s| !s.ends_with('/'))
+        .collect();
+
+    let missing: Vec<&String> = init_wrote.difference(&status_checks).collect();
+    assert!(
+        missing.is_empty(),
+        "drift detected: init wrote files that status does not check: {:?}\nstatus stdout:\n{}",
+        missing,
+        stdout
+    );
+}
+
 #[test]
 fn status_flags_missing_after_minimal_init() {
     let tmp = tempfile::tempdir().expect("tempdir");

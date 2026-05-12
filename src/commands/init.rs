@@ -5,15 +5,7 @@ use colored::*;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const ROOT_CLAUDE_MD: &str = include_str!("../templates/root/CLAUDE.md");
-const ROOT_ARCHITECTURE: &str = include_str!("../templates/root/ARCHITECTURE.md");
-const ROOT_README: &str = include_str!("../templates/root/README-RUN-BOB.md");
-const ROOT_ARCHUNIT_TEST: &str = include_str!("../templates/root/CleanArchitectureTest.java");
-const SHARED_USECASE: &str = include_str!("../templates/root/UseCase.java");
-const SHARED_DECORATOR: &str = include_str!("../templates/root/TransactionalUseCaseDecorator.java");
-const SKILL_BOB_IDENTIFY: &str = include_str!("../templates/skills/bob-identify.md");
-const SKILL_BOB_ONION: &str = include_str!("../templates/skills/bob-onion.md");
-const SKILL_BOB_SPEC: &str = include_str!("../templates/skills/bob-spec.md");
+use crate::assets::{Asset, Category, HARNESS_ASSETS, HARNESS_DIRS};
 
 pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
     let target = PathBuf::from(target_dir)
@@ -35,29 +27,28 @@ pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
     }
     println!();
 
-    println!("{}", "Installing skills...".bold());
-    install_skill(&target, "bob-identify", SKILL_BOB_IDENTIFY, force)?;
-    install_skill(&target, "bob-onion", SKILL_BOB_ONION, force)?;
-    install_skill(&target, "bob-spec", SKILL_BOB_SPEC, force)?;
+    let mut current_cat: Option<Category> = None;
+    for asset in HARNESS_ASSETS {
+        if minimal && !asset.included_in_minimal {
+            continue;
+        }
+        if Some(asset.category) != current_cat {
+            if current_cat.is_some() {
+                println!();
+            }
+            println!("{}", asset.category.install_header().bold());
+            current_cat = Some(asset.category);
+        }
+        install_asset(&target, asset, force)?;
+    }
 
     if !minimal {
-        println!("{}", "Installing harness documents...".bold());
-        install_root_file(&target, "CLAUDE.md", ROOT_CLAUDE_MD, force)?;
-        install_root_file(&target, "ARCHITECTURE.md", ROOT_ARCHITECTURE, force)?;
-        install_root_file(&target, "README-RUN-BOB.md", ROOT_README, force)?;
-        install_archunit_test(&target, force)?;
-
-        println!();
-        println!("{}", "Installing shared Java skeletons...".bold());
-        install_shared_usecase(&target, force)?;
-        install_shared_decorator(&target, force)?;
-
         println!();
         println!("{}", "Creating working directories...".bold());
-        ensure_dir(&target.join("docs").join("bob"))?;
-        ensure_dir(&target.join("docs").join("specs"))?;
-        crate::success("docs/bob/   (identify & onion intermediate notes)");
-        crate::success("docs/specs/ (bob-spec outputs → Superpowers inputs)");
+        for dir in HARNESS_DIRS {
+            ensure_dir_at(&target, dir.rel_path)?;
+            crate::success(&format!("{} {}", dir.display(), dir.note));
+        }
     }
 
     print_next_steps(minimal);
@@ -65,66 +56,12 @@ pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
     Ok(())
 }
 
-/// Install a skill as `.claude/skills/<name>/SKILL.md`.
-fn install_skill(target: &Path, name: &str, content: &str, force: bool) -> Result<()> {
-    let skill_dir = target.join(".claude").join("skills").join(name);
-    ensure_dir(&skill_dir)?;
-    let path = skill_dir.join("SKILL.md");
-    write_file(&path, content, force, &format!(".claude/skills/{}/SKILL.md", name))
-}
-
-/// Install a root-level file.
-fn install_root_file(target: &Path, name: &str, content: &str, force: bool) -> Result<()> {
-    let path = target.join(name);
-    write_file(&path, content, force, name)
-}
-
-fn install_archunit_test(target: &Path, force: bool) -> Result<()> {
-    let path = target
-        .join("src").join("test").join("java")
-        .join("architecture").join("CleanArchitectureTest.java");
-    write_file(
-        &path,
-        ROOT_ARCHUNIT_TEST,
-        force,
-        "src/test/java/architecture/CleanArchitectureTest.java",
-    )
-}
-
-fn install_shared_usecase(target: &Path, force: bool) -> Result<()> {
-    install_java_file(
-        target,
-        &["src", "main", "java", "com", "example", "shared", "usecase", "UseCase.java"],
-        SHARED_USECASE,
-        force,
-    )
-}
-
-fn install_shared_decorator(target: &Path, force: bool) -> Result<()> {
-    install_java_file(
-        target,
-        &[
-            "src", "main", "java", "com", "example", "shared",
-            "framework", "transaction", "TransactionalUseCaseDecorator.java",
-        ],
-        SHARED_DECORATOR,
-        force,
-    )
-}
-
-/// Install a Java file at an arbitrary path under target.
-fn install_java_file(
-    target: &Path,
-    rel_path: &[&str],
-    content: &str,
-    force: bool,
-) -> Result<()> {
+fn install_asset(target: &Path, asset: &Asset, force: bool) -> Result<()> {
     let mut path = target.to_path_buf();
-    for seg in rel_path {
+    for seg in asset.rel_path {
         path = path.join(seg);
     }
-    let display = rel_path.join("/");
-    write_file(&path, content, force, &display)
+    write_file(&path, asset.content, force, &asset.display())
 }
 
 /// Write a file, respecting the --force flag.
@@ -143,9 +80,12 @@ fn write_file(path: &Path, content: &str, force: bool, display: &str) -> Result<
     Ok(())
 }
 
-/// Make sure a directory exists.
-fn ensure_dir(path: &Path) -> Result<()> {
-    fs::create_dir_all(path)
+fn ensure_dir_at(target: &Path, segments: &[&str]) -> Result<()> {
+    let mut path = target.to_path_buf();
+    for seg in segments {
+        path = path.join(seg);
+    }
+    fs::create_dir_all(&path)
         .with_context(|| format!("Failed to create directory {}", path.display()))
 }
 
