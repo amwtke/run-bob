@@ -38,7 +38,60 @@ The single `@Transactional` in the entire project lives in **one decorator class
 
 ## Install
 
+### One-liner (recommended)
+
+**Linux + macOS:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/amwtke/run-bob/master/install.sh | sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/amwtke/run-bob/master/install.ps1 | iex
+```
+
+The installer detects your OS/arch, fetches the matching prebuilt binary from the latest [GitHub Release](https://github.com/amwtke/run-bob/releases), and drops `run-bob` into your install dir.
+
+Defaults:
+
+|  | POSIX (Linux + macOS) | Windows |
+|---|---|---|
+| Install dir | `~/.local/bin` | `%USERPROFILE%\bin` |
+| Version | latest release tag | latest release tag |
+
+Override via env vars (set them **before** the curl/iwr line):
+
+| Variable | Effect |
+|---|---|
+| `RUN_BOB_INSTALL_DIR` | Custom install directory |
+| `RUN_BOB_VERSION` | Pin to a specific tag (e.g. `v0.1.0`) |
+
+Example — install a specific version into a custom dir:
+
+```bash
+RUN_BOB_VERSION=v0.1.0 RUN_BOB_INSTALL_DIR=/usr/local/bin \
+  curl -fsSL https://raw.githubusercontent.com/amwtke/run-bob/master/install.sh | sh
+```
+
+macOS first-run note: the installer auto-strips the quarantine attribute, so Gatekeeper shouldn't get in the way. If it does, run `xattr -d com.apple.quarantine ~/.local/bin/run-bob`.
+
+### Update
+
+Re-run the same one-liner — the installer always pulls the latest release and overwrites in place.
+
+### Manual download
+
+Grab a tarball/zip directly from the [Releases page](https://github.com/amwtke/run-bob/releases) and unpack the `run-bob` binary into any directory on your PATH.
+
 ### From source (requires Rust ≥ 1.75)
+
+```bash
+cargo install --git https://github.com/amwtke/run-bob
+```
+
+Or clone + local install (preferred during development):
 
 ```bash
 git clone https://github.com/amwtke/run-bob
@@ -46,18 +99,9 @@ cd run-bob
 cargo install --path .
 ```
 
-After install, `run-bob` is on your `$PATH` (`~/.cargo/bin/run-bob`).
+After install, `run-bob` is at `~/.cargo/bin/run-bob`.
 
-### Update an existing install
-
-```bash
-cd run-bob
-git pull --ff-only origin master
-cargo test          # verify everything still passes
-cargo install --path .
-```
-
-### Via Claude Code `/install` skill (recommended for contributors)
+### Via Claude Code `/install` skill (contributors only)
 
 When you open **this repo** in Claude Code, a local skill is available:
 
@@ -65,22 +109,9 @@ When you open **this repo** in Claude Code, a local skill is available:
 /install
 ```
 
-It does end-to-end in one shot:
+End-to-end: `git pull` → toolchain check → `cargo build --release` → `cargo test` (16 integration tests must pass) → `cargo install --path .` → `run-bob --version` verify.
 
-1. **Sync code** — `git pull --ff-only origin master` (only if working tree clean)
-2. **Toolchain check** — verify Rust ≥ 1.75
-3. **Build** — `cargo build --release`
-4. **Test** — `cargo test` (15 integration tests must all pass)
-5. **Install** — `cargo install --path .` → `~/.cargo/bin/run-bob`
-6. **Verify** — `run-bob --version` / `run-bob --help`
-
-**Why use the skill instead of bare `cargo install`?** The skill enforces "test before install" — it refuses to install a binary whose test suite is failing, so a broken `git pull` won't quietly land in your `$PATH`. It also handles uncommitted-local-changes safely (asks before stashing).
-
-The skill only operates inside the `run-bob` repo — it won't touch your other Rust projects, and it won't edit your shell rc. See [`.claude/skills/install/SKILL.md`](.claude/skills/install/SKILL.md) for the exact procedure.
-
-### Pre-built binary
-
-Not yet provided. Build from source for now.
+**Why use the skill instead of bare `cargo install`?** It enforces "test before install" — refuses to install a binary whose test suite is failing, so a broken `git pull` won't quietly land in your `$PATH`. It also handles uncommitted-local-changes safely (asks before stashing). See [`.claude/skills/install/SKILL.md`](.claude/skills/install/SKILL.md) for the exact procedure.
 
 ## Usage
 
