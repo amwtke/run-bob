@@ -61,18 +61,26 @@ Defaults:
 | Install dir | `~/.local/bin` | `%USERPROFILE%\bin` |
 | Version | latest release tag | latest release tag |
 
-Override via env vars (set them **before** the curl/iwr line):
+Override via env vars:
 
 | Variable | Effect |
 |---|---|
 | `RUN_BOB_INSTALL_DIR` | Custom install directory |
 | `RUN_BOB_VERSION` | Pin to a specific tag (e.g. `v0.1.0`) |
 
-Example — install a specific version into a custom dir:
+For POSIX `curl ... | sh`, put the env vars on the **`sh` side** of the pipe — variable bindings in front of `curl` go to `curl`, not the downstream shell:
 
 ```bash
-RUN_BOB_VERSION=v0.1.0 RUN_BOB_INSTALL_DIR=/usr/local/bin \
-  curl -fsSL https://raw.githubusercontent.com/amwtke/run-bob/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/amwtke/run-bob/master/install.sh \
+  | RUN_BOB_VERSION=v0.1.0 RUN_BOB_INSTALL_DIR=/usr/local/bin sh
+```
+
+For PowerShell, set `$env:*` before the `iex` line — they're visible to the downstream invocation:
+
+```powershell
+$env:RUN_BOB_VERSION = 'v0.1.0'
+$env:RUN_BOB_INSTALL_DIR = "$env:USERPROFILE\bin"
+iwr -useb https://raw.githubusercontent.com/amwtke/run-bob/master/install.ps1 | iex
 ```
 
 macOS first-run note: the installer auto-strips the quarantine attribute, so Gatekeeper shouldn't get in the way. If it does, run `xattr -d com.apple.quarantine ~/.local/bin/run-bob`.
