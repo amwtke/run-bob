@@ -75,7 +75,7 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool) -> Result<()> {
         return Ok(());
     }
 
-    // Apply: optional backup, then overwrite OUTDATED. MISSING handled in Task 5.
+    // Apply: optional backup → overwrite OUTDATED → install MISSING.
     println!();
     println!("{}", "Applying changes...".bold());
 
