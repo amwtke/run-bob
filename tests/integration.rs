@@ -332,7 +332,7 @@ fn init_minimal_skips_archunit_and_shared_and_anchors() {
         .expect("init --minimal");
 
     // Skills must still be installed
-    for skill in &["bob-identify", "bob-onion", "bob-spec"] {
+    for skill in &["bob-identify", "bob-onion", "bob-spec", "bob-survey"] {
         let p = target.join(".claude").join("skills").join(skill).join("SKILL.md");
         assert!(p.is_file(), "minimal must still install skill {}", skill);
     }
