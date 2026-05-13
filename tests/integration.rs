@@ -332,7 +332,7 @@ fn init_minimal_skips_archunit_and_shared_and_anchors() {
         .expect("init --minimal");
 
     // Skills must still be installed
-    for skill in &["bob-identify", "bob-onion", "bob-spec", "bob-survey", "bob-stories"] {
+    for skill in &["bob-identify", "bob-onion", "bob-spec", "bob-survey", "bob-stories", "bob-nfr"] {
         let p = target.join(".claude").join("skills").join(skill).join("SKILL.md");
         assert!(p.is_file(), "minimal must still install skill {}", skill);
     }
@@ -1080,5 +1080,69 @@ fn bob_spec_template_c_mentions_step_0_with_stories_interlock() {
             "bob-spec Template C must mention {} for Step 0 stories interlock",
             token
         );
+    }
+}
+
+#[test]
+fn init_creates_bob_nfr_skill() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-nfr").join("SKILL.md");
+    assert!(p.is_file(), "bob-nfr SKILL.md missing at {}", p.display());
+    let content = std::fs::read_to_string(&p).unwrap();
+
+    // Frontmatter
+    assert!(content.starts_with("---"));
+    assert!(content.contains("name: bob-nfr"));
+    assert!(content.contains("description:"));
+
+    // Load-bearing tokens
+    for token in &[
+        // CLI
+        "/bob-nfr",
+        "--story",
+        "--refresh",
+        // 三段式 conventions
+        "三段式",
+        "推测",
+        "推荐选择",
+        // Stages (5)
+        "Stage 0",
+        "Stage 1",
+        "Stage 2",
+        "Stage 3",
+        "Stage 4",
+        // 13 NFR cards (English names — Chinese names embedded inline)
+        "Performance",
+        "Scalability",
+        "Capacity",
+        "Reliability",
+        "Monitoring",
+        "Authentication",
+        "Authorisation",
+        "Security",
+        "Data Privacy",
+        "Configurability",
+        "Extensibility",
+        "Portability",
+        "Compatibility",
+        // Quantification policy
+        "量化优先",
+        "待定",
+        "待量化",
+        // Output schema
+        "docs/bob/04-nfr-",
+        "建议新增 story 清单",
+        // Spec / story input
+        "<spec-path>",
+        "spec",
+    ] {
+        assert!(content.contains(token), "bob-nfr must mention {}", token);
     }
 }
