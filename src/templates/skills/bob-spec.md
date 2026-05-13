@@ -470,29 +470,36 @@ Response 404: { error, message }
 
 ## 3. 改造步骤(原子化,每步一次提交)
 
-### Step 1:加测试覆盖现状(防止改坏)
-- 写集成测试覆盖现 `OrderApplicationService.cancel`,记录现行为基线
+### Step 0:测试覆盖现状(全分支级)
+
+- 若 docs/bob/02-stories-*.md 索引里有 `R0.x · characterize · <本类>` 已完成 → 引用并跳过本步,前提:R0.x 的全分支盘点表(§2)覆盖了本 spec affected 的所有分支
+- 否则,本步执行:
+  - 枚举 affected method 的所有分支(if/else/switch case/throw/早 return)
+  - 写测试覆盖每一个分支(无遗漏)
+  - 跑测试 → 全绿(记录为基线)
 - **禁止**这一步删任何代码
 
-### Step 2:抽 `OrderRepository` 端口
+参见 bob-stories Stage 2.5 的全分支体检规则。
+
+### Step 1:抽 `OrderRepository` 端口
 - 新建 `usecase/port/OrderRepository.java`
 - 新建 `adapter/persistence/JdbcOrderRepository.java` implements,内部仍用 JdbcTemplate
 - 让 `OrderApplicationService` 依赖端口,不直接依赖 JdbcTemplate
 - 跑测试:基线绿 → 通过
 
-### Step 3:状态机上提到 Order
+### Step 2:状态机上提到 Order
 - 在 `entity/Order.java` 新增 `cancel(PaymentGateway, InventoryClient)` 方法
 - 把 SQL `WHERE status != 'SHIPPED'` 翻译成 `ensureStatus(...)` Java 表达
 - Service 改调 `order.cancel(...)`,SQL 改为单纯 `UPDATE order SET ...`
 - 跑测试:基线绿 → 通过
 
-### Step 4:框架边界外推
+### Step 3:框架边界外推
 - 新建 `CancelOrderUseCase` POJO,迁移 Service 编排逻辑
 - 新建 `framework/config/OrderUseCaseConfig.java`,@Bean + 装饰器装配
 - 删除 `@Service` `@Transactional` `@Slf4j`,引入 `LoggerPort`
 - 跑测试 + ArchUnit:全绿 → 通过
 
-### Step 5:删除 legacy Service
+### Step 4:删除 legacy Service
 - 现 Controller 改注入 `UseCase<CancelOrderCommand, ...>`
 - 删除 `OrderApplicationService.java`
 - 最终验证:`grep` + ArchUnit + 集成测试

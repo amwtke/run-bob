@@ -1055,3 +1055,30 @@ fn bob_identify_refactor_mentions_test_coverage_check() {
         );
     }
 }
+
+#[test]
+fn bob_spec_template_c_mentions_step_0_with_stories_interlock() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-spec").join("SKILL.md");
+    let content = std::fs::read_to_string(&p).unwrap();
+
+    for token in &[
+        "Step 0",
+        "全分支级",
+        "若 docs/bob/02-stories",
+        "characterize",
+    ] {
+        assert!(
+            content.contains(token),
+            "bob-spec Template C must mention {} for Step 0 stories interlock",
+            token
+        );
+    }
+}
