@@ -842,6 +842,10 @@ fn init_creates_bob_survey_skill() {
         "Easy",
         "Medium",
         "Hard",
+        // v2 — 4th factor + stories routing
+        "前置重构量",
+        "Q4",
+        "/bob-stories",
         // Recommendation matrix
         "🟢",
         "🟡",

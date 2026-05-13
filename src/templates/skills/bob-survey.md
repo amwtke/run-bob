@@ -8,7 +8,7 @@ description: |
 
   在跑 /bob-identify 之前做一道 TL 接需求动作:对当前仓库做架构体检
   (6 个 Bob 独有维度 × 0-20 = 100 分),对新需求做难度判定
-  (跨环数 / 状态机增量 / legacy 复用 三因子),结合两者给 3 档
+  (跨环数 / 状态机增量 / legacy 复用 / 前置重构量 四因子),结合两者给 3 档
   落地建议(🟢 直接接 / 🟡 准备一下再接 / 🔴 先重构再接)。
   产出 docs/bob/00-survey-<slug>-<date>.md 与 ARCHITECTURE.md §12
   体检记录追加一行。不写代码、不出 spec。
@@ -66,7 +66,7 @@ description: |
 ```
 Stage 0. 仓库状态判定(G / β / γ)
 Stage 1. 6 维度评分(β/γ);绿地跳过
-Stage 2. 需求难度三因子判定
+Stage 2. 需求难度四因子判定
 Stage 3. 推荐矩阵 → 🟢/🟡/🔴
 Stage 4. 写 docs/bob/00-survey-<slug>-<date>.md
 Stage 5. 追加 ARCHITECTURE.md §12 一行(除非 --no-record)
@@ -168,9 +168,9 @@ grep -rn '@Transactional' src/main/java/ 2>/dev/null
 
 ---
 
-## Stage 2. 需求难度三因子判定
+## Stage 2. 需求难度四因子判定
 
-LLM 三段式追问用户得出三因子等级。
+LLM 三段式追问用户得出四因子等级。
 
 ### 因子 1: 跨环数
 
@@ -211,6 +211,21 @@ LLM 三段式追问用户得出三因子等级。
 > - Medium = 依赖 1-2 个 legacy `@Service`(可走 ACL)
 > - Hard = ≥ 3 个 legacy + 还需要改 legacy 内部
 
+### 因子 4: 前置重构量
+
+> **Q4: 接这个需求需要先动多少现有文件?**
+>
+> **推测**:<结合 6 维度评分扣分点 + 需求碰到的类>
+> **理由**:<一句话,引用具体的扣分维度或类名>
+> **推荐选择**:`Easy` / `Medium` / `Hard`
+>
+> 标准:
+> - Easy = 0-2 个现有文件需动
+> - Medium = 3-7 个现有文件需动
+> - Hard = 8+ 个现有文件 或 跨模块
+
+> 说明:这一因子量"为了让新需求干净落地需要先改造多少现有代码"。结合 Stage 1 的 6 维度评分扣分点可以快速推估——通常扣分维度对应的文件就是要改造的候选。
+
 ### 组合规则
 
 - 任一因子 Hard → 总评 **Hard**
@@ -233,8 +248,8 @@ LLM 三段式追问用户得出三因子等级。
 
 | 评分 \ 难度 | Easy | Medium | Hard |
 |---|---|---|---|
-| **80-100(γ 健康)** | 🟢 `/bob-identify` | 🟢 `/bob-identify`(B2 模式) | 🟡 B2 清洁孤岛;或先 `/bob-onion --refresh` 增端口 |
-| **60-79(β 可接受)** | 🟢 `/bob-identify`(B2 模式) | 🟡 B2 清洁孤岛 + 提前列 ACL 表 | 🔴 先 `/bob-onion --refactor` 出三动作改造计划 |
+| **80-100(γ 健康)** | 🟢 `/bob-identify` | 🟢 `/bob-stories <需求>` | 🟡 `/bob-stories <需求>`(B2 清洁孤岛);或先 `/bob-onion --refresh` 增端口 |
+| **60-79(β 可接受)** | 🟢 `/bob-identify`(B2 模式) | 🟡 `/bob-stories <需求>` + 提前列 ACL 表 | 🔴 先 `/bob-onion --refactor` 出三动作改造计划 |
 | **0-59(α 烂底子)** | 🟡 警告:能做但债会变重;建议 B2 + 隔离严格 | 🔴 先重构再接 | 🔴 拒绝接需求;先 B1 全量重构;给"必须先改完哪 5 个东西"的清单 |
 
 每个格子在产出报告里展开为 3 行:
@@ -263,10 +278,11 @@ LLM 三段式追问用户得出三因子等级。
 ## 2. 评分明细
 <同 Stage 1 表格;绿地此节写"(绿地,跳过评分)">
 
-## 3. 需求难度三因子
+## 3. 需求难度四因子
 跨环数 · <Easy/Medium/Hard>(证据)
 状态机增量 · <Easy/Medium/Hard>(证据)
 legacy 复用 · <Easy/Medium/Hard>(证据)
+前置重构量 · <Easy/Medium/Hard>(证据:N 个文件需动,如 OrderService.java / OrderRepository.java)
 → 总评 **<Easy/Medium/Hard>**
 
 ## 4. 推荐
@@ -275,7 +291,10 @@ legacy 复用 · <Easy/Medium/Hard>(证据)
 风险:若忽略本建议直接接,...
 
 ## 5. 下一步
-推荐命令:`/bob-identify <需求> [--acl ...]`
+推荐命令(由 §4 推荐决定):
+- Easy / 🟢 → `/bob-identify <需求>`
+- Medium/Hard / 🟢🟡 → `/bob-stories <需求>`(用 --refresh 强制重跑)
+- 🔴 → 先重构(`/bob-onion --refactor` 或 B1 全量重构)
 ```
 
 ---
