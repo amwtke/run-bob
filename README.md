@@ -89,6 +89,44 @@ macOS first-run note: the installer auto-strips the quarantine attribute, so Gat
 
 Re-run the same one-liner — the installer always pulls the latest release and overwrites in place.
 
+### Upgrade harness assets in a project
+
+After upgrading the `run-bob` binary itself, run this **inside any project that was previously `run-bob init`'d** to sync the harness assets (skills + shared Java skeletons + `README-RUN-BOB.md`) to the new version:
+
+```bash
+cd your-project/
+run-bob upgrade
+```
+
+What `upgrade` does:
+
+- **Compares** the on-disk content of each upgrade-safe asset against the binary's embedded version (byte-for-byte).
+- **Backs up** any file that differs to `.run-bob-backup/<UTC-timestamp>/<original-path>` (add this directory to `.gitignore`), then **overwrites** with the embedded version.
+- **Installs** any upgrade-safe asset that's missing.
+- **Never touches** user-owned files: `CLAUDE.md` (your project rules), `ARCHITECTURE.md` (the 4-ring SSoT), and `src/test/java/architecture/CleanArchitectureTest.java` (your `FORBIDDEN_IN_INNER` list). Use `run-bob init --force` if you really want to reset those.
+
+Flags:
+
+| Flag | Effect |
+|---|---|
+| `--dir <path>` | Target project directory (default `.`) |
+| `--dry-run` / `-n` | Report what would change; write nothing |
+| `--no-backup` | Skip the safety backup (use only when you trust git to recover) |
+
+Typical flow after a `run-bob` binary upgrade:
+
+```bash
+# 1. Upgrade the binary (existing one-liner; pulls latest release)
+curl -fsSL https://raw.githubusercontent.com/amwtke/run-bob/master/install.sh | sh
+
+# 2. Preview what would change in your project
+cd your-project/
+run-bob upgrade --dry-run
+
+# 3. Apply
+run-bob upgrade
+```
+
 ### Manual download
 
 Grab a tarball/zip directly from the [Releases page](https://github.com/amwtke/run-bob/releases) and unpack the `run-bob` binary into any directory on your PATH.
