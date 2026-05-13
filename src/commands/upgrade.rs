@@ -108,7 +108,17 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool) -> Result<()> {
         println!("  {} {} ({})", "✓".green(), asset.display(), "updated".cyan());
     }
 
-    // MISSING handling lands in Task 5.
+    // Install MISSING files (no backup — they didn't exist).
+    for asset in &missing {
+        let path = asset_path(&target, asset);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create dir {}", parent.display()))?;
+        }
+        fs::write(&path, asset.content)
+            .with_context(|| format!("Failed to write {}", path.display()))?;
+        println!("  {} {} ({})", "✓".green(), asset.display(), "installed".green());
+    }
 
     println!();
     print_user_owned_skip_note(&user_owned);

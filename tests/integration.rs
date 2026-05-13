@@ -752,3 +752,48 @@ fn upgrade_no_backup_skips_backup() {
         ".run-bob-backup must not exist with --no-backup"
     );
 }
+
+#[test]
+fn upgrade_installs_missing_skill() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    // Delete a skill so the upgrade sees MISSING.
+    let skill = target.join(".claude/skills/bob-spec/SKILL.md");
+    std::fs::remove_file(&skill).expect("remove skill");
+    assert!(!skill.exists());
+
+    let output = std::process::Command::new(run_bob_bin())
+        .args(["upgrade", "--dir"])
+        .arg(target)
+        .output()
+        .expect("upgrade");
+    assert!(output.status.success(), "upgrade failed: {:?}", output);
+
+    // Skill was re-installed.
+    assert!(skill.is_file(), "bob-spec/SKILL.md must be installed back");
+    let content = std::fs::read_to_string(&skill).expect("read installed");
+    assert!(
+        content.contains("name: bob-spec"),
+        "installed content must match the embedded template"
+    );
+
+    // MISSING does not create a backup directory.
+    assert!(
+        !target.join(".run-bob-backup").exists(),
+        ".run-bob-backup must NOT exist when only MISSING was applied"
+    );
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains("installed"),
+        "expected 'installed' in summary, got:\n{}",
+        stdout
+    );
+}
