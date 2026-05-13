@@ -40,6 +40,7 @@
 - **不引入新依赖**:不加 `sha2` / `reqwest` 等 crate。比较用 `String ==`。
 - **`init` 与 `status` 行为不变**:upgrade 只新增,不修改它们的语义。
 - **SSoT 单一**:`HARNESS_ASSETS` 仍是唯一资产清单;新增字段属于这张表的扩展,不开第二张表。
+- **`superpowers-to-trae` 仅作 CLI 表面参考**:不导入、不移植、不镜像该仓库的任何代码 / 模板 / 资产。引用范围仅限 CLI 语义对照(flag 命名、"upgrade vs install-once 文件" 的取舍方向)。run-bob 的模板内容来源始终是本仓库 `src/templates/` + `include_str!`。
 
 ---
 
