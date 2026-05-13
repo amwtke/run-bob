@@ -208,9 +208,12 @@ run-bob status
 
 Prints a green/red checklist of every required asset (3 skills + 3 anchor docs + ArchUnit + 2 shared Java files + 2 working dirs).
 
-### The three skills
+### The four skills
 
 After `run-bob init`, open Claude Code in that directory and use these in order:
+
+#### 🩺 `/bob-survey <requirement>` (phase 0 — TL intake)
+Architectural health check + requirement difficulty + recommendation, before you even start identifying. Classifies the repo as G (greenfield) / β (brownfield no bob) / γ (mature bob), scores the architecture across 6 bob-specific dimensions (0-20 each, total 100), judges the requirement on 3 factors (cross-rings, state-machine delta, legacy reuse), and emits a 3-tier recommendation: 🟢 go ahead, 🟡 prepare some things first, 🔴 refactor before accepting. Output: `docs/bob/00-survey-*.md` + a row appended to `ARCHITECTURE.md §12 体检记录`. Run before `/bob-identify` (it'll soft-prompt you anyway).
 
 #### 🔍 `/bob-identify <business description>` (or `--refactor` / new-feature description)
 Identity test. Runs the **5-question decision tree** on every concept / import / annotation in your business description (or existing code, or new feature) and classifies each as **CORE / ADAPTER / FRAMEWORK / TOOL / 违规**. Auto-detects mode G (greenfield) / B1 (full refactor) / B2 (clean island for incremental new features). Output: `docs/bob/01-identity-*.md`.
