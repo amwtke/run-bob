@@ -332,7 +332,7 @@ fn init_minimal_skips_archunit_and_shared_and_anchors() {
         .expect("init --minimal");
 
     // Skills must still be installed
-    for skill in &["bob-identify", "bob-onion", "bob-spec", "bob-survey"] {
+    for skill in &["bob-identify", "bob-onion", "bob-spec", "bob-survey", "bob-stories"] {
         let p = target.join(".claude").join("skills").join(skill).join("SKILL.md");
         assert!(p.is_file(), "minimal must still install skill {}", skill);
     }
@@ -915,5 +915,61 @@ fn bob_identify_mentions_survey_soft_prompt() {
             "bob-identify must mention {} for survey integration",
             token
         );
+    }
+}
+
+#[test]
+fn init_creates_bob_stories_skill() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-stories").join("SKILL.md");
+    assert!(p.is_file(), "bob-stories SKILL.md missing at {}", p.display());
+    let content = std::fs::read_to_string(&p).unwrap();
+
+    // Frontmatter
+    assert!(content.starts_with("---"));
+    assert!(content.contains("name: bob-stories"));
+    assert!(content.contains("description:"));
+
+    // Load-bearing tokens
+    for token in &[
+        // CLI
+        "/bob-stories",
+        "--refactor",
+        "--from-survey",
+        "--refresh",
+        // 三段式 conventions
+        "三段式",
+        "推测",
+        "推荐选择",
+        // Stages
+        "Stage 0",
+        "Stage 1",
+        "Stage 2",
+        "Stage 3",
+        "Stage 4",
+        // Mode detection
+        "feature",
+        "refactor",
+        "混合",
+        // Output paths
+        "docs/bob/02-stories-",
+        "docs/bob/02-stories/",
+        // Story types in index
+        "前置重构 stories",
+        "新功能 stories",
+        // Identify handoff
+        "/bob-identify",
+        "--story",
+        // Survey input
+        "00-survey-",
+    ] {
+        assert!(content.contains(token), "bob-stories must mention {}", token);
     }
 }
