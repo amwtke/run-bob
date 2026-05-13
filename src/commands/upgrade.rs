@@ -24,7 +24,7 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool) -> Result<()> {
     println!("{}", "Checking upgrade-safe assets...".bold());
     for asset in HARNESS_ASSETS.iter().filter(|a| a.upgrade_safe) {
         let path = asset_path(&target, asset);
-        if !path.exists() {
+        if !path.is_file() {
             println!("  {} {} ({})", "+".green(), asset.display(), "missing — will install".yellow());
             missing.push(asset);
         } else {
