@@ -2,7 +2,7 @@
 
 > A tiny Rust CLI that bootstraps a **Bob's 4-ring Clean Architecture + Superpowers harness** for Claude Code projects in one command.
 
-`run-bob init` installs three Claude Code skills (`bob-identify`, `bob-onion`, `bob-spec`) plus anchor documents (`CLAUDE.md`, `ARCHITECTURE.md`, `README-RUN-BOB.md`) plus shared Java skeletons (`UseCase`, `TransactionalUseCaseDecorator`) plus an ArchUnit guard, giving you a structured workflow from **fuzzy business description / existing α legacy → identity test → 4-ring design → spec → TDD implementation**.
+`run-bob init` installs five Claude Code skills (`bob-survey`, `bob-stories`, `bob-identify`, `bob-onion`, `bob-spec`) plus anchor documents (`CLAUDE.md`, `ARCHITECTURE.md`, `README-RUN-BOB.md`) plus shared Java skeletons (`UseCase`, `TransactionalUseCaseDecorator`) plus an ArchUnit guard, giving you a structured workflow from **fuzzy business description / existing α legacy → architecture survey → story split → identity test → 4-ring design → spec → TDD implementation**.
 
 ```
    business need / α legacy code / new feature
@@ -213,7 +213,7 @@ Prints a green/red checklist of every required asset (3 skills + 3 anchor docs +
 After `run-bob init`, open Claude Code in that directory and use these in order:
 
 #### 🩺 `/bob-survey <requirement>` (phase 0 — TL intake)
-Architectural health check + requirement difficulty + recommendation, before you even start identifying. Classifies the repo as G (greenfield) / β (brownfield no bob) / γ (mature bob), scores the architecture across 6 bob-specific dimensions (0-20 each, total 100), judges the requirement on 3 factors (cross-rings, state-machine delta, legacy reuse), and emits a 3-tier recommendation: 🟢 go ahead, 🟡 prepare some things first, 🔴 refactor before accepting. Output: `docs/bob/00-survey-*.md` + a row appended to `ARCHITECTURE.md §12 体检记录`. Run before `/bob-identify` (it'll soft-prompt you anyway).
+Architectural health check + requirement difficulty + recommendation, before you even start identifying. Classifies the repo as G (greenfield) / β (brownfield no bob) / γ (mature bob), scores the architecture across 6 bob-specific dimensions (0-20 each, total 100), judges the requirement on 4 factors (cross-rings, state-machine delta, legacy reuse, pre-touch refactor count), and emits a 3-tier recommendation: 🟢 go ahead, 🟡 prepare some things first, 🔴 refactor before accepting. Output: `docs/bob/00-survey-*.md` + a row appended to `ARCHITECTURE.md §12 体检记录`. Run before `/bob-identify` (it'll soft-prompt you anyway).
 
 #### 🧩 `/bob-stories <requirement>` (phase 1 — split into UseCase stories)
 Triggered after survey for Medium/Hard requirements. 1:1-splits the requirement into UseCase-level stories — each one a deliverable unit you can feed to `/bob-identify --story <path>`. Supports `--refactor [path]` for pure refactor work (α→γ improvement units) and auto-detects "feature + refactor" mixed mode when survey's 4th factor (前置重构量) is Medium/Hard. Output: `docs/bob/02-stories-*.md` index + `docs/bob/02-stories/<n>-<slug>.md` per-story files.
