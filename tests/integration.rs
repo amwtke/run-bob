@@ -1028,3 +1028,30 @@ fn bob_stories_mentions_test_coverage_stage() {
         );
     }
 }
+
+#[test]
+fn bob_identify_refactor_mentions_test_coverage_check() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-identify").join("SKILL.md");
+    let content = std::fs::read_to_string(&p).unwrap();
+
+    for token in &[
+        "Step B1.0",
+        "测试覆盖现状",
+        "分支",
+        "测试覆盖警告",
+    ] {
+        assert!(
+            content.contains(token),
+            "bob-identify --refactor must mention {} for B1 safety gate",
+            token
+        );
+    }
+}

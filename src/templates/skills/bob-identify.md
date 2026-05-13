@@ -175,6 +175,29 @@ Q5. (棕地专用)它出现在 legacy α/β 代码里,但新功能要复用相�
 
 ### 模式 B1(棕地全量重构)
 
+**Step B1.0:测试覆盖现状(soft 前置,全分支级)**
+
+`--refactor` 入口先跑覆盖审查:`find src/test -name "*.java"` 找全部测试文件 → 对待重构的类逐一 grep 方法名 → 读测试体 → 枚举分支。
+
+三段式追问:
+
+> **Q0:这些待重构类的测试覆盖情况?**
+>
+> **推测**:扫了一遍——
+>   - OrderService.cancel(4 分支):2 ✓ 2 ✗ → 需补 R0
+>   - OrderService.confirm(3 分支):0 ✓ 3 ✗ → 需写全 R0
+>   - LegacyPricingService.calc(2 分支):0 测试文件 → 需写全 R0
+> **理由**:grep + 读测试体 + 分支枚举
+> **推荐选择**:`先 /bob-stories --refactor 拆 R0 写测试,再 identify`
+>
+> 是否同意?
+
+用户应答处理:
+- **"是"** → 提前结束 identify,提示 `/bob-stories --refactor`
+- **"否,我先识别再说"** → 继续 identify,但在 identity 文档 §8 段附加 "⚠ 测试覆盖警告:[列出每个无 / 部分覆盖的方法 + 分支编号]"——后续 onion / spec 阶段能看到这个警告
+
+不强制阻断。但警告留痕,后段无法回避。
+
 **Step B1.1**:跑代码扫描:
 ```bash
 find src/main/java -name "*.java" -not -path "*/test/*"
