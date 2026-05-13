@@ -49,6 +49,33 @@ description: |
 
 **不强制**。用户明确说"否"则照旧继续。这一节遵从 TL 风:提问而不阻塞。
 
+## 再检查 /bob-stories (soft 前置)
+
+启动时若检测到下面任一条件,**三段式追问**用户是否先跑 `/bob-stories`:
+
+- survey 报告显示难度 ≥ Medium,但项目内不存在 `docs/bob/02-stories-*.md`
+- 项目内有 `02-stories-*.md` 但用户没有传 `--story <path>` flag,直接复述了整段需求
+
+格式:
+
+> **Q0b:看起来你已拆过 N 个 story,要不要先指明哪个 story?**
+>
+> **推测**:建议先指 story。我可以从需求里推测当前要做哪个 UseCase,但直接接整段需求容易把多个 UseCase 一锅煮,违反 1 story = 1 UseCase 的原则。
+> **理由**:`docs/bob/02-stories-*.md` 索引里列了 N 个 story,每个都是独立交付单元。
+> **推荐选择**:`/bob-identify --story docs/bob/02-stories/01-<...>.md`
+>
+> 是否同意?(回"是"→等用户给 story 路径;回"否"→把整段需求当一个 ad-hoc story 继续做身份测试)
+
+### --story <path> 入口约定
+
+`/bob-identify --story docs/bob/02-stories/01-approve-order.md`
+
+行为:从 story 文件读 §1 目标 + §2 用户故事 / 改造范围 ,作为 identify 的输入。等价于把 story 内容 inline 传给 `/bob-identify`。
+
+注意:这是 skill 模板约定的调用形式,不是 run-bob CLI 增加新 flag。
+
+**不强制**。用户回"否"或不带 `--story` 则照旧。
+
 ## 目标
 
 把**每一个候选概念 / 类 / import / 注解**都跑过 5 问决策树,产出一份分类表。

@@ -973,3 +973,29 @@ fn init_creates_bob_stories_skill() {
         assert!(content.contains(token), "bob-stories must mention {}", token);
     }
 }
+
+#[test]
+fn bob_identify_mentions_stories_soft_prompt() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-identify").join("SKILL.md");
+    let content = std::fs::read_to_string(&p).unwrap();
+
+    for token in &[
+        "/bob-stories",
+        "02-stories-",
+        "--story",
+    ] {
+        assert!(
+            content.contains(token),
+            "bob-identify must mention {} for stories integration",
+            token
+        );
+    }
+}
