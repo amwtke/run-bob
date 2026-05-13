@@ -885,3 +885,31 @@ fn init_creates_architecture_md_with_section_12() {
         );
     }
 }
+
+#[test]
+fn bob_identify_mentions_survey_soft_prompt() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-identify").join("SKILL.md");
+    let content = std::fs::read_to_string(&p).unwrap();
+
+    // The soft prompt must mention survey and the 7-day threshold.
+    for token in &[
+        "/bob-survey",
+        "docs/bob/00-survey",
+        "7 天",
+        "soft",  // marker we'll include in the new section header
+    ] {
+        assert!(
+            content.contains(token),
+            "bob-identify must mention {} for survey integration",
+            token
+        );
+    }
+}
