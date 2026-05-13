@@ -856,3 +856,32 @@ fn init_creates_bob_survey_skill() {
         assert!(content.contains(token), "bob-survey must mention {}", token);
     }
 }
+
+#[test]
+fn init_creates_architecture_md_with_section_12() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join("ARCHITECTURE.md");
+    assert!(p.is_file());
+    let content = std::fs::read_to_string(&p).unwrap();
+
+    // §12 header + empty table header must be shipped so /bob-survey
+    // can append rows deterministically.
+    assert!(
+        content.contains("## 12. 架构体检记录"),
+        "ARCHITECTURE.md must ship empty §12 header"
+    );
+    for col in &["日期", "状态", "总分", "需求", "难度", "推荐", "详报"] {
+        assert!(
+            content.contains(col),
+            "ARCHITECTURE.md §12 must have column header {}",
+            col
+        );
+    }
+}

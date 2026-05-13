@@ -189,5 +189,13 @@ public R execute(C cmd) { return inner.execute(cmd); }
 - [ ] 对每个 UseCase 运行 `/bob-spec <用例名>`
 - [ ] 启动 Superpowers brainstorming 决定栈细节(若 CLAUDE.md `## 技术栈约定` 段未填)
 
+## 12. 架构体检记录
+
+> 由 `/bob-survey` 自动追加。每次 `/bob-survey <需求>` 跑完会在此表追加一行。
+> `bob-onion` / `bob-spec` 可参考最近一次结论。
+
+| 日期 | 状态 | 总分 | 需求 | 难度 | 推荐 | 详报 |
+|---|---|---|---|---|---|---|
+
 ---
 *Managed by run-bob + /bob-onion skill.*
