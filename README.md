@@ -208,7 +208,7 @@ run-bob status
 
 Prints a green/red checklist of every required asset (3 skills + 3 anchor docs + ArchUnit + 2 shared Java files + 2 working dirs).
 
-### The five skills
+### The six skills
 
 After `run-bob init`, open Claude Code in that directory and use these in order:
 
@@ -226,6 +226,9 @@ Identity test. Runs the **5-question decision tree** on every concept / import /
 
 #### 📝 `/bob-spec <use case>` (or `--query` / `--refactor`)
 Per-use-case spec. Reads `ARCHITECTURE.md`, produces a spec with **Given-When-Then scenarios**, full Java code stubs (Command / Result / UseCase POJO / Entity method / framework Config / Controller), Guardrails for Superpowers, and "open questions for Superpowers" (tech-stack decisions). Output: `docs/specs/spec-*.md`. Three templates: command / query / refactor.
+
+#### ⚖️ `/bob-nfr <spec-path>` (phase 2 — NFR review after TDD)
+Optional post-implementation pass triggered after Superpowers TDD + UT complete. Adopts the 13-card NFR taxonomy (Performance / Scalability / Capacity / Reliability / Monitoring / AuthN / AuthZ / Security / Data Privacy / Configurability / Extensibility / Portability / Compatibility) and asks the LLM to pick 5-8 cards relevant to your spec, then walks each card depth-first with quantification gates (P95 / QPS / threshold). bob TL 风:量化优先 + 允许待定(连续 2 次给不出数字 → ⚠ 待量化,不阻断)。Output: `docs/bob/04-nfr-<spec-slug>-<date>.md` with decisions + a "建议新增 story 清单" — you decide whether to invoke `/bob-stories` to backfill the suggested follow-ups.
 
 ### The two anchor documents
 
