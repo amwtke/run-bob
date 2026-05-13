@@ -40,6 +40,10 @@ pub struct Asset {
     pub category: Category,
     /// True if the asset is installed even in `--minimal` mode.
     pub included_in_minimal: bool,
+    /// True if `run-bob upgrade` may overwrite this file when its content
+    /// drifts from the embedded version. User-owned files (CLAUDE.md,
+    /// ARCHITECTURE.md, CleanArchitectureTest.java) MUST be false.
+    pub upgrade_safe: bool,
 }
 
 impl Asset {
@@ -66,18 +70,21 @@ pub const HARNESS_ASSETS: &[Asset] = &[
         content: include_str!("templates/skills/bob-identify.md"),
         category: Category::Skill,
         included_in_minimal: true,
+        upgrade_safe: true,
     },
     Asset {
         rel_path: &[".claude", "skills", "bob-onion", "SKILL.md"],
         content: include_str!("templates/skills/bob-onion.md"),
         category: Category::Skill,
         included_in_minimal: true,
+        upgrade_safe: true,
     },
     Asset {
         rel_path: &[".claude", "skills", "bob-spec", "SKILL.md"],
         content: include_str!("templates/skills/bob-spec.md"),
         category: Category::Skill,
         included_in_minimal: true,
+        upgrade_safe: true,
     },
     // --- Harness documents (skipped in --minimal) ---
     Asset {
@@ -85,18 +92,21 @@ pub const HARNESS_ASSETS: &[Asset] = &[
         content: include_str!("templates/root/CLAUDE.md"),
         category: Category::HarnessDoc,
         included_in_minimal: false,
+        upgrade_safe: false,
     },
     Asset {
         rel_path: &["ARCHITECTURE.md"],
         content: include_str!("templates/root/ARCHITECTURE.md"),
         category: Category::HarnessDoc,
         included_in_minimal: false,
+        upgrade_safe: false,
     },
     Asset {
         rel_path: &["README-RUN-BOB.md"],
         content: include_str!("templates/root/README-RUN-BOB.md"),
         category: Category::HarnessDoc,
         included_in_minimal: false,
+        upgrade_safe: true,
     },
     // --- ArchUnit guard ---
     Asset {
@@ -106,6 +116,7 @@ pub const HARNESS_ASSETS: &[Asset] = &[
         content: include_str!("templates/root/CleanArchitectureTest.java"),
         category: Category::ArchUnit,
         included_in_minimal: false,
+        upgrade_safe: false,
     },
     // --- Shared Java skeletons ---
     Asset {
@@ -115,6 +126,7 @@ pub const HARNESS_ASSETS: &[Asset] = &[
         content: include_str!("templates/root/UseCase.java"),
         category: Category::SharedJava,
         included_in_minimal: false,
+        upgrade_safe: true,
     },
     Asset {
         rel_path: &[
@@ -124,6 +136,7 @@ pub const HARNESS_ASSETS: &[Asset] = &[
         content: include_str!("templates/root/TransactionalUseCaseDecorator.java"),
         category: Category::SharedJava,
         included_in_minimal: false,
+        upgrade_safe: true,
     },
 ];
 

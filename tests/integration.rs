@@ -479,3 +479,49 @@ fn status_flags_missing_after_minimal_init() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("some assets are missing"), "got:\n{}", stdout);
 }
+
+/// SSoT drift guard: every entry in HARNESS_ASSETS must have a deliberate
+/// `upgrade_safe` value matching its policy.
+///   - Skill + SharedJava → always upgrade-safe (pure generated content)
+///   - ArchUnit          → never upgrade-safe (FORBIDDEN_IN_INNER is user-edited)
+///   - HarnessDoc        → mixed (README is safe; CLAUDE / ARCHITECTURE are not)
+#[test]
+fn upgrade_safe_field_matches_category_policy() {
+    use run_bob::assets::{Category, HARNESS_ASSETS};
+
+    for asset in HARNESS_ASSETS {
+        let display = asset.rel_path.join("/");
+        match asset.category {
+            Category::Skill => assert!(
+                asset.upgrade_safe,
+                "{} is a Skill but upgrade_safe=false",
+                display
+            ),
+            Category::SharedJava => assert!(
+                asset.upgrade_safe,
+                "{} is a SharedJava but upgrade_safe=false",
+                display
+            ),
+            Category::ArchUnit => assert!(
+                !asset.upgrade_safe,
+                "{} is an ArchUnit but upgrade_safe=true",
+                display
+            ),
+            Category::HarnessDoc => {
+                let is_readme = asset.rel_path == ["README-RUN-BOB.md"];
+                if is_readme {
+                    assert!(
+                        asset.upgrade_safe,
+                        "README-RUN-BOB.md must be upgrade_safe=true"
+                    );
+                } else {
+                    assert!(
+                        !asset.upgrade_safe,
+                        "{} is a user-owned HarnessDoc but upgrade_safe=true",
+                        display
+                    );
+                }
+            }
+        }
+    }
+}

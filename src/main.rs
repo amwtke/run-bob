@@ -2,10 +2,8 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use colored::*;
 
-mod assets;
-mod commands;
+use run_bob::commands;
 
 #[derive(Parser, Debug)]
 #[command(name = "run-bob")]
@@ -58,24 +56,4 @@ fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-/// Print a success message with a green checkmark.
-pub fn success(msg: &str) {
-    println!("{} {}", "✓".green().bold(), msg);
-}
-
-/// Print an info message.
-pub fn info(msg: &str) {
-    println!("{} {}", "ℹ".blue().bold(), msg);
-}
-
-/// Print a warning message.
-pub fn warn(msg: &str) {
-    println!("{} {}", "⚠".yellow().bold(), msg);
-}
-
-/// Print a skipped message.
-pub fn skip(msg: &str) {
-    println!("{} {}", "↷".bright_black().bold(), msg.bright_black());
 }
