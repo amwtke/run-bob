@@ -58,12 +58,13 @@ description: |
 - 自动识别"前置重构 + 新功能"混合需求,输出双表
 - 不写代码、不出 spec、不画架构。**只回答**:"这个大需求该拆成哪些 story,顺序与依赖怎么走?"
 
-## 工作流(5 个 Stage)
+## 工作流(5 个 Stage + 1 个 refactor 专属)
 
 ```
 Stage 0. 输入归并(读 survey + 需求 + --refactor flag)
 Stage 1. 自动识别模式(feature / refactor / 混合)
 Stage 2. 三段式提拆法(LLM 提 UseCase / 改造单元列表)
+Stage 2.5. 测试覆盖体检(全分支级,refactor / 混合模式专属)
 Stage 3. 三段式拆顺序与依赖
 Stage 4. 写汇总索引 + 每个 story 明细
 ```
@@ -125,6 +126,60 @@ LLM 从需求 + 6 维度扣分点里抽出 UseCase / 改造单元,三段式输�
 
 - **feature stories**:1 个动词 = 1 个 UseCase = 1 story。如果两个动词共享 Entity 状态机但语义独立(approve vs reject),仍拆成两个 story。
 - **refactor stories**:1 个原子改造 = 1 story。原子的定义:能在 1 个 PR 里干完,改完后所有现有测试仍绿,ArchUnit 通过。
+
+---
+
+## Stage 2.5. 测试覆盖体检(refactor / 混合模式专属,全分支级)
+
+**触发**:仅 refactor / 混合模式。feature 纯新功能模式跳过本 Stage。
+
+**目的**:在拆顺序之前,先对每个 refactor 单元的"被改方法"做全分支级覆盖审查;无覆盖 / 部分覆盖的方法自动产 R0.x 特征测试 story,排到所有 R_i 之前。
+
+### Step A. 枚举分支
+
+对每个 refactor 单元 R_i 的每个被改方法 m,LLM 读 m 源码,列出所有分支:`if / else / switch case / throw / 早 return / 关键 && 短路`,编号 `B1, B2, ..., Bn`。
+
+### Step B. 映射测试
+
+`grep -rn '<方法名>' src/test/java/ 2>/dev/null` 找出引用 m 的测试方法。读每个测试体,判定它覆盖了哪些分支(`Bk1, Bk2 ...`)。
+
+### Step C. 决定 R0.x(三态)
+
+| 测试状态 | R0.x 产物 |
+|---|---|
+| 方法 m **无任何测试** | `R0.x · 为 <类>.<m> 写全分支覆盖测试`(全部 B1..Bn) |
+| 方法 m 有测试,**部分分支未覆盖** | `R0.x · 为 <类>.<m> 补未覆盖分支测试`(列出未覆盖的 Bk) |
+| 方法 m 全分支已覆盖 | ✓ 不出 R0 |
+
+### 示例输出
+
+```
+R1 · OrderService 状态机上提:
+  - cancel() · 4 分支(B1..B4)
+    · testCancelHappyPath:88 覆盖 B1, B3
+    · ✗ B2(status=SHIPPED 拒绝)、B4(已 PaidNotShipped 警告)未覆盖
+    → R0.1 · 为 OrderService.cancel 补未覆盖分支(B2, B4)
+  - confirm() · 3 分支 · 无任何测试
+    → R0.2 · 为 OrderService.confirm 写全分支覆盖测试(B1, B2, B3)
+
+R2 · TransactionalDecorator 收敛:
+  - apply()   · 5 分支 · 无任何测试 → R0.3 · 写全分支覆盖
+  - rollback() · 3 分支 · 全覆盖 ✓
+
+→ 生成 3 个 R0.x stories,排在 R1/R2 之前(R0.1 → R0.2 → R0.3 → R1 → R2)
+```
+
+### 三段式收敛
+
+> **Q1.5: 接受这 N 个 R0.x stories?**
+>
+> **推测**:体检发现 N 个方法、X 个未覆盖分支。建议 N 个 R0.x stories 全部接受,先写测试再重构。
+> **理由**:Michael Feathers《Legacy Code》第一条—没特征测试不要碰 legacy。全分支级是因为 happy path 测试容易让人误以为"覆盖了"。
+> **推荐选择**:`接受 N 个 R0.x stories`
+>
+> 是否同意?(回"是"走推荐;回"否,合并 R0.1+R0.2 进一个 story"重判;回"否,只要 R0.2/R0.3 不要 R0.1"切到手动)
+
+用户可调:合并、丢弃、把多个方法的 R0 合到 1 个 story。
 
 ---
 
@@ -236,6 +291,37 @@ refactor 模板 `docs/bob/02-stories/R<n>-<unit-kebab>.md`:
 ## 4. 下一步
 `/bob-identify --refactor src/main/java/.../service/OrderService.java`
 ```
+
+characterize 模板 `docs/bob/02-stories/R0.<x>-<method-kebab>.md`(由 Stage 2.5 产出):
+
+```markdown
+# Story R0.1 · 为 OrderService.cancel 补未覆盖分支测试
+类型 · characterize · 优先级 · High · 依赖 · -
+
+## 1. 目标
+补齐 OrderService.cancel 未覆盖分支测试,作为后续重构(R1)的基线。
+**不改任何生产代码**。
+
+## 2. 当前分支盘点
+- B1: status=NEW 正常取消 ✓ 已覆盖(testCancelHappyPath:88)
+- B2: status=SHIPPED 拒绝取消 ✗ 未覆盖
+- B3: status=PAID 退款分支 ✓ 已覆盖(testCancelHappyPath:88 内部)
+- B4: status=PaidNotShipped 警告分支 ✗ 未覆盖
+
+## 3. 改造范围
+- src/test/java/.../service/OrderServiceTest.java(新增 2 个 test 方法:testCancelShipped / testCancelPaidNotShipped)
+- 无生产代码改动
+
+## 4. 验收
+- 新增 2 个测试 → 全绿(测试反映现行为)
+- 全分支覆盖:B1-B4 都至少有 1 个 test 命中
+- commit message: `test: characterize OrderService.cancel uncovered branches B2/B4`
+
+## 5. 下一步
+完成后,R1(OrderService 状态机上提)可以开始
+```
+
+"全分支覆盖型" R0(全新无测试)使用同一模板,但 §2 当前分支盘点所有 B_i 都标 ✗,§3 改造范围写 `新增 N 个 test 方法`。
 
 ---
 

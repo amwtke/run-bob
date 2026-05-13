@@ -999,3 +999,32 @@ fn bob_identify_mentions_stories_soft_prompt() {
         );
     }
 }
+
+#[test]
+fn bob_stories_mentions_test_coverage_stage() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-stories").join("SKILL.md");
+    let content = std::fs::read_to_string(&p).unwrap();
+
+    for token in &[
+        "Stage 2.5",
+        "测试覆盖体检",
+        "R0.",
+        "characterize",
+        "全分支覆盖",
+        "未覆盖分支",
+    ] {
+        assert!(
+            content.contains(token),
+            "bob-stories must mention {} for safety net integration",
+            token
+        );
+    }
+}
