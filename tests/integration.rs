@@ -1072,7 +1072,7 @@ fn bob_spec_template_c_mentions_step_0_with_stories_interlock() {
     for token in &[
         "Step 0",
         "全分支级",
-        "若 docs/bob/02-stories",
+        "docs/bob/02-stories",
         "characterize",
     ] {
         assert!(

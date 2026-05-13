@@ -472,7 +472,7 @@ Response 404: { error, message }
 
 ### Step 0:测试覆盖现状(全分支级)
 
-- 若 docs/bob/02-stories-*.md 索引里有 `R0.x · characterize · <本类>` 已完成 → 引用并跳过本步,前提:R0.x 的全分支盘点表(§2)覆盖了本 spec affected 的所有分支
+- 若 `docs/bob/02-stories-*.md` 索引里有 `R0.x · characterize · <本类>` 已完成 → 引用并跳过本步,前提:R0.x 的全分支盘点表(§2)覆盖了本 spec affected 的所有分支
 - 否则,本步执行:
   - 枚举 affected method 的所有分支(if/else/switch case/throw/早 return)
   - 写测试覆盖每一个分支(无遗漏)
