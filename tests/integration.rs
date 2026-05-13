@@ -547,3 +547,120 @@ fn upgrade_help_lists_flags() {
         );
     }
 }
+
+#[test]
+fn upgrade_on_fresh_init_is_noop() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    // Fresh init lays down everything.
+    let status = std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+    assert!(status.success());
+
+    let output = std::process::Command::new(run_bob_bin())
+        .args(["upgrade", "--dir"])
+        .arg(target)
+        .output()
+        .expect("upgrade");
+    assert!(output.status.success(), "upgrade failed: {:?}", output);
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert!(
+        stdout.contains("All upgrade-safe assets are up to date"),
+        "expected no-op message, got:\n{}",
+        stdout
+    );
+    // No backup dir created on no-op.
+    assert!(
+        !target.join(".run-bob-backup").exists(),
+        ".run-bob-backup must not exist after a no-op upgrade"
+    );
+}
+
+#[test]
+fn upgrade_skips_user_owned() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    // Hand-edit the 3 user-owned files. Upgrade must NOT touch them.
+    let sentinel = "USER-EDIT-DO-NOT-OVERWRITE\n";
+    let user_owned = [
+        target.join("CLAUDE.md"),
+        target.join("ARCHITECTURE.md"),
+        target.join("src/test/java/architecture/CleanArchitectureTest.java"),
+    ];
+    for p in &user_owned {
+        std::fs::write(p, sentinel).expect("write sentinel");
+    }
+
+    let output = std::process::Command::new(run_bob_bin())
+        .args(["upgrade", "--dir"])
+        .arg(target)
+        .output()
+        .expect("upgrade");
+    assert!(output.status.success(), "upgrade failed: {:?}", output);
+
+    for p in &user_owned {
+        let actual = std::fs::read_to_string(p).expect("read user-owned");
+        assert_eq!(
+            actual, sentinel,
+            "upgrade must not touch user-owned file {}",
+            p.display()
+        );
+    }
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains("user-owned files skipped"),
+        "expected user-owned skip note, got:\n{}",
+        stdout
+    );
+}
+
+#[test]
+fn upgrade_dry_run_writes_nothing() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    // Corrupt one skill file so detection sees OUTDATED.
+    let skill = target.join(".claude/skills/bob-identify/SKILL.md");
+    std::fs::write(&skill, "STALE\n").expect("write stale");
+
+    let output = std::process::Command::new(run_bob_bin())
+        .args(["upgrade", "--dry-run", "--dir"])
+        .arg(target)
+        .output()
+        .expect("upgrade --dry-run");
+    assert!(output.status.success(), "upgrade --dry-run failed: {:?}", output);
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains("dry-run"),
+        "expected dry-run note, got:\n{}",
+        stdout
+    );
+
+    // File on disk is still the stale version.
+    let actual = std::fs::read_to_string(&skill).expect("read");
+    assert_eq!(actual, "STALE\n", "dry-run must not write files");
+    assert!(
+        !target.join(".run-bob-backup").exists(),
+        ".run-bob-backup must not exist after dry-run"
+    );
+}
