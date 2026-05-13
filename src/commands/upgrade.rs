@@ -75,9 +75,52 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool) -> Result<()> {
         return Ok(());
     }
 
-    // Apply step lands in Task 4. For now, bail to keep behavior honest.
-    let _ = no_backup;
-    anyhow::bail!("upgrade apply step not yet implemented (Task 4)");
+    // Apply: optional backup, then overwrite OUTDATED. MISSING handled in Task 5.
+    println!();
+    println!("{}", "Applying changes...".bold());
+
+    if !no_backup && !outdated.is_empty() {
+        let ts = utc_timestamp();
+        let backup_root = target.join(".run-bob-backup").join(&ts);
+        // Step A: back up every OUTDATED file FIRST.
+        for (asset, original_content) in &outdated {
+            let backup_path = asset_path(&backup_root, asset);
+            if let Some(parent) = backup_path.parent() {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("Failed to create backup dir {}", parent.display()))?;
+            }
+            fs::write(&backup_path, original_content)
+                .with_context(|| format!("Failed to write backup {}", backup_path.display()))?;
+        }
+        println!(
+            "  {} backup: {}/ ({} files)",
+            "📦".bold(),
+            format!(".run-bob-backup/{}", ts).bold(),
+            outdated.len()
+        );
+    }
+
+    // Step B: overwrite OUTDATED with embedded content.
+    for (asset, _) in &outdated {
+        let path = asset_path(&target, asset);
+        fs::write(&path, asset.content)
+            .with_context(|| format!("Failed to write {}", path.display()))?;
+        println!("  {} {} ({})", "✓".green(), asset.display(), "updated".cyan());
+    }
+
+    // MISSING handling lands in Task 5.
+
+    println!();
+    print_user_owned_skip_note(&user_owned);
+    println!();
+    println!(
+        "{} upgrade complete. {} updated, {} installed, {} up to date.",
+        "✓".green().bold(),
+        outdated.len(),
+        missing.len(),
+        up_to_date.len()
+    );
+    Ok(())
 }
 
 fn print_header(target: &Path, dry_run: bool, no_backup: bool) {
@@ -120,4 +163,43 @@ fn asset_path(target: &Path, asset: &Asset) -> PathBuf {
         path = path.join(seg);
     }
     path
+}
+
+/// Format `SystemTime::now()` as `YYYYMMDDTHHMMSSZ` (UTC).
+/// Uses the Hinnant civil_from_days algorithm — do not "simplify" it.
+fn utc_timestamp() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time before UNIX_EPOCH")
+        .as_secs() as i64;
+
+    let days = secs.div_euclid(86_400);
+    let sod = secs.rem_euclid(86_400);
+    let hour = sod / 3600;
+    let minute = (sod % 3600) / 60;
+    let second = sod % 60;
+
+    let (year, month, day) = days_to_ymd(days);
+    format!(
+        "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
+        year, month, day, hour, minute, second
+    )
+}
+
+/// Howard Hinnant's `civil_from_days`. Input: days since 1970-01-01.
+/// Output: (year, month [1..=12], day [1..=31]). Correct for any year.
+fn days_to_ymd(days: i64) -> (i64, u32, u32) {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64; // [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11]
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32; // [1, 31]
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32; // [1, 12]
+    let y = if m <= 2 { y + 1 } else { y };
+    (y, m, d)
 }

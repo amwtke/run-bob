@@ -664,3 +664,91 @@ fn upgrade_dry_run_writes_nothing() {
         ".run-bob-backup must not exist after dry-run"
     );
 }
+
+#[test]
+fn upgrade_replaces_stale_skill() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let skill = target.join(".claude/skills/bob-identify/SKILL.md");
+    let original = std::fs::read_to_string(&skill).expect("read original");
+    std::fs::write(&skill, "STALE-CONTENT\n").expect("write stale");
+
+    let output = std::process::Command::new(run_bob_bin())
+        .args(["upgrade", "--dir"])
+        .arg(target)
+        .output()
+        .expect("upgrade");
+    assert!(output.status.success(), "upgrade failed: {:?}", output);
+
+    // File is restored to embedded content.
+    let after = std::fs::read_to_string(&skill).expect("read after");
+    assert_eq!(
+        after, original,
+        "skill must be restored to embedded content after upgrade"
+    );
+
+    // Backup directory exists; find its single timestamp subdir.
+    let backup_root = target.join(".run-bob-backup");
+    assert!(backup_root.is_dir(), ".run-bob-backup must exist");
+    let entries: Vec<_> = std::fs::read_dir(&backup_root)
+        .expect("read_dir backup")
+        .filter_map(|e| e.ok())
+        .collect();
+    assert_eq!(
+        entries.len(),
+        1,
+        "exactly one timestamp dir expected under .run-bob-backup"
+    );
+    let ts_dir = entries[0].path();
+    let backed_up = ts_dir.join(".claude/skills/bob-identify/SKILL.md");
+    assert!(
+        backed_up.is_file(),
+        "backed-up file expected at {}",
+        backed_up.display()
+    );
+    let backup_content = std::fs::read_to_string(&backed_up).expect("read backup");
+    assert_eq!(
+        backup_content, "STALE-CONTENT\n",
+        "backup must preserve the original (stale) content"
+    );
+}
+
+#[test]
+fn upgrade_no_backup_skips_backup() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let skill = target.join(".claude/skills/bob-onion/SKILL.md");
+    let embedded = std::fs::read_to_string(&skill).expect("read embedded");
+    std::fs::write(&skill, "STALE\n").expect("write stale");
+
+    let output = std::process::Command::new(run_bob_bin())
+        .args(["upgrade", "--no-backup", "--dir"])
+        .arg(target)
+        .output()
+        .expect("upgrade --no-backup");
+    assert!(output.status.success(), "upgrade --no-backup failed: {:?}", output);
+
+    // File was overwritten.
+    let after = std::fs::read_to_string(&skill).expect("read after");
+    assert_eq!(after, embedded, "skill must be overwritten with --no-backup");
+
+    // But no backup directory was created.
+    assert!(
+        !target.join(".run-bob-backup").exists(),
+        ".run-bob-backup must not exist with --no-backup"
+    );
+}
