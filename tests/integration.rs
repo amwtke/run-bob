@@ -797,3 +797,62 @@ fn upgrade_installs_missing_skill() {
         stdout
     );
 }
+
+#[test]
+fn init_creates_bob_survey_skill() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-survey").join("SKILL.md");
+    assert!(p.is_file(), "bob-survey SKILL.md missing at {}", p.display());
+    let content = std::fs::read_to_string(&p).unwrap();
+
+    // Frontmatter contract
+    assert!(content.starts_with("---"), "must start with YAML frontmatter");
+    assert!(content.contains("name: bob-survey"), "frontmatter name");
+    assert!(content.contains("description:"), "frontmatter description");
+
+    // Load-bearing tokens — the conversation contract
+    for token in &[
+        // Workflow
+        "/bob-survey",
+        "三段式",
+        "推测",
+        "推荐选择",
+        // Three repo states
+        "G(绿地)",
+        "β(棕地未跑过 bob)",
+        "γ(成熟 bob)",
+        // 6 scoring dimensions
+        "Entity 纯度",
+        "UseCase 纯度",
+        "端口位置",
+        "状态机位置",
+        "@Transactional 唯一",
+        "FORBIDDEN_IN_INNER",
+        // Difficulty rubric
+        "跨环数",
+        "状态机增量",
+        "legacy 复用",
+        "Easy",
+        "Medium",
+        "Hard",
+        // Recommendation matrix
+        "🟢",
+        "🟡",
+        "🔴",
+        // Output schema
+        "docs/bob/00-survey-",
+        "ARCHITECTURE.md",
+        "§12",
+        // Soft handoff to identify
+        "/bob-identify",
+    ] {
+        assert!(content.contains(token), "bob-survey must mention {}", token);
+    }
+}
