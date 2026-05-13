@@ -1146,3 +1146,31 @@ fn init_creates_bob_nfr_skill() {
         assert!(content.contains(token), "bob-nfr must mention {}", token);
     }
 }
+
+#[test]
+fn bob_spec_mentions_nfr_reminder() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-spec").join("SKILL.md");
+    let content = std::fs::read_to_string(&p).unwrap();
+
+    // bob-spec should mention /bob-nfr at least 3 times (one per template's 下一步)
+    let count = content.matches("/bob-nfr").count();
+    assert!(
+        count >= 3,
+        "bob-spec must mention /bob-nfr at least 3 times (Template A/B/C reminder); found {}",
+        count
+    );
+
+    // And the reminder text should hint at "Superpowers TDD ... UT" follow-up
+    assert!(
+        content.contains("Superpowers TDD") && content.contains("UT"),
+        "bob-spec NFR reminder must reference Superpowers TDD + UT completion as the trigger"
+    );
+}
