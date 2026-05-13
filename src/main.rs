@@ -37,6 +37,21 @@ enum Commands {
         #[arg(short, long, default_value = ".")]
         dir: String,
     },
+
+    /// Re-sync upgrade-safe harness assets in a target project with the current run-bob binary
+    Upgrade {
+        /// Target directory (default: current directory)
+        #[arg(short, long, default_value = ".")]
+        dir: String,
+
+        /// Only report what would change; do not write any files
+        #[arg(short = 'n', long)]
+        dry_run: bool,
+
+        /// Skip the safety backup before overwriting (dangerous)
+        #[arg(long)]
+        no_backup: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -52,6 +67,13 @@ fn main() -> Result<()> {
         }
         Commands::Status { dir } => {
             commands::status::run(&dir)?;
+        }
+        Commands::Upgrade {
+            dir,
+            dry_run,
+            no_backup,
+        } => {
+            commands::upgrade::run(&dir, dry_run, no_backup)?;
         }
     }
 

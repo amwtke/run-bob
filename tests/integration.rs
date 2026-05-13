@@ -525,3 +525,25 @@ fn upgrade_safe_field_matches_category_policy() {
         }
     }
 }
+
+#[test]
+fn upgrade_help_lists_flags() {
+    let output = std::process::Command::new(run_bob_bin())
+        .args(["upgrade", "--help"])
+        .output()
+        .expect("run run-bob upgrade --help");
+    assert!(
+        output.status.success(),
+        "run-bob upgrade --help failed: {:?}",
+        output
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    for flag in &["--dir", "--dry-run", "--no-backup"] {
+        assert!(
+            stdout.contains(flag),
+            "expected {} in `upgrade --help` output, got:\n{}",
+            flag,
+            stdout
+        );
+    }
+}
