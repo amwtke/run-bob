@@ -1438,3 +1438,52 @@ fn init_creates_compliance_readme_with_pmd_note() {
         );
     }
 }
+
+#[test]
+fn init_creates_bob_compliance_skill() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-compliance")
+        .join("SKILL.md");
+    assert!(p.is_file(), "bob-compliance SKILL.md missing at {}", p.display());
+    let content = std::fs::read_to_string(&p).expect("read skill");
+
+    // Frontmatter
+    assert!(content.starts_with("---"), "must start with YAML frontmatter");
+    assert!(content.contains("name: bob-compliance"), "frontmatter name");
+    assert!(content.contains("description:"), "frontmatter description");
+
+    // Stage 0 tokens (will be extended in Tasks 4 and 5 with additional stage tokens)
+    for token in &[
+        // CLI / invocation
+        "/bob-compliance",
+        "--story",
+        "--refresh",
+        "--all-branch",
+        // 三段式
+        "三段式",
+        "推测",
+        "推荐选择",
+        // Stage 0
+        "Stage 0",
+        "状态探测",
+        "空仓",
+        "首次",
+        "漂移",
+        "冷藏",
+        "docs/compliance/sources/",
+        ".compliance.lock",
+        "sha256",
+    ] {
+        assert!(content.contains(token), "bob-compliance must mention {}", token);
+    }
+}
