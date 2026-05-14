@@ -1648,3 +1648,61 @@ fn init_minimal_skips_compliance_dir_but_installs_skill() {
         "minimal must NOT create docs/compliance/"
     );
 }
+
+#[test]
+fn upgrade_preserves_user_compliance_sources() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    // Fresh init
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    // User drops a "compliance source file" into sources/
+    let user_source = target
+        .join("docs")
+        .join("compliance")
+        .join("sources")
+        .join("my-team-rules.md");
+    let sentinel = "USER COMPLIANCE SOURCE — must survive upgrade\n";
+    std::fs::write(&user_source, sentinel).expect("write user source");
+
+    // User simulates a runtime product: a generated md and a lock file
+    let generated = target
+        .join("docs")
+        .join("compliance")
+        .join("my-team-rules.md");
+    let generated_content = "# Generated structured md (would normally be produced by /bob-compliance)\n";
+    std::fs::write(&generated, generated_content).expect("write generated");
+    let lock = target.join("docs").join("compliance").join(".compliance.lock");
+    let lock_content = "generated_at: 2026-05-14T00:00:00Z\nsources: []\n";
+    std::fs::write(&lock, lock_content).expect("write lock");
+
+    // Run upgrade
+    let status = std::process::Command::new(run_bob_bin())
+        .args(["upgrade", "--dir"])
+        .arg(target)
+        .status()
+        .expect("upgrade");
+    assert!(status.success(), "upgrade failed");
+
+    // All three user/runtime artifacts must be byte-identical after upgrade
+    assert_eq!(
+        std::fs::read_to_string(&user_source).expect("read"),
+        sentinel,
+        "sources/my-team-rules.md must NOT be touched by upgrade"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&generated).expect("read"),
+        generated_content,
+        "generated my-team-rules.md must NOT be touched by upgrade"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&lock).expect("read"),
+        lock_content,
+        ".compliance.lock must NOT be touched by upgrade"
+    );
+}
