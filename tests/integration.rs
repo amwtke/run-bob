@@ -1397,3 +1397,44 @@ fn init_appends_to_existing_gitignore_preserving_content() {
         content
     );
 }
+
+#[test]
+fn init_creates_compliance_readme_with_pmd_note() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join("docs").join("compliance").join("README.md");
+    assert!(p.is_file(), "compliance/README.md missing at {}", p.display());
+    let content = std::fs::read_to_string(&p).expect("read README");
+
+    // Load-bearing tokens — the 3-section contract
+    for token in &[
+        // Section 1: 用法
+        "项目级合规检查",
+        "sources/",
+        "/bob-compliance",
+        "PDF",
+        "docx",
+        // Section 2: PMD/SonarQube 例外
+        "PMD",
+        "SonarQube",
+        "保持",
+        "为空",
+        // Section 3: 缓存
+        ".compliance.lock",
+        "sha256",
+        "filename",
+    ] {
+        assert!(
+            content.contains(token),
+            "compliance/README.md must mention {}; got:\n{}",
+            token,
+            content
+        );
+    }
+}
