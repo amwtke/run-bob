@@ -1761,7 +1761,73 @@ fn init_creates_bob_model_skill() {
         // Source-doc handling (mirrors compliance Stage 1)
         "Read 工具",
         "pages",
+        // Stage 2 — md SSoT
+        "Stage 2",
+        "SSoT",
+        "frontmatter",
+        "source_doc_sha256",
+        // Stage 3 — html view
+        "Stage 3",
+        "Mermaid",
+        "classDiagram",
+        "stateDiagram-v2",
+        "flowchart",
+        "粘性 TOC",
+        // Stage 4 — closing
+        "Stage 4",
+        "/bob-stories",
+        "/bob-identify",
+        // 不变量
+        "不变量",
+        "md 是 SSoT",
     ] {
         assert!(content.contains(token), "bob-model must mention {}", token);
     }
+}
+
+#[test]
+fn bob_model_skill_mentions_dual_output() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-model").join("SKILL.md");
+    let content = std::fs::read_to_string(&p).expect("read skill");
+
+    // The skill must instruct Claude to produce BOTH md and html
+    assert!(content.contains(".md"), "skill must mention .md output");
+    assert!(content.contains(".html"), "skill must mention .html output");
+    assert!(
+        content.contains("docs/bob/03-model-"),
+        "skill must reference the output path prefix"
+    );
+}
+
+#[test]
+fn bob_model_skill_explains_cdn_strategy() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-model").join("SKILL.md");
+    let content = std::fs::read_to_string(&p).expect("read skill");
+
+    // The skill must explain the CDN strategy + offline degradation
+    assert!(content.contains("CDN"), "skill must mention CDN");
+    assert!(
+        content.contains("降级") || content.contains("离线"),
+        "skill must mention offline / degradation behavior"
+    );
+    assert!(
+        content.contains("cdn.jsdelivr.net") || content.contains("mermaid"),
+        "skill must reference the specific Mermaid CDN url or library name"
+    );
 }

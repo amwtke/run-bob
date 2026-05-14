@@ -177,3 +177,139 @@ Claude 按下列顺序识别,**每段三段式追问填空**(不抛开放问题)
 > **推荐选择**:`确认无误,进入 Stage 2 写 md` / `补充遗漏后再写`
 >
 > 是否同意?
+
+---
+
+## Stage 2. 写 md(SSoT,下游消费)
+
+输出 `docs/bob/03-model-<slug>-<date>.md`,固定 schema:
+
+```
+---
+name: bob-model
+source_doc: /Users/.../ycb需求.md
+source_doc_sha256: a1b2c3...
+generated_at: 2026-05-14T03:21:00Z
+target_phase: pre-stories
+---
+
+# 领域模型 · YCB 订餐 · 2026-05-14
+
+## 0. 元信息
+- 源文档:`ycb需求.md`(sha256 `a1b2c3...`)
+- 生成时间:`2026-05-14T03:21:00Z`
+- 后续步骤:`/bob-stories ycb需求.md`(基于本模型切片)
+
+## 1. 术语表
+| 中文 | 英文 | 定义 | 来源 | 同义词 |
+|---|---|---|---|---|
+| 订单 | Order | 用户提交的餐品购买订单 | YCB-001 | 单子/单据 |
+...
+
+## 2. Entity 草图
+### 2.1 Order
+**属性**
+- orderId: String (必填,系统生成)
+- orderNumber: String (必填,系统生成,见 BR-002)
+- ...
+
+**状态机种子**(Mermaid `stateDiagram-v2`)
+- 已出现:PENDING_PAYMENT
+- 待确认:PAID / DELIVERED / CANCELLED / TIMEOUT_CANCELLED(虚线)
+
+**不变量**
+- INV-Order-1: 单个 Order 仅含一个商家(YCB-001 AC#5)
+- INV-Order-2: orderNumber 格式 `yyyyMMddHHmmss + 6 位随机数`(BR-002)
+
+## 3. 业务规则
+### BR-001 价格计算
+**公式**: `Σ(item.price × item.qty) + 打包费(1) + 配送费(3)`
+**精度**: 金额字段保留 2 位小数(YCB-001 1.3 AC#5)
+**来源**: YCB-001 1.2 全部 AC
+
+### BR-002 orderNumber 格式
+**格式**: `yyyyMMddHHmmss + 6 位随机数`(20 个字符)
+**来源**: YCB-001 AC#2
+
+## 4. UseCase 初步清单
+| UseCase | 涉及 Entity | 涉及规则 | 来源 story |
+...
+
+## 5. 开放问题
+| 编号 | 问题 | 影响哪个下游 | 暂定假设 |
+...
+```
+
+**写完 md → 在 frontmatter 的 `source_doc_sha256` 字段记录源文档 sha256**(对标 /bob-compliance 的 `.compliance.lock` 思路,但 model 把审计 trace 直接放进 frontmatter,不另起 lock 文件)。
+
+---
+
+## Stage 3. 写 html(视图,团队 PR review)
+
+输出 `docs/bob/03-model-<slug>-<date>.html`:**单文件,自包含**,由 Claude 直接产出整段 html。
+
+### 3.1 页面结构
+
+```
+┌────────────────────────────────────────────┐
+│  顶部 metadata 卡片                          │
+│  (源文档 / 日期 / Claude 版本)              │
+├──────────┬─────────────────────────────────┤
+│ 粘性 TOC │ § 1. 术语表       (HTML 表)      │
+│          │ § 2. Entity 草图  (Mermaid)      │
+│  - 术语  │   2.1 Order       classDiagram   │
+│  - Entity│        + stateDiagram-v2         │
+│  - 规则  │ § 3. 业务规则     (卡片 + 表)    │
+│  - UC    │ § 4. UseCase      (Mermaid)      │
+│  - Q     │ § 5. 开放问题     (checklist)    │
+└──────────┴─────────────────────────────────┘
+```
+
+### 3.2 Mermaid 图清单
+
+| 段 | Mermaid 类型 | 内容 |
+|---|---|---|
+| 2.x Entity | `classDiagram` | 一个 class 块,列属性,加注释行 `<<entity>>` |
+| 2.x 状态机 | `stateDiagram-v2` | 已出现状态实线(`-->`),待确认虚线(`..>`) |
+| 4. UseCase 关系 | `flowchart LR` | UseCase 节点 + 依赖箭头 |
+
+### 3.3 资源策略
+
+- **CDN 一行**:`<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>` + 一段初始化 `mermaid.initialize({startOnLoad:true})`
+- **离线降级**:Mermaid 没加载到,代码块原样显示 —— Claude 必须用 `<pre><code class="language-mermaid">…</code></pre>` 包裹每张图,工程师即使没渲染仍能读 DSL
+- **CSS 内联**:`<style>` 标签,~200 行,实现:
+  - 左侧**粘性 TOC**(`position: sticky; top: 0`)
+  - 主区最大宽度 `960px` 居中
+  - 代码 / 表 / 标题字号、间距、配色(参考 Stripe / Tailwind 文档站的简洁风)
+- **暗黑模式:不做**(YAGNI)
+- **不内联 Mermaid 库**(节省 ~1MB)
+- **不内联字体 / 图标**(用系统 sans-serif)
+- 预期单文件 30-80 KB,git diff 友好
+
+### 3.4 html 入 git
+
+html 入 git,团队可以在 PR 里浏览器直接打开 review。每次跑 `/bob-model` 会覆盖,git diff 显示模型变化(术语 / 规则 / 开放问题)。
+
+---
+
+## Stage 4. 三段式收口 + 通报下一步
+
+> **Q3: 建模完成。N 条术语 / M 个 Entity / K 条业务规则 / W 个开放问题。**
+>
+> **推测**:难度 `<Medium/Hard>` → 建议 `/bob-stories`(基于本模型切片);如难度 `<Easy>` → 直接 `/bob-identify`
+> **理由**:从 /bob-survey 推荐 + 本模型规模综合判断
+> **推荐选择**:`继续 /bob-stories` / `直接 /bob-identify` / `打开 html 团队 review 后再决定`
+>
+> 是否同意?(回"是"按推荐;回"打开 html"提示文件路径 + 暂停)
+
+---
+
+## 不变量
+
+- **md 是 SSoT** —— html 仅是视图,每次 `/bob-model` 运行重写
+- **html 入 git** —— 团队 PR review 用,差异可见
+- **Mermaid via CDN** —— 单 `<script>` 标签;离线时优雅降级为代码块
+- **`docs/bob/03-` 槽位独占** —— model 用这个槽,其他 skill 不占
+- **不内置业务术语** —— 完全 runtime 抽取,无 schema fixture
+- **不引入新 R 规则** —— Model 是翻译层,不构造硬约束
+- **覆盖 vs 累积** —— 同一天 + 同源文档 → 覆盖;跨天 → 新文件(自动保留历史)
