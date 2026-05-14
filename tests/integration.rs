@@ -1519,3 +1519,35 @@ fn init_creates_bob_compliance_skill() {
         assert!(content.contains(token), "bob-compliance must mention {}", token);
     }
 }
+
+#[test]
+fn claude_md_has_r13_compliance() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join("CLAUDE.md");
+    assert!(p.is_file(), "CLAUDE.md missing");
+    let content = std::fs::read_to_string(&p).expect("read CLAUDE.md");
+
+    for token in &[
+        "R13",
+        "合规规则前置",
+        "docs/compliance/",
+        "/bob-compliance",
+        "【强制】",
+        "规则 ID",
+        "豁免",
+    ] {
+        assert!(
+            content.contains(token),
+            "CLAUDE.md must contain {} for R13; got:\n{}",
+            token,
+            content
+        );
+    }
+}
