@@ -1551,3 +1551,31 @@ fn claude_md_has_r13_compliance() {
         );
     }
 }
+
+#[test]
+fn bob_spec_mentions_compliance_in_all_three_templates() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-spec").join("SKILL.md");
+    let content = std::fs::read_to_string(&p).expect("read bob-spec");
+
+    // bob-spec must mention /bob-compliance at least 3 times (one per template's 下一步)
+    let count = content.matches("/bob-compliance").count();
+    assert!(
+        count >= 3,
+        "bob-spec must mention /bob-compliance at least 3 times (Template A/B/C reminder); found {}",
+        count
+    );
+
+    // And the reminder text should hint at "先 /bob-compliance 再 /bob-nfr" ordering
+    assert!(
+        content.contains("docs/compliance/sources/"),
+        "bob-spec compliance reminder must reference the sources/ directory"
+    );
+}

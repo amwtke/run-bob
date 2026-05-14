@@ -373,6 +373,7 @@ class OrderController {
 2. superpowers:writing-plans:基于本 spec 出分步计划
 3. superpowers:executing-plans + TDD:红 → 绿 → 重构
 4. superpowers:finishing-a-development-branch:验全绿 → 合并 / PR
+4.5. (可选,如 `docs/compliance/sources/` 非空)Superpowers TDD 完成 + UT 完备后,先跑 `/bob-compliance` 做合规校验,产物落 `docs/bob/05-compliance-<story>.md`
 5. (可选)Superpowers TDD 完成 + UT 完备后,跑 `/bob-nfr <本 spec 路径>` 过 13 张 NFR 卡片
 ```
 
@@ -442,6 +443,8 @@ Response 404: { error, message }
 ## 下一步
 查询实现通常短小(Application Service + DTO + Controller GET 端点),
 不一定需要完整 Superpowers 全流程;可直接实现 + 集成测试验证。
+
+(可选,如 `docs/compliance/sources/` 非空)Superpowers TDD 完成 + UT 完备后,先跑 `/bob-compliance` 做合规校验,产物落 `docs/bob/05-compliance-<story>.md`
 
 (可选)Superpowers TDD 完成 + UT 完备后,跑 `/bob-nfr <本 spec 路径>` 过 13 张 NFR 卡片(查询 spec 通常关注 Performance / Capacity 两张)。
 ````
@@ -522,6 +525,7 @@ Response 404: { error, message }
 ## 5. Guardrails / 下一步
 - 同模板 A §9 的反模式硬清单
 - **B1 模式重构每完成一步,必须 git commit;严禁批量合并**
+- (可选,如 `docs/compliance/sources/` 非空)Superpowers TDD 完成 + UT 完备后,先跑 `/bob-compliance` 做合规校验,产物落 `docs/bob/05-compliance-<story>.md`
 - (可选)Superpowers TDD 完成 + UT 完备后,跑 `/bob-nfr <本 spec 路径>` 过 13 张 NFR 卡片(refactor spec 通常 0-2 张相关)
 ````
 
