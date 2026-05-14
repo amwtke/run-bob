@@ -1831,3 +1831,29 @@ fn bob_model_skill_explains_cdn_strategy() {
         "skill must reference the specific Mermaid CDN url or library name"
     );
 }
+
+#[test]
+fn bob_survey_mentions_model_soft_prompt() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-survey").join("SKILL.md");
+    let content = std::fs::read_to_string(&p).expect("read bob-survey");
+
+    // bob-survey's 下一步 must mention /bob-model and the source-doc requirement
+    assert!(
+        content.contains("/bob-model"),
+        "bob-survey must mention /bob-model in 下一步; got:\n{}",
+        content
+    );
+    // And the prompt should clarify it's gated on having a source requirement doc
+    assert!(
+        content.contains("Medium") || content.contains("Hard") || content.contains("源需求文档"),
+        "bob-survey /bob-model prompt should hint at difficulty or source-doc gating"
+    );
+}

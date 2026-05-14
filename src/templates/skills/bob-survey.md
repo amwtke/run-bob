@@ -295,6 +295,7 @@ legacy 复用 · <Easy/Medium/Hard>(证据)
 - Easy / 🟢 → `/bob-identify <需求>`
 - Medium/Hard / 🟢🟡 → `/bob-stories <需求>`(用 --refresh 强制重跑)
 - 🔴 → 先重构(`/bob-onion --refactor` 或 B1 全量重构)
+- (强烈推荐,如有源需求文档)Medium/Hard / 🟢🟡 → 先跑 `/bob-model <源文档路径>` 把领域模型抽出来,再 `/bob-stories <需求>`
 ```
 
 ---
