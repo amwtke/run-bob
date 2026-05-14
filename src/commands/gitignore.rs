@@ -292,4 +292,36 @@ other/
         assert_eq!(new_content, None);
         assert_eq!(action, GitignoreReport::UpToDate);
     }
+
+    #[test]
+    fn header_no_space_variant_does_not_match() {
+        let existing = "#run-bob\n.run-bob-backup/\n";
+        let (new_content, action) =
+            compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
+        // We should append our own block; the user's `#run-bob` is foreign.
+        let nc = new_content.expect("must write");
+        assert!(nc.contains("#run-bob\n"), "must preserve user line");
+        assert!(nc.contains("# run-bob\n"), "must add canonical block header");
+        assert_eq!(action, GitignoreReport::Updated { added: 1 });
+    }
+
+    #[test]
+    fn header_double_hash_variant_does_not_match() {
+        let existing = "## run-bob\n.run-bob-backup/\n";
+        let (new_content, _) =
+            compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
+        let nc = new_content.expect("must write");
+        assert!(nc.contains("## run-bob\n"));
+        assert!(nc.contains("# run-bob\n"));
+    }
+
+    #[test]
+    fn header_case_variant_does_not_match() {
+        let existing = "# RUN-BOB\n.run-bob-backup/\n";
+        let (new_content, _) =
+            compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
+        let nc = new_content.expect("must write");
+        assert!(nc.contains("# RUN-BOB\n"));
+        assert!(nc.contains("# run-bob\n"));
+    }
 }
