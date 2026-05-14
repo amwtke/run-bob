@@ -107,6 +107,13 @@ pub const HARNESS_ASSETS: &[Asset] = &[
         included_in_minimal: true,
         upgrade_safe: true,
     },
+    Asset {
+        rel_path: &[".claude", "skills", "bob-compliance", "SKILL.md"],
+        content: include_str!("templates/skills/bob-compliance.md"),
+        category: Category::Skill,
+        included_in_minimal: true,
+        upgrade_safe: true,
+    },
     // --- Harness documents (skipped in --minimal) ---
     Asset {
         rel_path: &["CLAUDE.md"],
@@ -125,6 +132,13 @@ pub const HARNESS_ASSETS: &[Asset] = &[
     Asset {
         rel_path: &["README-RUN-BOB.md"],
         content: include_str!("templates/root/README-RUN-BOB.md"),
+        category: Category::HarnessDoc,
+        included_in_minimal: false,
+        upgrade_safe: true,
+    },
+    Asset {
+        rel_path: &["docs", "compliance", "README.md"],
+        content: include_str!("templates/root/compliance-README.md"),
         category: Category::HarnessDoc,
         included_in_minimal: false,
         upgrade_safe: true,
@@ -169,5 +183,9 @@ pub const HARNESS_DIRS: &[HarnessDir] = &[
     HarnessDir {
         rel_path: &["docs", "specs"],
         note: "(bob-spec outputs → Superpowers inputs)",
+    },
+    HarnessDir {
+        rel_path: &["docs", "compliance", "sources"],
+        note: "(用户合规规约原始文件 — PDF/docx/md/txt;空目录 = 无合规要求)",
     },
 ];

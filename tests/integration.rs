@@ -512,11 +512,18 @@ fn upgrade_safe_field_matches_category_policy() {
                 display
             ),
             Category::HarnessDoc => {
-                let is_readme = asset.rel_path == ["README-RUN-BOB.md"];
-                if is_readme {
+                let upgrade_safe_docs: &[&[&str]] = &[
+                    &["README-RUN-BOB.md"],
+                    &["docs", "compliance", "README.md"],
+                ];
+                let is_upgrade_safe_doc = upgrade_safe_docs
+                    .iter()
+                    .any(|s| asset.rel_path == *s);
+                if is_upgrade_safe_doc {
                     assert!(
                         asset.upgrade_safe,
-                        "README-RUN-BOB.md must be upgrade_safe=true"
+                        "{} is a machine-managed HarnessDoc, must be upgrade_safe=true",
+                        display
                     );
                 } else {
                     assert!(
