@@ -212,3 +212,124 @@ rule_id → (file, section, severity, title)
 > **推荐选择**:`进入 Stage 3 跑校验`
 >
 > 是否同意?
+
+---
+
+## Stage 3. Diff 校验 (模式 B 核心)
+
+### 3.1 定位检查范围 (优先级从高到低)
+
+1. **显式参数**:`/bob-compliance --story <story-id>` → 读取该 story 在 `docs/bob/02-stories-*.md` 里记录的 base ref,跑 `git diff <base>..HEAD`
+2. **当前活跃 story**:`docs/bob/02-stories-*.md` 存在且能识别出"当前 story" → 用该 story 的 base..HEAD
+3. **Fallback**:`git diff master..HEAD` + 未提交的工作目录变更
+4. **`--all-branch` flag**:`git diff master..HEAD` 全分支 diff,忽略 story 划分
+
+向用户三段式确认范围:
+
+> **Q2: 检查范围:<具体 ref 范围>,涉及 N 个文件 / M 行新增。**
+>
+> **推测**:<具体路径列表>
+> **理由**:<按上述优先级判定>
+> **推荐选择**:`确认范围,开始校验`
+>
+> 是否同意?
+
+### 3.2 逐条规则比对
+
+对每条加载到的规则,在 diff 内匹配:
+
+- **可机械检测**(命名、空格、关键字位置等)→ Claude 用模式匹配 / 正则检视 diff 文本
+- **需语义判断**(异常处理思路、并发设计、安全实践)→ Claude 逐文件逐函数检视上下文,判断是否符合规则意图
+
+**优先级**:先跑【强制】,再【推荐】,最后【参考】。中途如发现【强制】违反过多(> 10 条),可三段式询问是否暂停【推荐】 / 【参考】,先修【强制】。
+
+### 3.3 分类
+
+每条命中的规则归入三类:
+
+| 分类 | 定义 |
+|---|---|
+| **违反** | 明确触碰规则;diff 里有反例代码 |
+| **待量化** | 规则模糊或需求未给出基线(例:阿里规约要求"接口幂等",但 spec 未明确该接口是否要求幂等)→ 建议回 spec 补充 |
+| **豁免** | spec 的"交给 Superpowers 的开放问题"段已显式注明豁免理由 |
+
+---
+
+## Stage 4. 报告 + 建议新增 story 清单
+
+写报告到 `docs/bob/05-compliance-<story>.md`(或 `<branch>.md` 当走 `--all-branch` 时)。固定结构:
+
+```markdown
+# 合规校验报告 · <story-name>
+
+**日期:** 2026-05-14
+**范围:** <base-ref>..HEAD,N 个文件 / M 行新增
+**加载标准:** alibaba-songshan, ccaf-internal, ...
+
+## 违反清单
+
+### 【强制】违反 (X 条)
+
+#### [ALI-1.1.2] 禁止拼音英文混合
+- **位置:** `src/main/java/com/example/order/OrderService.java:42`
+- **代码片段:**
+  ```java
+  String DaZhePromotion = ...;
+  ```
+- **修复建议:** 改为 `String discountPromotion = ...;` 或 `String promotion = ...;`
+
+#### [ALI-2.2.1] 异常不能裸吞
+- **位置:** `src/main/java/com/example/order/OrderRepository.java:78-80`
+- **代码片段:** ...
+- **修复建议:** 至少 `log.error("...", e)`,或重抛业务异常
+
+### 【推荐】违反 (Y 条)
+...
+
+### 【参考】违反 (Z 条)
+...
+
+## 待量化 (W 条)
+- [ALI-7.3] 设计规约要求"接口幂等" — spec 未明确该接口是否要求幂等,
+  建议回 spec 补充
+
+## 豁免 (V 条)
+...
+
+## 建议新增 story 清单
+
+1. **R-compliance-001 修复 OrderService 拼音命名**
+   - story 类型:重构
+   - 影响范围:`OrderService` 及其调用方,共 5 处
+   - 估时:0.5h
+
+2. **R-compliance-002 OrderRepository 异常补 log**
+   - story 类型:重构
+   - 影响范围:OrderRepository 全文件
+   - 估时:0.5h
+
+## 下一步
+
+- 如有违反,把建议 story 喂给 `/bob-stories --refactor`
+- 跑 `/bob-nfr` 做非功能复盘
+```
+
+向用户三段式收口:
+
+> **Q3: 校验完成。违反 X【强制】 + Y【推荐】 + Z【参考】,待量化 W 条。**
+>
+> **推测**:【强制】X 条必须修;建议生成 K 个修复 story
+> **理由**:<列出最高优先级的几条>
+> **推荐选择**:`生成 story 清单 → 喂给 /bob-stories --refactor`
+>
+> 是否同意?(回"是"生成;回"否"只留报告;回"细看 [ID]"展开某条具体细节)
+
+---
+
+## 不变量
+
+- **目录即配置**:`docs/compliance/sources/` 空 ⇒ Stage 0 软退出
+- **永不内置标准**:run-bob 二进制里**不**打包任何标准 PDF / md
+- **upgrade 边界**:用户的 `sources/`、生成的 md、`.compliance.lock`、报告文件 —— run-bob upgrade **永不触碰**
+- **PMD/SonarQube 兼容**:空 sources/ ⇒ 与现有静态扫描工具零冲突
+- **Claude 唯一执行器**:PDF → md、规则抽取、diff 校验全在 Claude 内部,不引入新二进制 / 不调外部进程

@@ -1499,6 +1499,22 @@ fn init_creates_bob_compliance_skill() {
         "装载",
         "规则索引",
         "Severity",
+        // Stage 3 — diff check
+        "Stage 3",
+        "diff",
+        "违反",
+        "待量化",
+        "豁免",
+        // Diff scope priority
+        "git diff",
+        "master..HEAD",
+        // Stage 4 — report + handoff
+        "Stage 4",
+        "docs/bob/05-compliance-",
+        "建议新增 story 清单",
+        "/bob-stories",
+        // Cross-skill handoff
+        "/bob-nfr",
     ] {
         assert!(content.contains(token), "bob-compliance must mention {}", token);
     }
