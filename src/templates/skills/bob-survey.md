@@ -293,9 +293,12 @@ legacy 复用 · <Easy/Medium/Hard>(证据)
 ## 5. 下一步
 推荐命令(由 §4 推荐决定):
 - Easy / 🟢 → `/bob-identify <需求>`
-- Medium/Hard / 🟢🟡 → `/bob-stories <需求>`(用 --refresh 强制重跑)
+- **Medium/Hard / 🟢🟡 → 两步顺序(强制,不可跳过)**:
+  1. `/bob-model <源文档路径>` —— 抽术语 / Entity 草图 / 业务规则(BR-NNN) / UseCase 初步清单。无源文档时用 `/bob-model --story <story-path>` 反向建模;极小需求允许短路(仍产出占位 md)。
+  2. `/bob-stories <需求>`(用 `--refresh` 强制重跑) —— stories 在 Stage 0 会硬校验 `docs/bob/03-model-*.md` 存在,缺失立即拒绝运行。
 - 🔴 → 先重构(`/bob-onion --refactor` 或 B1 全量重构)
-- (强烈推荐,如有源需求文档)Medium/Hard / 🟢🟡 → 先跑 `/bob-model <源文档路径>` 把领域模型抽出来,再 `/bob-stories <需求>`
+
+> **不变量**:Medium/Hard 链路上 `/bob-model` 是强制阶段。即便 AC 从 survey 看起来"已清晰",model 仍需运行——跨 story 共享的术语 / 业务规则 / Entity 不变量必须在 SSoT(`docs/bob/03-model-*.md`)里登记,否则下游 identify/spec/TDD 会逐 story 重复追问,术语漂移与返工不可避免。
 ```
 
 ---

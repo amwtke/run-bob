@@ -35,6 +35,12 @@ description: |
 - **必须带需求**(或 `--refactor [path]` 指向重构对象)。无任一输入 → 拒绝。
 - 项目在 git 仓库内(用于读取 `docs/bob/00-survey-*.md` 等输入)。
 - 建议先跑过 `/bob-survey`——本 skill 在 survey 难度 ≥ Medium 时被 survey 推荐;若未跑过 survey,可以独立用,但拆分质量会下降。
+- **必须先跑过 `/bob-model`(强制门禁,不可跳过)** —— 存在 `docs/bob/03-model-*.md`(取最新一份,创建时间 < 7 天)。**缺失立即拒绝运行**。三段式提示用户:
+  - 有源需求文档 → `/bob-model <源文档路径>`
+  - 无源文档(只有 survey / AC)→ `/bob-model --story <story-path>` 反向建模
+  - 极小需求 → `/bob-model <源文档>` 选 "短路" 分支(仍产生占位 md,通过门禁)
+
+  > **理由**:stories 切片需要 model 的术语表 / 业务规则(BR-NNN) / Entity 草图作为输入;缺失会导致 N 个 story 各自重新追问相同问题,术语漂移、规则不一致、返工。`--refactor` 纯重构模式同样需要——refactor story 的 AC 引用 BR-NNN。**不留 `--skip-model` flag**:刻意不提供逃生口。
 
 ## 提问规约(强制)
 
@@ -73,6 +79,35 @@ Stage 4. 写汇总索引 + 每个 story 明细
 
 ## Stage 0. 输入归并
 
+### Step 1 · model 门禁(在读其它输入之前执行)
+
+```bash
+ls -t docs/bob/03-model-*.md 2>/dev/null | head -1
+```
+
+| 检测结果 | 行为 |
+|---|---|
+| **不存在** | **立即拒绝运行**。输出错误信息(见下)+ 三段式建议;**不进 Step 2** |
+| **存在但 mtime > 7 天** | 三段式追问"model 已陈旧,是否 `/bob-model --refresh` 重建?"。选"是" → 退出 stories;选"否,继续" → 在 stories 索引 §"用户调整" 留痕 |
+| **存在且新鲜(< 7 天)** | 读取 md frontmatter + §1-3(术语 / Entity 草图 / BR-NNN),供 Stage 2 拆分时引用;每个 story 文件的 §3「涉及概念」必须引用 `BR-NNN` 与 model 中登记的 Entity / UseCase 名(术语对齐)|
+
+**拒绝运行时的输出模板:**
+
+```
+❌ 缺失 model 阶段产物 `docs/bob/03-model-*.md`。
+
+stories 是 Medium/Hard 链路的下游,必须先跑 /bob-model(强制门禁,不可跳过)。
+
+下一步建议:
+  - 有源需求文档     → /bob-model <源文档路径>
+  - 无源文档(只有 survey)→ /bob-model --story <story-path>
+  - 极小需求           → /bob-model <源文档>(选"短路"分支,仍产出占位 md)
+
+理由:跨 story 共享的术语 / 业务规则 / Entity 不变量必须先在 SSoT 里登记。
+```
+
+### Step 2 · 业务输入归并(model 门禁通过后才执行)
+
 读取以下输入,按优先级合并:
 
 1. 命令行 `<需求>` / `--refactor [path]` / `--from-survey <path>` 参数
@@ -81,8 +116,9 @@ Stage 4. 写汇总索引 + 每个 story 明细
    - 总评难度(必须是 Medium 或 Hard,否则三段式追问"这个需求 Easy,要拆 stories 吗?")
    - 4 因子取值(尤其是 **前置重构量**,触发自动双模式)
    - 6 维度评分扣分点(用于推估 refactor 单元)
+4. 从 Step 1 读到的 model md 中提取:术语表(Glossary)、Entity 列表与状态机种子、BR-NNN 业务规则清单、UseCase 初步清单 —— 供 Stage 2 拆分时**直接引用**(每个 story 的 §3 必须出现至少一个 BR-NNN 或 Entity 名,确保术语对齐)。
 
-向用户**三段式**通报归并结果。
+向用户**三段式**通报归并结果(包含 model 文件名 + 新鲜度 + 引用计数)。
 
 ---
 
