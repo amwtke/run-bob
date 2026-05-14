@@ -78,9 +78,50 @@ fn compute_update(
                     out.push_str(&build_block(header, entries));
                     (Some(out), GitignoreReport::Updated { added: entries.len() })
                 }
-                Some(_start) => {
-                    // Cases C/D handled in later tasks.
-                    unimplemented!("cases C/D not yet implemented")
+                Some(start) => {
+                    // Find block end: first blank line, or foreign comment header,
+                    // or EOF (= lines.len()). We scan from start+1.
+                    let mut end = lines.len();
+                    for (i, line) in lines.iter().enumerate().skip(start + 1) {
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() {
+                            end = i;
+                            break;
+                        }
+                        if trimmed.starts_with('#') && trimmed != header {
+                            end = i;
+                            break;
+                        }
+                    }
+
+                    use std::collections::HashSet;
+                    let existing_entries: HashSet<&str> = lines[start + 1..end]
+                        .iter()
+                        .map(|l| l.trim())
+                        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                        .collect();
+
+                    let missing: Vec<&&str> = entries
+                        .iter()
+                        .filter(|e| !existing_entries.contains(*e as &str))
+                        .collect();
+
+                    if missing.is_empty() {
+                        // Case D: nothing to do.
+                        return (None, GitignoreReport::UpToDate);
+                    }
+
+                    // Case C: insert missing entries at `end`.
+                    let mut new_lines: Vec<String> =
+                        lines.iter().map(|s| s.to_string()).collect();
+                    for (offset, entry) in missing.iter().enumerate() {
+                        new_lines.insert(end + offset, entry.to_string());
+                    }
+                    let out = new_lines.join("\n");
+                    (
+                        Some(out),
+                        GitignoreReport::Updated { added: missing.len() },
+                    )
                 }
             }
         }
@@ -168,5 +209,61 @@ mod tests {
             new_content.as_deref(),
             Some("target/\n*.log\n\n# run-bob\n.run-bob-backup/\n")
         );
+    }
+
+    #[test]
+    fn case_c_appends_missing_entry_at_block_end() {
+        let existing = "# run-bob\n.run-bob-backup/\n";
+        let (new_content, action) = compute_update(
+            Some(existing),
+            "# run-bob",
+            &[".run-bob-backup/", ".run-bob-cache/"], // future 2nd entry
+        );
+        assert_eq!(
+            new_content.as_deref(),
+            Some("# run-bob\n.run-bob-backup/\n.run-bob-cache/\n")
+        );
+        assert_eq!(action, GitignoreReport::Updated { added: 1 });
+    }
+
+    #[test]
+    fn case_c_block_followed_by_other_content() {
+        // Block is followed by a blank line + foreign section. Insertion
+        // must happen at the END of the block, before the blank line.
+        let existing = "\
+# run-bob
+.run-bob-backup/
+
+# my own ignores
+local-cache/
+";
+        let (new_content, action) = compute_update(
+            Some(existing),
+            "# run-bob",
+            &[".run-bob-backup/", ".run-bob-cache/"],
+        );
+        let expected = "\
+# run-bob
+.run-bob-backup/
+.run-bob-cache/
+
+# my own ignores
+local-cache/
+";
+        assert_eq!(new_content.as_deref(), Some(expected));
+        assert_eq!(action, GitignoreReport::Updated { added: 1 });
+    }
+
+    #[test]
+    fn case_c_empty_block_gets_all_entries() {
+        // Header is there but no entries underneath.
+        let existing = "# run-bob\n";
+        let (new_content, action) =
+            compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
+        assert_eq!(
+            new_content.as_deref(),
+            Some("# run-bob\n.run-bob-backup/\n")
+        );
+        assert_eq!(action, GitignoreReport::Updated { added: 1 });
     }
 }
