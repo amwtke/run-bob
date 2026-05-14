@@ -1748,6 +1748,19 @@ fn init_creates_bob_model_skill() {
         "常规",
         // Output target hint (the skill must explain where its output goes)
         "docs/bob/03-model-",
+        // Stage 1 — extraction
+        "Stage 1",
+        "术语表",
+        "Entity 草图",
+        "状态机种子",
+        "不变量",
+        "业务规则",
+        "BR-",
+        "UseCase 初步清单",
+        "开放问题",
+        // Source-doc handling (mirrors compliance Stage 1)
+        "Read 工具",
+        "pages",
     ] {
         assert!(content.contains(token), "bob-model must mention {}", token);
     }

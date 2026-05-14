@@ -96,3 +96,84 @@ Stage 4. 三段式收口 + 通报下一步(/bob-stories 或 /bob-identify)
 - **同一天再跑** → 覆盖同名文件;**跨天** → 新文件,旧文件保留(团队可手动清理)
 
 `--refresh` flag 显式触发 Stage 1,即使 Stage 0 判定为"极小需求"。
+
+---
+
+## Stage 1. 抽取(领域核心工作)
+
+仅在 Stage 0 判定为 **常规** 或用户主动选择 `--refresh` 时执行。
+
+### 1.1 按格式读源文档
+
+| 后缀 | 读取方式 |
+|---|---|
+| `.pdf` | Read 工具的 `pages` 参数分批读(每次 5-10 页),逐批抽取 |
+| `.docx` | 同 PDF,Read 工具直接处理(注:抽取质量取决于文档结构) |
+| `.md`、`.txt`、`.markdown` | 一次性 Read 全文 |
+| 其他 | 跳过,在 md/html 报告里标注"格式不支持" |
+
+### 1.2 抽取 5 段内容
+
+Claude 按下列顺序识别,**每段三段式追问填空**(不抛开放问题)。
+
+#### A. 术语表(Glossary)
+
+| 字段 | 说明 |
+|---|---|
+| 中文 | 例:订单 |
+| 英文 | 例:Order |
+| 定义 | 一句话 |
+| 来源 | story / AC 编号 |
+| 同义词 | 散文里出现的其他叫法,统一指向此条 |
+
+#### B. Entity 草图
+
+每个 Entity 一段:
+
+- **属性清单** —— 名字 + 类型 + 必填(从 AC 推断)
+- **状态机种子** —— 已出现的状态名 + 已知的迁移箭头;**未确认的状态用虚线**,标注"待 /bob-spec 确认"
+- **不变量** —— 用 AC 措辞反推的 invariant,例:"一个 Order 只能包含一个商家的餐品"(YCB-001 AC#5)
+- **生命周期事件**(可选) —— "创建时""提交时""完结时"等关键 hook
+
+#### C. 业务规则清单(Business Rules)
+
+| 规则 ID | 类型 | 公式/约束 | 来源 |
+|---|---|---|---|
+| BR-001 | 计算 | `Σ(item.price × item.qty) + 1 + 3` | YCB-001 价格计算 |
+| BR-002 | 格式 | orderNumber = `yyyyMMddHHmmss + 6 位随机数` | YCB-001 AC#2 |
+| BR-003 | 约束 | 一个 Order 只能一个商家 | YCB-001 AC#5 |
+
+规则 ID 命名:`BR-<NNN>`,顺序递增,跨 story 共享。下游 spec 在 GWT 里直接 `// 验证 BR-001`,TDD 测试方法名可以是 `shouldCalculatePriceAccordingToBR001`。
+
+#### D. UseCase 初步清单
+
+| UseCase | 涉及 Entity | 涉及规则 | 来源 story | 备注 |
+|---|---|---|---|---|
+| CreateOrder | Order | BR-001 / BR-002 / BR-003 | YCB-001 + 1.1 + 1.3 | 命令型 |
+| CalculateOrderPrice | Order | BR-001 | YCB-001 + 1.2 | 命令型 |
+| ApplyDiscount | Order, DiscountScheme | (待定) | YCB-003 | 命令型 |
+
+这只是**初步切**。`/bob-stories` 拿到后会按 4 因子复评再 1:1 切到 UseCase 粒度。
+
+#### E. 开放问题清单
+
+**显式列出**散文需求没说清楚的:
+
+| 编号 | 问题 | 影响哪个下游 | 暂定假设 |
+|---|---|---|---|
+| Q1 | YCB-003 多种折扣是否可以叠加?顺序? | spec / TDD | 暂定不可叠加,以最高优惠为准 |
+| Q2 | 除 PENDING_PAYMENT 外完整 Order 状态机? | onion / spec | 暂只建模 PENDING_PAYMENT;其他用虚线 |
+| Q3 | 订单超时未支付是否自动取消? | onion / spec | 暂不实现 |
+| Q4 | 配送地址校验?(手机号格式) | spec | 暂不校验 |
+
+下游 `/bob-spec` 的"交给 Superpowers 的开放问题"段会进一步消化这些 Q。
+
+### 1.3 三段式确认抽取结果
+
+> **Q1: 抽取完成。N 条术语 / M 个 Entity / K 条业务规则 / U 个 UseCase / W 个开放问题。**
+>
+> **推测**:看起来覆盖完整 / 还有遗漏(列出我看到但未确认的概念)
+> **理由**:基于源文档的 grep + AC 反推
+> **推荐选择**:`确认无误,进入 Stage 2 写 md` / `补充遗漏后再写`
+>
+> 是否同意?
