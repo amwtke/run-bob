@@ -266,4 +266,30 @@ local-cache/
         );
         assert_eq!(action, GitignoreReport::Updated { added: 1 });
     }
+
+    #[test]
+    fn case_d_noop_when_block_already_complete() {
+        let existing = "# run-bob\n.run-bob-backup/\n";
+        let (new_content, action) =
+            compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
+        assert_eq!(new_content, None);
+        assert_eq!(action, GitignoreReport::UpToDate);
+    }
+
+    #[test]
+    fn case_d_noop_with_surrounding_content() {
+        let existing = "\
+target/
+
+# run-bob
+.run-bob-backup/
+
+# my section
+other/
+";
+        let (new_content, action) =
+            compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
+        assert_eq!(new_content, None);
+        assert_eq!(action, GitignoreReport::UpToDate);
+    }
 }
