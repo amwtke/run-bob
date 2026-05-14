@@ -1261,3 +1261,103 @@ fn init_run_twice_keeps_gitignore_byte_identical() {
     let second = std::fs::read(target.join(".gitignore")).expect("read second .gitignore");
     assert_eq!(first, second, "second init must leave .gitignore byte-identical");
 }
+
+#[test]
+fn upgrade_creates_gitignore_when_missing() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    // init first so we have a valid harness layout
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    // Then delete .gitignore to simulate an older run-bob install that
+    // never wrote one. upgrade must re-create it.
+    let gitignore = target.join(".gitignore");
+    assert!(gitignore.is_file(), "init should have created .gitignore");
+    std::fs::remove_file(&gitignore).expect("remove .gitignore");
+
+    let status = std::process::Command::new(run_bob_bin())
+        .args(["upgrade", "--dir"])
+        .arg(target)
+        .status()
+        .expect("upgrade");
+    assert!(status.success());
+
+    assert!(gitignore.is_file(), "upgrade must re-create .gitignore");
+    let content = std::fs::read_to_string(&gitignore).expect("read");
+    assert!(content.contains("# run-bob"));
+    assert!(content.contains(".run-bob-backup/"));
+}
+
+#[test]
+fn upgrade_no_gitignore_flag_leaves_gitignore_alone() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let gitignore = target.join(".gitignore");
+    std::fs::remove_file(&gitignore).expect("remove for test");
+    assert!(!gitignore.exists());
+
+    let status = std::process::Command::new(run_bob_bin())
+        .args(["upgrade", "--no-gitignore", "--dir"])
+        .arg(target)
+        .status()
+        .expect("upgrade --no-gitignore");
+    assert!(status.success());
+
+    assert!(
+        !gitignore.exists(),
+        "--no-gitignore must not re-create .gitignore"
+    );
+}
+
+#[test]
+fn upgrade_help_lists_no_gitignore_flag() {
+    let output = std::process::Command::new(run_bob_bin())
+        .args(["upgrade", "--help"])
+        .output()
+        .expect("upgrade --help");
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains("--no-gitignore"),
+        "upgrade --help must list --no-gitignore; got:\n{}",
+        stdout
+    );
+}
+
+#[test]
+fn upgrade_dry_run_does_not_create_gitignore() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    std::fs::remove_file(target.join(".gitignore")).expect("remove");
+
+    let status = std::process::Command::new(run_bob_bin())
+        .args(["upgrade", "--dry-run", "--dir"])
+        .arg(target)
+        .status()
+        .expect("upgrade --dry-run");
+    assert!(status.success());
+
+    assert!(
+        !target.join(".gitignore").exists(),
+        "dry-run must not touch .gitignore"
+    );
+}

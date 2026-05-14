@@ -55,6 +55,10 @@ enum Commands {
         /// Skip the safety backup before overwriting (dangerous)
         #[arg(long)]
         no_backup: bool,
+
+        /// Skip writing the run-bob block into the target directory's .gitignore
+        #[arg(long)]
+        no_gitignore: bool,
     },
 }
 
@@ -77,8 +81,9 @@ fn main() -> Result<()> {
             dir,
             dry_run,
             no_backup,
+            no_gitignore,
         } => {
-            commands::upgrade::run(&dir, dry_run, no_backup)?;
+            commands::upgrade::run(&dir, dry_run, no_backup, no_gitignore)?;
         }
     }
 

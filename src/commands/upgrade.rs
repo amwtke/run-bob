@@ -9,12 +9,12 @@ use std::path::{Path, PathBuf};
 
 use crate::assets::{Asset, HARNESS_ASSETS};
 
-pub fn run(target_dir: &str, dry_run: bool, no_backup: bool) -> Result<()> {
+pub fn run(target_dir: &str, dry_run: bool, no_backup: bool, no_gitignore: bool) -> Result<()> {
     let target = PathBuf::from(target_dir)
         .canonicalize()
         .with_context(|| format!("Failed to resolve target directory: {}", target_dir))?;
 
-    print_header(&target, dry_run, no_backup);
+    print_header(&target, dry_run, no_backup, no_gitignore);
 
     // Classify every upgrade-safe asset.
     let mut up_to_date: Vec<&Asset> = Vec::new();
@@ -47,6 +47,18 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool) -> Result<()> {
         println!();
         print_user_owned_skip_note(&user_owned);
         println!();
+        println!("{}", "Updating .gitignore...".bold());
+        if dry_run {
+            println!(
+                "  {} {}",
+                "→".bright_black(),
+                "skipped: --dry-run".bright_black()
+            );
+        } else {
+            let report = crate::commands::gitignore::apply(&target, no_gitignore)?;
+            crate::commands::gitignore::print_report(&report);
+        }
+        println!();
         println!(
             "{} {}",
             "✓".green().bold(),
@@ -64,6 +76,13 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool) -> Result<()> {
         );
         println!();
         print_user_owned_skip_note(&user_owned);
+        println!();
+        println!("{}", "Updating .gitignore...".bold());
+        println!(
+            "  {} {}",
+            "→".bright_black(),
+            "skipped: --dry-run".bright_black()
+        );
         println!();
         println!(
             "{} would update {}, would install {}, {} up to date.",
@@ -123,6 +142,10 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool) -> Result<()> {
     println!();
     print_user_owned_skip_note(&user_owned);
     println!();
+    println!("{}", "Updating .gitignore...".bold());
+    let report = crate::commands::gitignore::apply(&target, no_gitignore)?;
+    crate::commands::gitignore::print_report(&report);
+    println!();
     println!(
         "{} upgrade complete. {} updated, {} installed, {} up to date.",
         "✓".green().bold(),
@@ -133,7 +156,7 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool) -> Result<()> {
     Ok(())
 }
 
-fn print_header(target: &Path, dry_run: bool, no_backup: bool) {
+fn print_header(target: &Path, dry_run: bool, no_backup: bool, no_gitignore: bool) {
     println!();
     println!(
         "{} {}",
@@ -147,6 +170,9 @@ fn print_header(target: &Path, dry_run: bool, no_backup: bool) {
         (false, false) => "default (backup enabled)",
     };
     println!("  {} {}", "→ mode:".dimmed(), mode);
+    if no_gitignore {
+        println!("  {} {}", "→ mode:".dimmed(), "--no-gitignore (skip .gitignore)".yellow());
+    }
     println!();
 }
 
