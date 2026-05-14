@@ -324,4 +324,13 @@ other/
         assert!(nc.contains("# RUN-BOB\n"));
         assert!(nc.contains("# run-bob\n"));
     }
+
+    #[test]
+    fn user_added_entries_inside_block_preserved() {
+        let existing = "# run-bob\n.run-bob-backup/\nmy-local-cache/\n";
+        let (new_content, action) =
+            compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
+        assert_eq!(new_content, None, "no write — all run-bob entries already present");
+        assert_eq!(action, GitignoreReport::UpToDate);
+    }
 }
