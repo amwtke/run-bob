@@ -1706,3 +1706,49 @@ fn upgrade_preserves_user_compliance_sources() {
         ".compliance.lock must NOT be touched by upgrade"
     );
 }
+
+#[test]
+fn init_creates_bob_model_skill() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-model")
+        .join("SKILL.md");
+    assert!(p.is_file(), "bob-model SKILL.md missing at {}", p.display());
+    let content = std::fs::read_to_string(&p).expect("read skill");
+
+    // Frontmatter
+    assert!(content.starts_with("---"), "must start with YAML frontmatter");
+    assert!(content.contains("name: bob-model"), "frontmatter name");
+    assert!(content.contains("description:"), "frontmatter description");
+
+    // Stage 0 + meta tokens (will be extended in Tasks 3 and 4)
+    for token in &[
+        // CLI / invocation
+        "/bob-model",
+        "--story",
+        // 三段式
+        "三段式",
+        "推测",
+        "推荐选择",
+        // Workflow
+        "Stage 0",
+        "入口体检",
+        "短路",
+        "缺输入",
+        "极小需求",
+        "常规",
+        // Output target hint (the skill must explain where its output goes)
+        "docs/bob/03-model-",
+    ] {
+        assert!(content.contains(token), "bob-model must mention {}", token);
+    }
+}
