@@ -2,13 +2,15 @@
 
 > A tiny Rust CLI that bootstraps a **Bob's 4-ring Clean Architecture + Superpowers harness** for Claude Code projects in one command.
 
-`run-bob init` installs 7 Claude Code skills (`bob-survey`, `bob-stories`, `bob-identify`, `bob-onion`, `bob-spec`, `bob-nfr`, `bob-compliance`) plus anchor documents (`CLAUDE.md` with hard rules R0–R13, `ARCHITECTURE.md`, `README-RUN-BOB.md`) plus shared Java skeletons + an ArchUnit guard + a managed `.gitignore` block. Together they give Claude Code a structured pipeline from **fuzzy business need / α legacy → architecture survey → story split → identity test → 4-ring design → spec → TDD implementation → NFR & compliance review**.
+`run-bob init` installs 8 Claude Code skills (`bob-survey`, `bob-model`, `bob-stories`, `bob-identify`, `bob-onion`, `bob-spec`, `bob-nfr`, `bob-compliance`) plus anchor documents (`CLAUDE.md` with hard rules R0–R13, `ARCHITECTURE.md`, `README-RUN-BOB.md`) plus shared Java skeletons + an ArchUnit guard + a managed `.gitignore` block. Together they give Claude Code a structured pipeline from **fuzzy business need / α legacy → architecture survey → domain modeling → story split → identity test → 4-ring design → spec → TDD implementation → compliance & NFR review**.
 
 ```
    business need / α legacy code / new feature
               ↓
   /bob-survey     ──→ docs/bob/00-survey-*.md       (architecture + difficulty health check)
-              ↓                                       (Medium/Hard → split first)
+              ↓
+  /bob-model      ──→ docs/bob/03-model-*.md (+ .html)   (terms / entities / BR-NNN rules)
+              ↓                                            (Medium/Hard with source doc)
   /bob-stories    ──→ docs/bob/02-stories-*.md       (UseCase-level stories, +safety net)
               ↓
   /bob-identify   ──→ docs/bob/01-identity-*.md      (5-question decision tree)
@@ -28,7 +30,7 @@
 
 ## Status
 
-✅ **v0.2.0** — 6 phases live. Spec list under [`docs/superpowers/specs/`](docs/superpowers/specs/).
+✅ **v0.3.0** — 7 phases live. Spec list under [`docs/superpowers/specs/`](docs/superpowers/specs/).
 
 ---
 
@@ -62,19 +64,19 @@ Override via env vars:
 | Variable | Effect |
 |---|---|
 | `RUN_BOB_INSTALL_DIR` | Custom install directory |
-| `RUN_BOB_VERSION` | Pin to a specific tag (e.g. `v0.2.0`) |
+| `RUN_BOB_VERSION` | Pin to a specific tag (e.g. `v0.3.0`) |
 
 For POSIX `curl ... | sh`, put env vars on the **`sh` side** of the pipe:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/amwtke/run-bob/master/install.sh \
-  | RUN_BOB_VERSION=v0.2.0 RUN_BOB_INSTALL_DIR=/usr/local/bin sh
+  | RUN_BOB_VERSION=v0.3.0 RUN_BOB_INSTALL_DIR=/usr/local/bin sh
 ```
 
 For PowerShell, set `$env:*` before the `iex` line:
 
 ```powershell
-$env:RUN_BOB_VERSION = 'v0.2.0'
+$env:RUN_BOB_VERSION = 'v0.3.0'
 $env:RUN_BOB_INSTALL_DIR = "$env:USERPROFILE\bin"
 iwr -useb https://raw.githubusercontent.com/amwtke/run-bob/master/install.ps1 | iex
 ```
@@ -105,7 +107,7 @@ curl -fsSL https://raw.githubusercontent.com/amwtke/run-bob/master/install.sh | 
 
 # Or pin to a specific tag
 curl -fsSL https://raw.githubusercontent.com/amwtke/run-bob/master/install.sh \
-  | RUN_BOB_VERSION=v0.2.0 sh
+  | RUN_BOB_VERSION=v0.3.0 sh
 ```
 
 Windows PowerShell uses the `install.ps1` variant — see the [Install](#install) section above.
@@ -157,7 +159,7 @@ run-bob init [--dir <path>] [--force] [--minimal] [--no-gitignore]
 |---|---|---|
 | `-d`, `--dir <path>` | Target directory (default `.`) | Bootstrapping a sibling subdirectory (e.g. `--dir ./api`) without `cd` |
 | `-f`, `--force` | Overwrite existing files **including user-owned anchors** (`CLAUDE.md`, `ARCHITECTURE.md`, `CleanArchitectureTest.java`) | You explicitly want to reset the harness — destroys local edits to those 3 files |
-| `-m`, `--minimal` | **Only** install the 7 skills under `.claude/skills/`. Skip anchor docs, ArchUnit guard, shared Java skeletons, `docs/bob/`, `docs/specs/`, `docs/compliance/` | Adding bob skills to an existing project that already has its own architecture conventions / Java layout |
+| `-m`, `--minimal` | **Only** install the 8 skills under `.claude/skills/`. Skip anchor docs, ArchUnit guard, shared Java skeletons, `docs/bob/`, `docs/specs/`, `docs/compliance/` | Adding bob skills to an existing project that already has its own architecture conventions / Java layout |
 | `--no-gitignore` | Skip writing the `# run-bob` block (containing `.run-bob-backup/`) into the target directory's `.gitignore` | You manage `.gitignore` by hand or have your own ignore strategy |
 
 Default behavior creates this layout:
@@ -166,6 +168,7 @@ Default behavior creates this layout:
 your-project/
 ├── .claude/skills/
 │   ├── bob-survey/SKILL.md       # 🩺 phase 0 — TL intake (health check + recommendation)
+│   ├── bob-model/SKILL.md        # 🗺 phase 0.5 — domain modeling (glossary / entities / BR-NNN)
 │   ├── bob-stories/SKILL.md      # 🧩 phase 1 — split into UseCase stories
 │   ├── bob-identify/SKILL.md     # 🔍 5-question identity test (G/B1/B2 mode)
 │   ├── bob-onion/SKILL.md        # 🧅 4-ring design → ARCHITECTURE.md SSoT
@@ -231,13 +234,14 @@ Prints `✓` / `✗` for every asset run-bob expects. Exit code is non-zero when
 
 ---
 
-## The 7 skills (workflow order)
+## The 8 skills (workflow order)
 
 After `run-bob init`, open Claude Code in that directory and use the skills in this order. Each skill writes its output into `docs/bob/` or `docs/specs/` so the next skill can pick up where the previous one stopped.
 
 | # | Skill | Phase | Output |
 |---|---|---|---|
 | 0 | 🩺 `/bob-survey <requirement>` | TL intake | `docs/bob/00-survey-*.md` + row in `ARCHITECTURE.md §12` |
+| 0.5 | 🗺 `/bob-model <doc-path>` | Domain modeling (Medium/Hard + source doc) | `docs/bob/03-model-*.md` + `.html` |
 | 1 | 🧩 `/bob-stories <requirement>` | Story split (for Medium/Hard) | `docs/bob/02-stories-*.md` + per-story files |
 | 2 | 🔍 `/bob-identify <description>` | 5-question identity test | `docs/bob/01-identity-*.md` |
 | 3 | 🧅 `/bob-onion` | 4-ring design | updates `ARCHITECTURE.md` (SSoT) |

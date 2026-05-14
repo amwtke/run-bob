@@ -18,7 +18,7 @@ fn binary_prints_version() {
     assert!(output.status.success(), "run-bob --version failed");
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(
-        stdout.contains("run-bob 0.2.0"),
+        stdout.contains("run-bob 0.3.0"),
         "expected version in output, got: {}",
         stdout
     );
