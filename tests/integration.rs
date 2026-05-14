@@ -1361,3 +1361,32 @@ fn upgrade_dry_run_does_not_create_gitignore() {
         "dry-run must not touch .gitignore"
     );
 }
+
+#[test]
+fn init_appends_to_existing_gitignore_preserving_content() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    // Pre-existing .gitignore (e.g. user's Maven project setup).
+    std::fs::write(target.join(".gitignore"), "target/\n*.log\n").expect("write pre-existing");
+
+    let status = std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+    assert!(status.success());
+
+    let content = std::fs::read_to_string(target.join(".gitignore")).expect("read");
+    // User content preserved.
+    assert!(content.contains("target/\n"), "user line target/ must survive");
+    assert!(content.contains("*.log\n"), "user line *.log must survive");
+    // Run-bob block added.
+    assert!(content.contains("# run-bob\n.run-bob-backup/"), "run-bob block must be present");
+    // Block is separated from user content by a blank line.
+    assert!(
+        content.contains("*.log\n\n# run-bob"),
+        "must have blank line separator between user content and block; got:\n{}",
+        content
+    );
+}
