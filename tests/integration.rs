@@ -1579,3 +1579,72 @@ fn bob_spec_mentions_compliance_in_all_three_templates() {
         "bob-spec compliance reminder must reference the sources/ directory"
     );
 }
+
+#[test]
+fn init_creates_compliance_dir_and_sources() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    assert!(
+        target.join("docs").join("compliance").is_dir(),
+        "docs/compliance/ must be created"
+    );
+    assert!(
+        target.join("docs").join("compliance").join("sources").is_dir(),
+        "docs/compliance/sources/ must be created"
+    );
+    assert!(
+        target.join("docs").join("compliance").join("README.md").is_file(),
+        "docs/compliance/README.md must be installed"
+    );
+
+    // sources/ must be empty (user populates it)
+    let entries: Vec<_> = std::fs::read_dir(target.join("docs").join("compliance").join("sources"))
+        .expect("read_dir sources")
+        .filter_map(|e| e.ok())
+        .collect();
+    assert!(
+        entries.is_empty(),
+        "docs/compliance/sources/ must be empty after init; got {} entries",
+        entries.len()
+    );
+
+    // No generated files / lock yet (those are runtime products of /bob-compliance)
+    assert!(
+        !target.join("docs").join("compliance").join(".compliance.lock").exists(),
+        ".compliance.lock must NOT exist after init"
+    );
+}
+
+#[test]
+fn init_minimal_skips_compliance_dir_but_installs_skill() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--minimal", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init --minimal");
+
+    // Skill must still be installed (skills always included in minimal)
+    let skill = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-compliance")
+        .join("SKILL.md");
+    assert!(
+        skill.is_file(),
+        "minimal must install bob-compliance skill"
+    );
+
+    // But the compliance/ dir and README must NOT be created
+    assert!(
+        !target.join("docs").join("compliance").exists(),
+        "minimal must NOT create docs/compliance/"
+    );
+}
