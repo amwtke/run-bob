@@ -1483,6 +1483,22 @@ fn init_creates_bob_compliance_skill() {
         "docs/compliance/sources/",
         ".compliance.lock",
         "sha256",
+        // Stage 1 — generation
+        "Stage 1",
+        "结构化",
+        "规则 ID",
+        "强制",
+        "推荐",
+        "参考",
+        "frontmatter",
+        "alibaba-songshan",
+        "ALI-1.1.2",  // sample rule ID from the schema example
+        "generated_to",
+        // Stage 2 — load
+        "Stage 2",
+        "装载",
+        "规则索引",
+        "Severity",
     ] {
         assert!(content.contains(token), "bob-compliance must mention {}", token);
     }
