@@ -29,6 +29,10 @@ enum Commands {
         /// Target directory (default: current directory)
         #[arg(short, long, default_value = ".")]
         dir: String,
+
+        /// Skip writing the run-bob block into the target directory's .gitignore
+        #[arg(long)]
+        no_gitignore: bool,
     },
 
     /// Check if the current project has the run-bob harness properly installed
@@ -62,8 +66,9 @@ fn main() -> Result<()> {
             force,
             minimal,
             dir,
+            no_gitignore,
         } => {
-            commands::init::run(&dir, force, minimal)?;
+            commands::init::run(&dir, force, minimal, no_gitignore)?;
         }
         Commands::Status { dir } => {
             commands::status::run(&dir)?;

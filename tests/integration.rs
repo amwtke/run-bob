@@ -436,6 +436,10 @@ fn status_checks_every_file_init_writes() {
     }
     walk(target, target, &mut init_wrote);
 
+    // .gitignore is managed by the gitignore module (not a harness asset),
+    // so status intentionally does not track it. Exclude it from the drift check.
+    init_wrote.remove(".gitignore");
+
     // Run status and pull out the relative paths it printed.
     let output = Command::new(run_bob_bin())
         .args(["status", "--dir"])
@@ -1173,4 +1177,87 @@ fn bob_spec_mentions_nfr_reminder() {
         content.contains("Superpowers TDD") && content.contains("UT"),
         "bob-spec NFR reminder must reference Superpowers TDD + UT completion as the trigger"
     );
+}
+
+#[test]
+fn init_creates_gitignore_with_run_bob_block() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    let status = std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+    assert!(status.success(), "init failed");
+
+    let gitignore = target.join(".gitignore");
+    assert!(gitignore.is_file(), ".gitignore must be created by init");
+    let content = std::fs::read_to_string(&gitignore).expect("read .gitignore");
+    assert!(
+        content.contains("# run-bob"),
+        ".gitignore must contain run-bob block header; got:\n{}",
+        content
+    );
+    assert!(
+        content.contains(".run-bob-backup/"),
+        ".gitignore must contain .run-bob-backup/; got:\n{}",
+        content
+    );
+}
+
+#[test]
+fn init_no_gitignore_flag_skips_gitignore() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    let status = std::process::Command::new(run_bob_bin())
+        .args(["init", "--no-gitignore", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init --no-gitignore");
+    assert!(status.success());
+
+    assert!(
+        !target.join(".gitignore").exists(),
+        "--no-gitignore must skip .gitignore creation"
+    );
+}
+
+#[test]
+fn init_help_lists_no_gitignore_flag() {
+    let output = std::process::Command::new(run_bob_bin())
+        .args(["init", "--help"])
+        .output()
+        .expect("init --help");
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains("--no-gitignore"),
+        "init --help must list --no-gitignore; got:\n{}",
+        stdout
+    );
+}
+
+#[test]
+fn init_run_twice_keeps_gitignore_byte_identical() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("first init");
+
+    let first = std::fs::read(target.join(".gitignore")).expect("read first .gitignore");
+
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--force", "--dir"])
+        .arg(target)
+        .status()
+        .expect("second init");
+
+    let second = std::fs::read(target.join(".gitignore")).expect("read second .gitignore");
+    assert_eq!(first, second, "second init must leave .gitignore byte-identical");
 }

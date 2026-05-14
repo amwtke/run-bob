@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use crate::assets::{Asset, Category, HARNESS_ASSETS, HARNESS_DIRS};
 
-pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
+pub fn run(target_dir: &str, force: bool, minimal: bool, no_gitignore: bool) -> Result<()> {
     let target = PathBuf::from(target_dir)
         .canonicalize()
         .with_context(|| format!("Failed to resolve target directory: {}", target_dir))?;
@@ -24,6 +24,9 @@ pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
     }
     if minimal {
         println!("  {} {}", "→ mode:".dimmed(), "--minimal (skills only)".yellow());
+    }
+    if no_gitignore {
+        println!("  {} {}", "→ mode:".dimmed(), "--no-gitignore (skip .gitignore)".yellow());
     }
     println!();
 
@@ -50,6 +53,11 @@ pub fn run(target_dir: &str, force: bool, minimal: bool) -> Result<()> {
             crate::success(&format!("{} {}", dir.display(), dir.note));
         }
     }
+
+    println!();
+    println!("{}", "Updating .gitignore...".bold());
+    let report = crate::commands::gitignore::apply(&target, no_gitignore)?;
+    crate::commands::gitignore::print_report(&report);
 
     print_next_steps(minimal);
 
