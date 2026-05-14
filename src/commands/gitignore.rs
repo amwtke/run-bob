@@ -62,9 +62,27 @@ fn compute_update(
             let body = build_block(header, entries);
             (Some(body), GitignoreReport::Created { entries: entries.len() })
         }
-        Some(_existing) => {
-            // Cases B/C/D handled in later tasks.
-            unimplemented!("cases B/C/D not yet implemented")
+        Some(existing) => {
+            let lines: Vec<&str> = existing.split('\n').collect();
+            let block_start = lines.iter().position(|l| l.trim() == header);
+
+            match block_start {
+                None => {
+                    // Case B: append block. Ensure existing ends with "\n\n".
+                    let mut out = existing.to_string();
+                    if !out.is_empty() {
+                        while !out.ends_with("\n\n") {
+                            out.push('\n');
+                        }
+                    }
+                    out.push_str(&build_block(header, entries));
+                    (Some(out), GitignoreReport::Updated { added: entries.len() })
+                }
+                Some(_start) => {
+                    // Cases C/D handled in later tasks.
+                    unimplemented!("cases C/D not yet implemented")
+                }
+            }
         }
     }
 }
@@ -113,5 +131,42 @@ mod tests {
             Some("# run-bob\n.run-bob-backup/\n")
         );
         assert_eq!(action, GitignoreReport::Created { entries: 1 });
+    }
+
+    #[test]
+    fn case_b_appends_block_with_trailing_newline() {
+        // file ends with '\n'  → exactly one blank line should appear before the block.
+        let existing = "target/\n*.log\n";
+        let (new_content, action) =
+            compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
+        assert_eq!(
+            new_content.as_deref(),
+            Some("target/\n*.log\n\n# run-bob\n.run-bob-backup/\n")
+        );
+        assert_eq!(action, GitignoreReport::Updated { added: 1 });
+    }
+
+    #[test]
+    fn case_b_appends_block_no_trailing_newline() {
+        // file does NOT end with '\n' → add newline + blank line + block.
+        let existing = "target/\n*.log";
+        let (new_content, _) =
+            compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
+        assert_eq!(
+            new_content.as_deref(),
+            Some("target/\n*.log\n\n# run-bob\n.run-bob-backup/\n")
+        );
+    }
+
+    #[test]
+    fn case_b_appends_block_already_has_blank_line() {
+        // file already ends with "\n\n" → no extra newline needed.
+        let existing = "target/\n*.log\n\n";
+        let (new_content, _) =
+            compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
+        assert_eq!(
+            new_content.as_deref(),
+            Some("target/\n*.log\n\n# run-bob\n.run-bob-backup/\n")
+        );
     }
 }
