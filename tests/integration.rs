@@ -2080,7 +2080,7 @@ fn init_installs_bob_model_scripts() {
         .expect("init failed");
 
     let scripts_dir = target.join(".claude/skills/bob-model/scripts");
-    for fname in ["server.cjs", "helper.js", "start-server.sh", "stop-server.sh"] {
+    for fname in ["server.cjs", "helper.js", "start-server.sh", "stop-server.sh", "frame-template.html"] {
         let path = scripts_dir.join(fname);
         assert!(path.is_file(), "{} should be installed; not found", path.display());
     }

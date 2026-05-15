@@ -156,6 +156,13 @@ pub const HARNESS_ASSETS: &[Asset] = &[
         included_in_minimal: true,
         upgrade_safe: true,
     },
+    Asset {
+        rel_path: &[".claude", "skills", "bob-model", "scripts", "frame-template.html"],
+        content: include_str!("templates/scripts/bob-model/frame-template.html"),
+        category: Category::Skill,
+        included_in_minimal: true,
+        upgrade_safe: true,
+    },
     // --- Harness documents (skipped in --minimal) ---
     Asset {
         rel_path: &["CLAUDE.md"],
