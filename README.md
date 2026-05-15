@@ -34,6 +34,13 @@
 
 ---
 
+## Dependencies
+
+- **Rust ≥ 1.75** — to build from source (not required if you use a prebuilt binary)
+- **(Optional) Node.js ≥14** — required by `/bob-model` interactive review canvas. Without it, the skill falls back to read-only HTML automatically.
+
+---
+
 ## Install
 
 ### One-liner (recommended)
