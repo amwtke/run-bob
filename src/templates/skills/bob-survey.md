@@ -6,12 +6,19 @@ description: |
   或 /bob-survey --no-record(跑完不写 ARCHITECTURE.md §12),
   或 /bob-survey --refresh(已有 00-survey-*.md 时强制重跑)。
 
-  在跑 /bob-identify 之前做一道 TL 接需求动作:对当前仓库做架构体检
+  在跑 /bob-model 之前做一道 TL 接需求动作:对当前仓库做架构体检
   (6 个 Bob 独有维度 × 0-20 = 100 分),对新需求做难度判定
   (跨环数 / 状态机增量 / legacy 复用 / 前置重构量 四因子),结合两者给 3 档
   落地建议(🟢 直接接 / 🟡 准备一下再接 / 🔴 先重构再接)。
   产出 docs/bob/00-survey-<slug>-<date>.md 与 ARCHITECTURE.md §12
   体检记录追加一行。不写代码、不出 spec。
+
+  **survey 是可选阶段** —— 它只回答"现在能不能接、要不要先重构",
+  用户跳过也不阻塞后续 skill。**但是 /bob-model 及下游(stories / spec / TDD)
+  是强制阶段,不论需求难度 Easy / Medium / Hard 都必须跑**:跨 story 共享的
+  术语 / 业务规则 / Entity 不变量必须在 SSoT(docs/bob/03-model-*.md)里登记,
+  否则下游会逐 story 重复追问,术语漂移与返工不可避免。所有"下一步"推荐
+  统一指向 /bob-model,不存在"超过 N 个新端口才升 model"之类的阈值短路。
 
   适用于 Bob 4 环 Clean Architecture 工作流的 phase 0:接需求时
   先评估底子能不能接。当用户说"接需求前先体检"、"现在能不能接
@@ -53,13 +60,15 @@ description: |
 
 ## 目标
 
-产出一份**架构体检报告 + 需求难度评估 + 落地建议**,让用户在跑 /bob-identify 前知道:
+产出一份**架构体检报告 + 需求难度评估 + 落地建议**,让用户在跑 /bob-model 前知道:
 
 1. 当前仓库是 G/β/γ 哪一档
 2. 这个需求是 Easy/Medium/Hard
 3. 推荐 🟢/🟡/🔴 三档之一(直接接 / 先做几个准备 / 先重构再接)
 
 **不写代码、不出 spec**。只回答一个问题:**这个需求现在能不能接,怎么接最稳?**
+
+> **survey 是可选阶段**:用户可以跳过整个体检直接进 /bob-model;survey 只是把"能不能接"这件事显式化。但**一旦决定接,/bob-model 及下游就是强制阶段,不可跳过**——无论难度是 Easy / Medium / Hard,所有"下一步"推荐(本 skill 后面 Stage 3 / §5)都统一指向 /bob-model。
 
 ## 工作流(5 个 Stage)
 
@@ -236,21 +245,23 @@ LLM 三段式追问用户得出四因子等级。
 
 ## Stage 3. 推荐矩阵
 
+> **不变量(贯穿所有矩阵格子)**:`🟢` 与 `🟡` 的下一步**永远是 `/bob-model`**,不论难度 Easy / Medium / Hard;`🔴` 的下一步是先重构(onion),重构完仍回到 `/bob-model`。**不存在"Easy 难度可以直接跳过 model 走 identify"或"端口数少于 N 就不跑 model"之类的短路**——这些短路曾经在历史报告里出现,已被 v0.5+ 移除。`/bob-identify` 不在 survey 的推荐矩阵里,它是与 /bob-model 平行的可选 skill(用于 B1 全量重构 / B2 清洁孤岛 / Q1-Q5 边界判定),不替代 model。
+
 ### 绿地(G)
 
 | 难度 | 推荐 | 备注 |
 |---|---|---|
-| Easy | 🟢 直接 `/bob-identify <需求>`(G 模式) |  |
-| Medium | 🟢 直接 `/bob-identify <需求>`(G 模式) |  |
-| Hard | 🟢 直接 `/bob-identify <需求>`(G 模式) | 附加提示:建议拆 story(phase 1,未实施) |
+| Easy | 🟢 直接 `/bob-model <源文档>`(G 模式) |  |
+| Medium | 🟢 直接 `/bob-model <源文档>`(G 模式) |  |
+| Hard | 🟢 直接 `/bob-model <源文档>`(G 模式) | 附加提示:建议拆 story(phase 1,未实施) |
 
 ### 棕地(β / γ)3×3
 
 | 评分 \ 难度 | Easy | Medium | Hard |
 |---|---|---|---|
-| **80-100(γ 健康)** | 🟢 `/bob-identify` | 🟢 `/bob-stories <需求>` | 🟡 `/bob-stories <需求>`(B2 清洁孤岛);或先 `/bob-onion --refresh` 增端口 |
-| **60-79(β 可接受)** | 🟢 `/bob-identify`(B2 模式) | 🟡 `/bob-stories <需求>` + 提前列 ACL 表 | 🔴 先 `/bob-onion --refactor` 出三动作改造计划 |
-| **0-59(α 烂底子)** | 🟡 警告:能做但债会变重;建议 B2 + 隔离严格 | 🔴 先重构再接 | 🔴 拒绝接需求;先 B1 全量重构;给"必须先改完哪 5 个东西"的清单 |
+| **80-100(γ 健康)** | 🟢 `/bob-model` | 🟢 `/bob-model` | 🟡 `/bob-model`(B2 清洁孤岛);或先 `/bob-onion --refresh` 增端口再 `/bob-model` |
+| **60-79(β 可接受)** | 🟢 `/bob-model`(B2 模式) | 🟡 `/bob-model` + 提前列 ACL 表 | 🔴 先 `/bob-onion --refactor` 出三动作改造计划,再 `/bob-model` |
+| **0-59(α 烂底子)** | 🟡 警告:能做但债会变重;建议 `/bob-model` + B2 隔离严格 | 🔴 先重构再 `/bob-model` | 🔴 拒绝接需求;先 B1 全量重构;给"必须先改完哪 5 个东西"的清单,完成后再 `/bob-model` |
 
 每个格子在产出报告里展开为 3 行:
 
@@ -291,14 +302,16 @@ legacy 复用 · <Easy/Medium/Hard>(证据)
 风险:若忽略本建议直接接,...
 
 ## 5. 下一步
-推荐命令(由 §4 推荐决定):
-- Easy / 🟢 → `/bob-identify <需求>`
-- **Medium/Hard / 🟢🟡 → 两步顺序(强制,不可跳过)**:
+**不变量**:**survey 是可选阶段**(只回答"现在能不能接、要不要先重构");**`/bob-model` 及下游(stories / spec / TDD)是强制阶段,不论 Easy / Medium / Hard 都必须跑**。下面的"下一步"统一指向 `/bob-model`,**禁止**输出"超过 N 个新端口才升 model"或"AC 看起来清晰所以跳过 model"之类的阈值短路;`/bob-identify` 不在主链路里,需要它时用户会显式调用。
+
+路径(由 §4 推荐决定):
+
+- 🟢/🟡(可接) → 两步顺序:
   1. `/bob-model <源文档路径>` —— 抽术语 / Entity 草图 / 业务规则(BR-NNN) / UseCase 初步清单。无源文档时用 `/bob-model --story <story-path>` 反向建模;极小需求允许短路(仍产出占位 md)。
   2. `/bob-stories <需求>`(用 `--refresh` 强制重跑) —— stories 在 Stage 0 会硬校验 `docs/bob/03-model-*.md` 存在,缺失立即拒绝运行。
-- 🔴 → 先重构(`/bob-onion --refactor` 或 B1 全量重构)
+- 🔴 → 先 `/bob-onion --refactor` 或 B1 全量重构,**完成后仍回到上面的两步顺序**(model 不可跳)
 
-> **不变量**:Medium/Hard 链路上 `/bob-model` 是强制阶段。即便 AC 从 survey 看起来"已清晰",model 仍需运行——跨 story 共享的术语 / 业务规则 / Entity 不变量必须在 SSoT(`docs/bob/03-model-*.md`)里登记,否则下游 identify/spec/TDD 会逐 story 重复追问,术语漂移与返工不可避免。
+> 理由:跨 story 共享的术语 / 业务规则 / Entity 不变量必须在 SSoT(`docs/bob/03-model-*.md`)里登记,否则下游 identify/spec/TDD 会逐 story 重复追问,术语漂移与返工不可避免。
 ```
 
 ---
@@ -331,13 +344,17 @@ legacy 复用 · <Easy/Medium/Hard>(证据)
 
 - "你这个需求看起来 Medium,但我注意到 6 维度里 X 还在 Y,会被卡住。这是不是要先单独修?"
 - 给推荐时**明确说出代价**:"你也可以直接接,但代价是 [预测后果];好处是 [加速度]。"
+- **禁止**在"下一步"或 TL 提醒里用"超过 N 个新端口才升 model"、"AC 看起来清晰所以跳过 model"之类的阈值短路 —— 只要源文档是 PM 散文 + 多个 AC,就必须走 `/bob-model`,不存在豁免。判断点已经做完了(就是 §3 难度 + §4 推荐);"是否跑 model"不在判断范围内,是默认强制项。
 
-用户回"否"或"我先这样" → 尊重决定,但在报告末尾追加一行 "用户选择忽略推荐:..."。
+用户回"否,我先跑 model"或"我先这样" → 尊重决定,但在报告末尾追加一行 "用户选择忽略推荐:..."。
+用户回"否,我要跳过 /bob-model 直接进 stories" → 拒绝,引用上面 §5 不变量。
 
 ---
 
-## 与 bob-identify 的关系
+## 与 /bob-model / /bob-identify 的关系
 
-跑完 `/bob-survey` 后输出"下一步"命令,由用户自行决定是否执行 `/bob-identify`。**不自动调用** `/bob-identify`。
+跑完 `/bob-survey` 后输出"下一步"命令,**统一指向 `/bob-model`**(survey 是可选,model 是强制)。survey **不自动调用** model;由用户阅读报告 §5 后显式执行。
+
+`/bob-identify` 不在 survey 推荐矩阵的主链路里 —— 它是与 `/bob-model` 平行的可选 skill(用于 B1 全量重构 / B2 清洁孤岛 / Q1-Q5 边界判定)。用户可在 model 之后或之外按需调用,但**它不替代 model**:Easy 难度不会因为"调了 identify"就豁免 model。
 
 `bob-identify` 在启动时若检测到无 `docs/bob/00-survey-*.md` 或最新一份距今 > 7 天,会三段式追问是否先跑 survey(见 `bob-identify` skill 的描述)。

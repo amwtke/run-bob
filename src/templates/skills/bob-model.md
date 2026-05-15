@@ -5,9 +5,14 @@ description: |
   或 /bob-model --story <story-path>(退路:已有 stories 时反向补建模),
   或 /bob-model --refresh(强制重写已有模型,即使源文档未变化)。
 
-  在 /bob-survey 之后、/bob-stories 之前运行。读 PM 风格的散文需求文档
-  (.md / .pdf / .docx / .txt),抽取出:1) 术语表,2) Entity 草图(属性 + 状态机种子 + 不变量),
-  3) 业务规则清单(BR-NNN,跨 story 共享),4) UseCase 初步清单,5) 开放问题。
+  在 /bob-survey 之后、/bob-stories 之前运行。**/bob-model 是 bob-* 链路的强制阶段**:
+  与 /bob-survey(可跳过)不同,不论需求难度 Easy / Medium / Hard,只要决定接需求,
+  就必须跑 /bob-model;"极小需求"可走 Stage 0 短路分支,但仍产出占位 md。
+  不存在"AC 看起来清晰所以跳过 model"或"端口数少于 N 就不跑 model"之类的阈值短路。
+
+  读 PM 风格的散文需求文档(.md / .pdf / .docx / .txt),抽取出:1) 术语表,
+  2) Entity 草图(属性 + 状态机种子 + 不变量),3) 业务规则清单(BR-NNN,跨 story 共享),
+  4) UseCase 初步清单,5) 开放问题。
   产出交互式 docs/bob/03-model-<slug>-<date>.html(Stage 2-3.5 review canvas,带 widget + WebSocket 反馈)
   + Stage 4 推进时从最终 html 状态 dump 出 docs/bob/03-model-<slug>-<date>.md(SSoT)。
 

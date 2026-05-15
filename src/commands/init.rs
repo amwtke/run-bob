@@ -7,7 +7,13 @@ use std::path::{Path, PathBuf};
 
 use crate::assets::{Asset, Category, HARNESS_ASSETS, HARNESS_DIRS};
 
-pub fn run(target_dir: &str, force: bool, minimal: bool, no_gitignore: bool) -> Result<()> {
+pub fn run(
+    target_dir: &str,
+    force: bool,
+    minimal: bool,
+    no_gitignore: bool,
+    with_java: bool,
+) -> Result<()> {
     let target = PathBuf::from(target_dir)
         .canonicalize()
         .with_context(|| format!("Failed to resolve target directory: {}", target_dir))?;
@@ -25,6 +31,9 @@ pub fn run(target_dir: &str, force: bool, minimal: bool, no_gitignore: bool) -> 
     if minimal {
         println!("  {} {}", "→ mode:".dimmed(), "--minimal (skills only)".yellow());
     }
+    if with_java {
+        println!("  {} {}", "→ mode:".dimmed(), "--with-java (install Maven/ArchUnit skeleton)".yellow());
+    }
     if no_gitignore {
         println!("  {} {}", "→ mode:".dimmed(), "--no-gitignore (skip .gitignore)".yellow());
     }
@@ -33,6 +42,9 @@ pub fn run(target_dir: &str, force: bool, minimal: bool, no_gitignore: bool) -> 
     let mut current_cat: Option<Category> = None;
     for asset in HARNESS_ASSETS {
         if minimal && !asset.included_in_minimal {
+            continue;
+        }
+        if asset.category.is_java_skeleton() && !with_java {
             continue;
         }
         if Some(asset.category) != current_cat {
@@ -125,7 +137,8 @@ fn print_next_steps(minimal: bool) {
 
     if minimal {
         println!("  Skills installed. Open Claude Code and try:");
-        println!("    {} /bob-identify <your business description>", "•".cyan());
+        println!("    {} /bob-survey <your business description>   (optional sanity check)", "•".cyan());
+        println!("    {} /bob-model <doc-path>                     (mandatory — extracts the domain SSoT)", "•".cyan());
         println!();
         println!(
             "  {} for full project integration, run without --minimal.",
@@ -142,12 +155,18 @@ fn print_next_steps(minimal: bool) {
     println!();
     println!("  2. {} open Claude Code in this directory.", "Launch".cyan());
     println!();
-    println!("  3. {} start the workflow:", "Run".cyan());
+    println!("  3. {} start the workflow (survey is optional; /bob-model and downstream are mandatory):", "Run".cyan());
     println!(
-        "       {}",
-        "/bob-identify <your business description>".bold().green()
+        "       {}    {}",
+        "/bob-survey <your business description>".bold().green(),
+        "(optional)".bright_black()
     );
-    println!("       {}", "/bob-onion".bold().green());
+    println!(
+        "       {}    {}",
+        "/bob-model <doc-path>".bold().green(),
+        "(mandatory — produces the SSoT for downstream skills)".bright_black()
+    );
+    println!("       {}", "/bob-stories <your business description>".bold().green());
     println!(
         "       {}",
         "/bob-spec <use case>".bold().green()

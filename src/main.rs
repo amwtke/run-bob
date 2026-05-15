@@ -33,6 +33,13 @@ enum Commands {
         /// Skip writing the run-bob block into the target directory's .gitignore
         #[arg(long)]
         no_gitignore: bool,
+
+        /// Also install the Java/Maven skeleton (ArchUnit test + shared UseCase /
+        /// TransactionalUseCaseDecorator under src/). Off by default — only useful
+        /// when the target project is a Java/Spring project ready to enforce the
+        /// 4-ring architecture at test time.
+        #[arg(long)]
+        with_java: bool,
     },
 
     /// Check if the current project has the run-bob harness properly installed
@@ -71,8 +78,9 @@ fn main() -> Result<()> {
             minimal,
             dir,
             no_gitignore,
+            with_java,
         } => {
-            commands::init::run(&dir, force, minimal, no_gitignore)?;
+            commands::init::run(&dir, force, minimal, no_gitignore, with_java)?;
         }
         Commands::Status { dir } => {
             commands::status::run(&dir)?;

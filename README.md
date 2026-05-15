@@ -159,23 +159,24 @@ Prints a green/red checklist of every required asset.
 ### `run-bob init` — bootstrap a project
 
 ```bash
-run-bob init [--dir <path>] [--force] [--minimal] [--no-gitignore]
+run-bob init [--dir <path>] [--force] [--minimal] [--with-java] [--no-gitignore]
 ```
 
 | Flag | Effect | When to use it |
 |---|---|---|
 | `-d`, `--dir <path>` | Target directory (default `.`) | Bootstrapping a sibling subdirectory (e.g. `--dir ./api`) without `cd` |
-| `-f`, `--force` | Overwrite existing files **including user-owned anchors** (`CLAUDE.md`, `ARCHITECTURE.md`, `CleanArchitectureTest.java`) | You explicitly want to reset the harness — destroys local edits to those 3 files |
+| `-f`, `--force` | Overwrite existing files **including user-owned anchors** (`CLAUDE.md`, `ARCHITECTURE.md`, `CleanArchitectureTest.java`) | You explicitly want to reset the harness — destroys local edits to those files |
 | `-m`, `--minimal` | **Only** install the 8 skills under `.claude/skills/`. Skip anchor docs, ArchUnit guard, shared Java skeletons, `docs/bob/`, `docs/specs/`, `docs/compliance/` | Adding bob skills to an existing project that already has its own architecture conventions / Java layout |
+| `--with-java` | Also install the Java/Maven skeleton: ArchUnit test (`src/test/java/architecture/CleanArchitectureTest.java`) + shared interfaces (`src/main/java/com/example/shared/usecase/UseCase.java`, `…/framework/transaction/TransactionalUseCaseDecorator.java`). **Off by default** — by default `init` no longer touches `src/` at all. | The target project is a Java/Spring project ready to enforce the 4-ring architecture at test time |
 | `--no-gitignore` | Skip writing the `# run-bob` block (containing `.run-bob-backup/`) into the target directory's `.gitignore` | You manage `.gitignore` by hand or have your own ignore strategy |
 
-Default behavior creates this layout:
+Default behavior creates this layout (no `src/`):
 
 ```
 your-project/
 ├── .claude/skills/
-│   ├── bob-survey/SKILL.md       # 🩺 phase 0 — TL intake (health check + recommendation)
-│   ├── bob-model/SKILL.md        # 🗺 phase 0.5 — domain modeling (glossary / entities / BR-NNN)
+│   ├── bob-survey/SKILL.md       # 🩺 phase 0 — TL intake (health check + recommendation, optional)
+│   ├── bob-model/SKILL.md        # 🗺 phase 0.5 — domain modeling (mandatory, all difficulties)
 │   ├── bob-stories/SKILL.md      # 🧩 phase 1 — split into UseCase stories
 │   ├── bob-identify/SKILL.md     # 🔍 5-question identity test (G/B1/B2 mode)
 │   ├── bob-onion/SKILL.md        # 🧅 4-ring design → ARCHITECTURE.md SSoT
@@ -186,18 +187,25 @@ your-project/
 ├── ARCHITECTURE.md               # 📘 4-ring architecture SSoT (user-owned)
 ├── README-RUN-BOB.md             # 📖 in-project user guide (upgrade-safe)
 ├── .gitignore                    # auto-managed `# run-bob` block (+ existing user content)
-├── docs/
-│   ├── bob/                      # bob skills' intermediate outputs
-│   ├── specs/                    # bob-spec outputs
-│   └── compliance/               # phase-3 compliance scaffold
-│       ├── README.md             # how to use this folder (auto-managed)
-│       └── sources/              # ← drop your team standards here (PDF/docx/md)
+└── docs/
+    ├── bob/                      # bob skills' intermediate outputs
+    ├── specs/                    # bob-spec outputs
+    └── compliance/               # phase-3 compliance scaffold
+        ├── README.md             # how to use this folder (auto-managed)
+        └── sources/              # ← drop your team standards here (PDF/docx/md)
+```
+
+Pass `--with-java` to additionally lay down the Maven/ArchUnit skeleton:
+
+```
 └── src/
     ├── main/java/com/example/shared/
     │   ├── usecase/UseCase.java
     │   └── framework/transaction/TransactionalUseCaseDecorator.java
     └── test/java/architecture/CleanArchitectureTest.java
 ```
+
+`status` and `upgrade` auto-detect whether the target is a Java project (presence of `src/main/java/`) and silently skip the Java skeleton on non-Java targets — so projects that opted out at `init` time stay opted out.
 
 ### `run-bob upgrade` — refresh harness in a project
 
@@ -247,10 +255,10 @@ After `run-bob init`, open Claude Code in that directory and use the skills in t
 
 | # | Skill | Phase | Output |
 |---|---|---|---|
-| 0 | 🩺 `/bob-survey <requirement>` | TL intake | `docs/bob/00-survey-*.md` + row in `ARCHITECTURE.md §12` |
-| 0.5 | 🗺 `/bob-model <doc-path>` | Domain modeling (Medium/Hard + source doc) | `docs/bob/03-model-*.md` + `.html` |
-| 1 | 🧩 `/bob-stories <requirement>` | Story split (for Medium/Hard) | `docs/bob/02-stories-*.md` + per-story files |
-| 2 | 🔍 `/bob-identify <description>` | 5-question identity test | `docs/bob/01-identity-*.md` |
+| 0 | 🩺 `/bob-survey <requirement>` | TL intake (**optional** — only answers "can we take this on?") | `docs/bob/00-survey-*.md` + row in `ARCHITECTURE.md §12` |
+| 0.5 | 🗺 `/bob-model <doc-path>` | Domain modeling — **mandatory across all difficulties** (Easy / Medium / Hard); no threshold shortcuts | `docs/bob/03-model-*.md` + `.html` |
+| 1 | 🧩 `/bob-stories <requirement>` | Story split (Stage 0 hard-checks that `docs/bob/03-model-*.md` exists) | `docs/bob/02-stories-*.md` + per-story files |
+| 2 | 🔍 `/bob-identify <description>` | 5-question identity test (parallel to model, not a replacement) | `docs/bob/01-identity-*.md` |
 | 3 | 🧅 `/bob-onion` | 4-ring design | updates `ARCHITECTURE.md` (SSoT) |
 | 4 | 📝 `/bob-spec <use case>` | Per-use-case spec | `docs/specs/spec-*.md` |
 | — | _Superpowers TDD_ | brainstorm → plan → execute | branch with passing tests |

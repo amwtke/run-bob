@@ -30,6 +30,13 @@ impl Category {
             Category::SharedJava => "Shared Java skeletons",
         }
     }
+
+    /// True if the asset is part of the optional Java/Maven skeleton
+    /// (ArchUnit test + shared `UseCase` / `TransactionalUseCaseDecorator`).
+    /// Off by default; opt in via `--with-java`.
+    pub fn is_java_skeleton(self) -> bool {
+        matches!(self, Category::ArchUnit | Category::SharedJava)
+    }
 }
 
 pub struct Asset {

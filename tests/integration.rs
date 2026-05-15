@@ -34,7 +34,7 @@ fn init_help_lists_flags() {
         .expect("run run-bob init --help");
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
-    for flag in &["--force", "--minimal", "--dir"] {
+    for flag in &["--force", "--minimal", "--dir", "--with-java"] {
         assert!(stdout.contains(flag), "expected {} flag in help: {}", flag, stdout);
     }
 }
@@ -125,7 +125,11 @@ fn init_installs_archunit_test_at_correct_path() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
 
-    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+    Command::new(run_bob_bin())
+        .args(["init", "--with-java", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
 
     let archunit = target
         .join("src").join("test").join("java")
@@ -166,7 +170,11 @@ fn init_installs_shared_usecase_interface() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
 
-    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+    Command::new(run_bob_bin())
+        .args(["init", "--with-java", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
 
     let p = target
         .join("src").join("main").join("java")
@@ -194,7 +202,11 @@ fn init_installs_transactional_decorator() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
 
-    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+    Command::new(run_bob_bin())
+        .args(["init", "--with-java", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
 
     let p = target
         .join("src").join("main").join("java")
@@ -323,6 +335,104 @@ fn init_creates_working_directories() {
 }
 
 #[test]
+fn init_default_skips_java_skeleton() {
+    // Plain `run-bob init` (no flags) must NOT create the Java/Maven skeleton.
+    // Java is opt-in via --with-java now.
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    // No ArchUnit test
+    assert!(
+        !target.join("src/test/java/architecture/CleanArchitectureTest.java").exists(),
+        "default init must NOT install ArchUnit test"
+    );
+    // No shared Java skeleton
+    assert!(
+        !target.join("src/main/java/com/example/shared/usecase/UseCase.java").exists(),
+        "default init must NOT install UseCase.java"
+    );
+    assert!(
+        !target.join("src/main/java/com/example/shared/framework/transaction/TransactionalUseCaseDecorator.java").exists(),
+        "default init must NOT install TransactionalUseCaseDecorator.java"
+    );
+    // No src/ at all, because nothing under src/ was written
+    assert!(!target.join("src").exists(), "default init must NOT create src/ at all");
+
+    // But docs/skills are still installed
+    assert!(target.join("CLAUDE.md").is_file(), "default init must install CLAUDE.md");
+    assert!(
+        target.join(".claude/skills/bob-identify/SKILL.md").is_file(),
+        "default init must install skills"
+    );
+}
+
+#[test]
+fn init_with_java_installs_skeleton() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    Command::new(run_bob_bin())
+        .args(["init", "--with-java", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init --with-java");
+
+    assert!(
+        target.join("src/test/java/architecture/CleanArchitectureTest.java").is_file(),
+        "--with-java must install ArchUnit test"
+    );
+    assert!(
+        target.join("src/main/java/com/example/shared/usecase/UseCase.java").is_file(),
+        "--with-java must install UseCase.java"
+    );
+    assert!(
+        target.join("src/main/java/com/example/shared/framework/transaction/TransactionalUseCaseDecorator.java").is_file(),
+        "--with-java must install TransactionalUseCaseDecorator.java"
+    );
+}
+
+#[test]
+fn status_complete_on_non_java_target_after_default_init() {
+    // After plain `init`, status must still report "harness is complete" —
+    // Java assets are silently skipped because the target has no src/main/java.
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let output = Command::new(run_bob_bin())
+        .args(["status", "--dir"])
+        .arg(target)
+        .output()
+        .expect("status");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert!(
+        stdout.contains("harness is complete"),
+        "default init + status must report complete on non-Java target; got:\n{}",
+        stdout
+    );
+    // Java tokens must NOT appear in output (not checked at all)
+    for absent in &["CleanArchitectureTest.java", "UseCase.java", "TransactionalUseCaseDecorator.java"] {
+        assert!(
+            !stdout.contains(absent),
+            "status must not mention {} on non-Java target; got:\n{}",
+            absent,
+            stdout
+        );
+    }
+}
+
+#[test]
 fn init_minimal_skips_archunit_and_shared_and_anchors() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
@@ -377,7 +487,11 @@ fn init_minimal_skips_archunit_and_shared_and_anchors() {
 fn status_reports_complete_after_full_init() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
-    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+    Command::new(run_bob_bin())
+        .args(["init", "--with-java", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
 
     let output = Command::new(run_bob_bin())
         .args(["status", "--dir"])
@@ -599,8 +713,9 @@ fn upgrade_skips_user_owned() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
 
+    // --with-java needed so the ArchUnit user-owned file actually exists.
     std::process::Command::new(run_bob_bin())
-        .args(["init", "--dir"])
+        .args(["init", "--with-java", "--dir"])
         .arg(target)
         .status()
         .expect("init");
@@ -1838,6 +1953,59 @@ fn bob_model_skill_explains_cdn_strategy() {
 }
 
 #[test]
+fn bob_survey_declares_model_mandatory_across_difficulties() {
+    // survey is optional; /bob-model and downstream are mandatory regardless of
+    // Easy/Medium/Hard. The skill must say so explicitly and must NOT contain
+    // any "Easy → /bob-identify" pattern that bypasses model.
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    std::process::Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-survey").join("SKILL.md");
+    let content = std::fs::read_to_string(&p).expect("read bob-survey");
+
+    // Survey-optional / model-mandatory invariant must be stated.
+    assert!(
+        content.contains("survey 是可选阶段") || content.contains("survey 可选"),
+        "bob-survey must declare survey is optional"
+    );
+    assert!(
+        content.contains("强制阶段") && content.contains("不论"),
+        "bob-survey must declare /bob-model is mandatory across difficulties"
+    );
+
+    // The old "Easy → /bob-identify (G 模式)" routing rows must be gone.
+    assert!(
+        !content.contains("直接 `/bob-identify <需求>`(G 模式)"),
+        "bob-survey must no longer route Easy directly to /bob-identify (it bypasses /bob-model)"
+    );
+
+    // Every greenfield difficulty row in Stage 3 must route to /bob-model now.
+    for difficulty_row in &[
+        "Easy | 🟢 直接 `/bob-model",
+        "Medium | 🟢 直接 `/bob-model",
+        "Hard | 🟢 直接 `/bob-model",
+    ] {
+        assert!(
+            content.contains(difficulty_row),
+            "bob-survey 绿地 row must route through /bob-model: {}",
+            difficulty_row
+        );
+    }
+
+    // Anti-threshold guardrail (the regression we're fixing — TL must not write
+    // "超过 N 个新端口才升 model" in the report).
+    assert!(
+        content.contains("超过 N 个新端口才升 model") || content.contains("阈值短路"),
+        "bob-survey must explicitly forbid threshold-shortcut TL phrasing"
+    );
+}
+
+#[test]
 fn bob_survey_mentions_model_soft_prompt() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
@@ -1867,7 +2035,7 @@ fn bob_survey_mentions_model_soft_prompt() {
 fn init_makes_sh_scripts_executable() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
-    run_bob::commands::init::run(target.to_str().unwrap(), false, false, true)
+    run_bob::commands::init::run(target.to_str().unwrap(), false, false, true, false)
         .expect("init failed");
 
     #[cfg(unix)]
@@ -1908,7 +2076,7 @@ fn init_adds_bob_dir_to_gitignore() {
 fn init_installs_bob_model_scripts() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
-    run_bob::commands::init::run(target.to_str().unwrap(), false, false, true)
+    run_bob::commands::init::run(target.to_str().unwrap(), false, false, true, false)
         .expect("init failed");
 
     let scripts_dir = target.join(".claude/skills/bob-model/scripts");
@@ -1947,7 +2115,7 @@ fn init_installs_bob_model_scripts() {
 fn start_server_script_has_node_detection() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
-    run_bob::commands::init::run(target.to_str().unwrap(), false, false, true)
+    run_bob::commands::init::run(target.to_str().unwrap(), false, false, true, false)
         .expect("init failed");
 
     let content = std::fs::read_to_string(
@@ -1970,7 +2138,7 @@ fn upgrade_replaces_stale_bob_model_scripts() {
     let target = tmp.path();
 
     // First init
-    run_bob::commands::init::run(target.to_str().unwrap(), false, false, true)
+    run_bob::commands::init::run(target.to_str().unwrap(), false, false, true, false)
         .expect("init failed");
 
     // Tamper with server.cjs to simulate a stale version

@@ -21,8 +21,16 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool, no_gitignore: bool)
     let mut outdated: Vec<(&Asset, String)> = Vec::new(); // (asset, current on-disk content)
     let mut missing: Vec<&Asset> = Vec::new();
 
+    let java_target = crate::is_java_target(&target);
+
     println!("{}", "Checking upgrade-safe assets...".bold());
-    for asset in HARNESS_ASSETS.iter().filter(|a| a.upgrade_safe) {
+    for asset in HARNESS_ASSETS
+        .iter()
+        .filter(|a| a.upgrade_safe)
+        // Skip the optional Java/Maven skeleton on non-Java targets so we
+        // don't reinstate files the user opted out of at init time.
+        .filter(|a| !(a.category.is_java_skeleton() && !java_target))
+    {
         let path = asset_path(&target, asset);
         if !path.is_file() {
             println!("  {} {} ({})", "+".green(), asset.display(), "missing — will install".yellow());

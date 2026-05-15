@@ -22,8 +22,14 @@ pub fn run(target_dir: &str) -> Result<()> {
 
     let mut all_ok = true;
     let mut current_cat: Option<Category> = None;
+    let java_target = crate::is_java_target(&target);
 
     for asset in HARNESS_ASSETS {
+        // The Java/Maven skeleton is optional (init --with-java). Skip it on
+        // non-Java targets so status doesn't flag absent files as missing.
+        if asset.category.is_java_skeleton() && !java_target {
+            continue;
+        }
         if Some(asset.category) != current_cat {
             if current_cat.is_some() {
                 println!();
