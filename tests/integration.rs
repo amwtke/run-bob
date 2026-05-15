@@ -1880,3 +1880,23 @@ fn init_makes_sh_scripts_executable() {
         );
     }
 }
+
+#[test]
+fn init_adds_bob_dir_to_gitignore() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    let status = Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("run run-bob init");
+    assert!(status.success(), "run-bob init failed");
+
+    let gitignore_content = std::fs::read_to_string(target.join(".gitignore"))
+        .expect("gitignore should exist after init");
+    assert!(
+        gitignore_content.contains(".bob/"),
+        "gitignore should contain .bob/ entry; got: {}",
+        gitignore_content
+    );
+}

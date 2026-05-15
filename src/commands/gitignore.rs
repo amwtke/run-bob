@@ -8,7 +8,7 @@ use std::fs;
 use std::path::Path;
 
 pub const GITIGNORE_BLOCK_HEADER: &str = "# run-bob";
-pub const GITIGNORE_ENTRIES: &[&str] = &[".run-bob-backup/"];
+pub const GITIGNORE_ENTRIES: &[&str] = &[".run-bob-backup/", ".bob/"];
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum GitignoreReport {
@@ -169,9 +169,9 @@ mod tests {
         );
         assert_eq!(
             new_content.as_deref(),
-            Some("# run-bob\n.run-bob-backup/\n")
+            Some("# run-bob\n.run-bob-backup/\n.bob/\n")
         );
-        assert_eq!(action, GitignoreReport::Created { entries: 1 });
+        assert_eq!(action, GitignoreReport::Created { entries: 2 });
     }
 
     #[test]
@@ -182,9 +182,9 @@ mod tests {
             compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
         assert_eq!(
             new_content.as_deref(),
-            Some("target/\n*.log\n\n# run-bob\n.run-bob-backup/\n")
+            Some("target/\n*.log\n\n# run-bob\n.run-bob-backup/\n.bob/\n")
         );
-        assert_eq!(action, GitignoreReport::Updated { added: 1 });
+        assert_eq!(action, GitignoreReport::Updated { added: 2 });
     }
 
     #[test]
@@ -195,7 +195,7 @@ mod tests {
             compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
         assert_eq!(
             new_content.as_deref(),
-            Some("target/\n*.log\n\n# run-bob\n.run-bob-backup/\n")
+            Some("target/\n*.log\n\n# run-bob\n.run-bob-backup/\n.bob/\n")
         );
     }
 
@@ -207,7 +207,7 @@ mod tests {
             compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
         assert_eq!(
             new_content.as_deref(),
-            Some("target/\n*.log\n\n# run-bob\n.run-bob-backup/\n")
+            Some("target/\n*.log\n\n# run-bob\n.run-bob-backup/\n.bob/\n")
         );
     }
 
@@ -262,14 +262,14 @@ local-cache/
             compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
         assert_eq!(
             new_content.as_deref(),
-            Some("# run-bob\n.run-bob-backup/\n")
+            Some("# run-bob\n.run-bob-backup/\n.bob/\n")
         );
-        assert_eq!(action, GitignoreReport::Updated { added: 1 });
+        assert_eq!(action, GitignoreReport::Updated { added: 2 });
     }
 
     #[test]
     fn case_d_noop_when_block_already_complete() {
-        let existing = "# run-bob\n.run-bob-backup/\n";
+        let existing = "# run-bob\n.run-bob-backup/\n.bob/\n";
         let (new_content, action) =
             compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
         assert_eq!(new_content, None);
@@ -283,6 +283,7 @@ target/
 
 # run-bob
 .run-bob-backup/
+.bob/
 
 # my section
 other/
@@ -302,7 +303,7 @@ other/
         let nc = new_content.expect("must write");
         assert!(nc.contains("#run-bob\n"), "must preserve user line");
         assert!(nc.contains("# run-bob\n"), "must add canonical block header");
-        assert_eq!(action, GitignoreReport::Updated { added: 1 });
+        assert_eq!(action, GitignoreReport::Updated { added: 2 });
     }
 
     #[test]
@@ -327,7 +328,7 @@ other/
 
     #[test]
     fn user_added_entries_inside_block_preserved() {
-        let existing = "# run-bob\n.run-bob-backup/\nmy-local-cache/\n";
+        let existing = "# run-bob\n.run-bob-backup/\n.bob/\nmy-local-cache/\n";
         let (new_content, action) =
             compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
         assert_eq!(new_content, None, "no write — all run-bob entries already present");
