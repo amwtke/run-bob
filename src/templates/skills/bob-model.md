@@ -54,7 +54,13 @@ description: |
 
 **通用心法**:**动词 + 名词 / 形容词 + 名词 / 修饰语 + 被动式** 组合,让命名自描述;不要让一个英文裸单词承担"判断它是什么类型"的认知负担。
 
-### 必守规则(对每个术语 / Entity 字段 / 类型名)
+### 核心原则(强制 · 普适)
+
+每个名字必须让读者**脱离上下文**就能判断:**(a) 它是什么 type**(钱 / 数量 / 时间 / bool / 状态 / 结果 / 事件 / ...)和 **(b) 它的语义角色**(active / applied / computed / pending / ...)。光秃名词在两项上都失败。
+
+通过 **POS 组合**(动词 + 名词 / 形容词 + 名词 / 修饰语 + 被动式)同时编码 (a) 和 (b)。**具体的后缀 / 前缀是领域约定**,**原则是普适的**——下面表里的具体词(`Fee` / `Rate` / `At` / `Quantity`)是电商 / 订单域示例,**换到其它域必须按本域自然约定灵活调整**(见后文「跨领域适用」)。
+
+### 参考模式(电商/订单域示例,非穷举,按域灵活调整)
 
 | 类别 | 反模式(禁) | 推荐模式 | 说明 |
 |---|---|---|---|
@@ -65,6 +71,20 @@ description: |
 | **类型(归属型)** | `MerchantDiscount`(只说归属) | `ActiveDiscountPlan` —— 形容词 + 抽象名词 | 类型名应表达"状态 / 角色 / 结果",归属由 repository 携带(`ActiveDiscountPlanRepository.findByMerchantId`) |
 | **类型(动作型)** | `Discount` / `Apply`(光秃) | `DiscountResult` / `ApplyDiscountCommand` / `AppliedDiscountSnapshot` | 用后缀(`Result` / `Command` / `Snapshot` / `Event`)消除"动词 vs 名词"歧义 |
 | **Boolean** | `valid` / `discount` / `active` | `isValid` / `hasActiveDiscount` / `wasApplied` / `canCancel` | 用 `has` / `is` / `was` / `can` 前缀 + 形容词或被动式,让"是 bool"显式 |
+
+### 跨领域适用(原则普适,具体词按域改)
+
+上表是电商 / 订单域示例。换到其它域,**原则不变**——名字必须同时编码 type + role,禁止光秃名词——**但具体词必须换成本域自然量纲与角色**:
+
+| 域 | 金额族 | 数量 / 度量族 | 时间族 | 类型族 |
+|---|---|---|---|---|
+| **物流 / 配送** | `shippingFeeAmount` / `codAmount` | `weightGram` / `weightKg` / `distanceKm` / `parcelCount` | `shippedAt` / `deliveredAt` / `signedAt` | `DeliveryStatusSnapshot` / `ActiveRouteAssignment` |
+| **IoT / 设备** | (少金额) | `temperatureCelsius` / `batteryPercentage` / `signalRssi` | `lastPingedAt` / `lastChargedAt` | `DeviceHealthSnapshot` / `ActiveFirmwareImage` |
+| **金融 / 账务** | `ledgerAmount` / `txnFeeAmount` | `shareCount` / `lotSize` | `settledAt` / `postedAt` / `accruedAt` | `PostedLedgerEntry` / `ActiveCounterparty` |
+| **医疗 / 处方** | `prescriptionCharge` | `dosageMg` / `dosageMl` / `vialCount` | `prescribedAt` / `administeredAt` | `FilledPrescription` / `ActivePatientChart` |
+| **教育 / LMS** | `tuitionFeeAmount` / `scholarshipAmount` | `enrolledCount` / `attemptCount` | `enrolledAt` / `submittedAt` / `gradedAt` | `SubmittedAssignment` / `ActiveEnrollmentPlan` |
+
+**心法**:**不要照搬表里的具体词**——要复制表的**结构**:找到本域自然量纲(Kg / Km / Mg / Ml / Celsius / RSSI / ...),用 `xxxAt` 表达事件时间,用形容词 + 抽象名词表达类型角色。**普适规则只有一条:每个名字 = type + role 的显式编码。**
 
 ### Stage 1 抽取过程内自检(强制)
 
@@ -326,6 +346,43 @@ html 入 git,团队可以在 PR 里浏览器直接打开 review。每次跑 `/bo
 
 ---
 
+## Stage 3.5 · 多轮修改循环(默认进入,不主动追问 Stage 4)
+
+`/bob-model` 的产出**很少在 Stage 1.3 一次性完美**。md + html 落盘后,用户通常会:
+
+- 指出术语 / 字段 / 类型命名不够表意(触发命名规约重审,可能涉及多处级联改名)
+- 补充遗漏的概念 / 不变量 / 业务规则
+- 修正暂定假设(确认下来,或反过来提为新 Q)
+- 调整公式 / 状态机 / 折扣应用顺序等语义细节
+- 触发跨域改名(如电商 → 物流时,数量族从 `Quantity` 改为 `Gram` / `Kg`)
+
+**默认进入修改循环**,而**不是**马上跑 Stage 4 收口。**3-8 轮迭代是常态**,不是异常。
+
+### 循环协议
+
+1. **入循环**:Stage 3 完成(html 落盘)后,Claude **默认等待**用户反馈,**不主动**追问"是否进入下一步"。
+2. **每轮处理**:
+   - 若指令清晰且不涉及歧义 → 直接执行 Edit md + html → grep 校验 → **简短报告改动落点**(到此为止)
+   - 若解读有歧义(如笔误判定、改动范围不明、命名风格冲突)→ **就该具体改动**用三段式确认
+   - ❌ **不要趁机再问"是否进入 /bob-stories"** —— 那是 Stage 4 的专责,不混在改动报告里
+3. **退循环信号**(以下任一,触发 Stage 4):
+   - 用户**显式说**"OK 推进" / "next" / "可以了" / "继续 stories" / "/bob-stories"
+   - 用户连续多轮没有新改动且明显在等下一步 → Claude **一次**主动询问"还有改动吗?",收到"没了"再进 Stage 4
+4. **明令禁止**:
+   - 每轮改动后追问"还要不要继续 stories?" —— 用户没说就别问
+   - 把单点改动当 Stage 1.3 全量重审(只动相关段,其它段保留)
+   - 在改动报告里夹带 Stage 4 三段式
+
+### Stage 4 边界
+
+Stage 4 三段式**只在退循环信号触发时**发出。中途反复发"是否进入 /bob-stories?"会:
+
+- 制造打断用户思路的噪音
+- 暗示"现在就该结束"的隐性压力,违反「消除歧义优先」
+- 在用户还在打磨时过早收口
+
+---
+
 ## Stage 4. 三段式收口 + 通报下一步
 
 > **Q3: 建模完成。N 条术语 / M 个 Entity / K 条业务规则 / W 个开放问题。**
@@ -341,7 +398,8 @@ html 入 git,团队可以在 PR 里浏览器直接打开 review。每次跑 `/bo
 ## 不变量
 
 - **强制阶段(不可跳过)** —— Medium/Hard 链路上 `/bob-model` 必跑。`/bob-stories` 在 Stage 0 硬校验 `docs/bob/03-model-*.md` 存在,缺失立即拒绝。"极小需求"可走短路,但仍必须产出占位 md。
-- **命名表意强制** —— 术语 / Entity 字段 / 类型名必须显式表意(金额族 `Fee` 后缀 / 比率族 `xxxRate` / 时间族 `createdAt` 被动式 / 类型加状态形容词 / Boolean `is/has/was` 前缀),禁止光秃名词。详见 §命名规约。违反等价于本阶段未完成,需 `--refresh` 重抽。
+- **命名表意强制(原则普适,具体词按域调整)** —— 术语 / Entity 字段 / 类型名必须显式编码 type + role,禁止光秃名词。**具体后缀按域换**:电商 `Fee` / 物流 `Gram` / IoT `Celsius` / 医疗 `Mg` ...,**不要把电商示例当唯一标准**。详见 §命名规约「核心原则」+「跨领域适用」。违反 = 本阶段未完成,需 `--refresh` 重抽。
+- **多轮修改是默认** —— Stage 3(html 落盘)与 Stage 4(收口)之间**默认进入修改循环**,3-8 轮迭代是常态。Claude **不主动**追问"是否进入下一步";**只在用户显式给推进信号**("OK 推进" / "继续 stories" / 等)时才发 Stage 4 三段式。详见 §Stage 3.5。
 - **md 是 SSoT** —— html 仅是视图,每次 `/bob-model` 运行重写
 - **html 入 git** —— 团队 PR review 用,差异可见
 - **Mermaid via CDN** —— 单 `<script>` 标签;离线时优雅降级为代码块
