@@ -337,7 +337,7 @@ Claude 在 Stage 3 启 server / push html 时,通报段必须包含以下 3 行�
 ✓ 已检查:所有 widget 的 click handler 都来自 canonical 片段,无 modified-round 分支
 ✓ 已检查:CSS 中 .bob-widget / .comment-toggle / .comment-input 选择器无 pointer-events / user-select / opacity:0 / disabled 屏蔽
 ✓ 已检查:所有 textarea 无 disabled / readonly 属性;所有 .comment-toggle 是 <button>
-✓ 已检查:**每个聚合根 H3 块内都有一张 Mermaid `classDiagram` 类图**(grep `<div class="mermaid">` × 聚合根数 ≥ 聚合根数;无类图的聚合根 = 0 个)
+✓ 已检查:**每个聚合根 H3 块内都有 Entity 类图,且画法符合阈值**(class ≤ 10 单图全展开 / > 10 切骨架+详图;骨架自身 class ≤ 10;每个非平凡 VO 有详图;`<<value object>>` 出现次数 = 详图数 + 单字段 inline 注释数 — 任何 VO 既无详图又无 inline = 违规)
 ```
 
 任一勾不上 = 本阶段未完成,需立即修改 HTML 重新 push。
@@ -424,7 +424,7 @@ Claude 在 Stage 3 启 server / push html 时,通报段必须包含以下 3 行�
 | 出现位置 | Mermaid 类型 | 用途 |
 |---|---|---|
 | §1 顶部 overview(聚合根 ≥ 3 时可选) | `classDiagram` | 跨聚合根关系鸟瞰,只画基数 + 包含/引用;**关系细节不靠这张图传递**,以 §1 各聚合根块内 inline 文字为准 |
-| §1 各聚合根块 Entity 类图(**强制**,每聚合根一张) | `classDiagram` | 该聚合根 + 内嵌实体/值对象的属性 class 块 + `<<value object>>` / `<<entity>>` 注解;sum type 子类用 `<|--` 继承箭头。**即使只有一个 entity 也必出**,目的是让用户一眼看到该聚合的结构而不必从字段表格脑补 |
+| §1 各聚合根块 Entity 类图(**强制**,每聚合根至少一张) | `classDiagram` | 该聚合根 + 内嵌实体/值对象的属性 class 块 + `<<value object>>` / `<<entity>>` / `<<enum>>` 注解。**画法按 class 总数决定**:≤ 10 单图全展开;> 10 切「骨架 + 详图」两层(骨架仅画名字,深度=1;每个非平凡 VO 一张详图,深度=1)。平凡 VO(单字段包装)只在骨架 inline 标注,enum 取值不列。详见 §1.3 A.2 第 2 项 |
 | §1 各聚合根块 状态机种子 | `stateDiagram-v2` | 已出现状态用实线 `-->`,未确认状态用虚线 `..>` |
 | §3 UseCase 流程 | `flowchart TD` 或 `flowchart LR` | 流程图,展示 UseCase 内部 step 串联 / 分支逻辑 |
 
@@ -888,7 +888,28 @@ classDiagram
 每个聚合根开一个 `### <AggregateName>` 三级标题,块内**按下列固定顺序**列出:
 
 1. **本聚合根的一句话定义**(自述,不靠词条)
-2. **Entity 类图(强制)** —— 用 Mermaid `classDiagram` 把**该聚合根本身 + 内嵌实体 + 值对象**画成 class 块,字段写在 class 块内,`<<entity>>` / `<<value object>>` / `<<enum>>` 注解角色,组合/包含用 `*--` / `o--` / `<|--`,基数写在线上(`"1" --> "N"`)。**即使该聚合只有一个 entity 也必出图**(单 class 块也是图,目的是给用户一个视觉锚点,而不是让其从下文字段表格脑补结构)。该图与第 4 项「属性清单」内容上同源、形式互补:类图给直觉,清单给精确。例:
+2. **Entity 类图(强制)** —— 用 Mermaid `classDiagram` 画该聚合根的结构。**即使该聚合只有一个 entity 也必出图**(单 class 块也是图,目的是给用户一个视觉锚点,而不是让其从下文字段表格脑补结构)。该图与第 5 项「属性清单」内容上同源、形式互补:类图给直觉,清单给精确。
+
+   **画法决策 —— 先数 class 总数(聚合根 + entity + VO + enum,展平计):**
+
+   | class 总数 | 画法 | 嵌套深度 |
+   |---|---|---|
+   | ≤ 10 | **单图全展开**:所有 class 块字段全列 | 1 层(根 → 直属) |
+   | > 10 | **骨架 + 详图两层制** | 见下 |
+
+   **「骨架 + 详图」两层制(总数 > 10 时强制)**:
+   - **骨架主图**:画聚合根 + 直属 entity + VO **名字**(class 块上 `<<value object>>` 注解,**不展开字段**),嵌套深度严格 = 1。骨架图 class 块 ≤ 10
+   - **VO 详图(每个一张)**:**非平凡 VO**(字段 ≥ 2)各自一张 mini classDiagram,在骨架图下方按顺序列出;每张详图深度 = 1(VO → 它直接引用的下一层 VO 名字)。超过 1 层 = 拆下一张详图,不在同图叠 2 层
+   - 详图之间不交叉引用,只对骨架主图负责
+
+   **省略 / 简化规则(明确什么不画)**:
+   - **平凡 VO**(单字段包装,如 `OrderNumber { String value }`)→ 骨架图 class 块上标 `<<value object>>` + 字段类型 inline 注释即可,**不开详图**
+   - **enum** → 类图里只出现名字 + `<<enum>>` 注解,**取值不列**(交给状态机种子 / 字段表 / 单独枚举注释)
+   - 跨聚合根复用的 VO(如 Money 被多聚合用)→ 只在主属聚合详细画一次,其他聚合骨架图用 `..>` 跨链到主属
+
+   **覆盖完备性(强制 · 机械校验)**:`<<value object>>` 注解出现的次数 = 详图数 + 单字段 inline 数。任何 VO 既无详图又无 inline 说明 = skill 违反。
+
+   **小聚合示例(class 总数 = 3,直接全展开):**
 
        ```mermaid
        classDiagram
@@ -912,6 +933,71 @@ classDiagram
            Order "1" *-- "N" OrderItem : 包含
            OrderItem ..> Money : 引用
        ```
+
+   **大聚合示例(class 总数 = 14,切骨架 + 详图):**
+
+       ```mermaid
+       %% 骨架主图(只画名字,不展开 VO 字段)
+       classDiagram
+           class Order {
+               <<aggregate-root>>
+               +OrderNumber orderNumber
+               +Money totalAmountFee
+               +DeliveryAddress address
+               +PromotionSet promotions
+               +OrderStatus status
+           }
+           class OrderItem {
+               <<entity>>
+               +FoodItemSnapshot snapshot
+               +Integer quantity
+           }
+           class Money
+           class DeliveryAddress
+           class PromotionSet
+           class FoodItemSnapshot
+           class OrderStatus
+           Order "1" *-- "N" OrderItem : 包含
+           Order ..> Money : 引用
+           Order ..> DeliveryAddress : 引用
+           Order ..> PromotionSet : 引用
+           OrderItem ..> FoodItemSnapshot : 引用
+           Order ..> OrderStatus : 状态
+           Money : <<value object>>
+           DeliveryAddress : <<value object>>
+           PromotionSet : <<value object>>
+           FoodItemSnapshot : <<value object>>
+           OrderStatus : <<enum>>
+       ```
+
+       ```mermaid
+       %% VO 详图 1: DeliveryAddress
+       classDiagram
+           class DeliveryAddress {
+               <<value object>>
+               +String recipientName
+               +PhoneNumber recipientPhone
+               +String detailedAddress
+               +GeoPoint location
+           }
+           class PhoneNumber {
+               <<value object>>
+               +String e164
+           }
+           class GeoPoint {
+               <<value object>>
+               +Double latitude
+               +Double longitude
+           }
+           DeliveryAddress ..> PhoneNumber
+           DeliveryAddress ..> GeoPoint
+       ```
+
+       ```mermaid
+       %% VO 详图 2: PromotionSet ... 同样模式
+       ```
+
+       说明:`OrderNumber` 是单字段包装(`{ String value }`),属于平凡 VO,骨架图标 `<<value object>>` + 类型说明就够,**不**开详图。`OrderStatus` 是 enum,取值见状态机种子。`Money` 是跨聚合根复用的 VO,假设主属在 Billing 聚合,这里只在骨架用 `..>` 跨链。
 
 3. **与其他聚合根的关系**(inline,文字 + 基数 + 类型),例:
    - `引用 AggregateB(1 ── 1,独立生命周期)`
@@ -1238,7 +1324,7 @@ kill -TERM $(cat "$STATE_DIR/server.pid")
 - **聚合根识别独立成 mini-loop** —— Stage 1.2 必须先在**终端纯文本**多轮反馈识别聚合根,**用户 confirm 才进入 Stage 1.3**。聚合根错了所有下游 entity/字段/不变量都挂错地方,html canvas 一旦生成再重组成本极高,所以这步独立、必经、无轮数上限。详见 §Stage 1.2。
 - **HTML 默认合并 §1+§2(术语+Entity 一体)** —— html canvas 共 4 节(术语+Entity / BR / UC / 开放问题),术语+Entity 按聚合根分组,每聚合根块固定 8 子段(详见 §1.3 A.2)。**禁止再回到"独立术语表 + 独立 Entity 段"双段结构**。
 - **关系标注 inline,顶部 overview 仅鸟瞰** —— 各聚合根块内必须有「与其他聚合根的关系」子段(文字 + 基数 + 包含/引用);顶部 overview `classDiagram` 仅作鸟瞰(聚合根 ≥ 3 时可选),**关系细节不靠它传递**。
-- **每个聚合根块强制内嵌 Entity 类图** —— 每个 `### <AggregateName>` H3 块内**必须**出一张 Mermaid `classDiagram`,把该聚合根 + 内嵌实体 + 值对象画成 class 块,字段写在块内,`<<entity>>` / `<<value object>>` / `<<enum>>` 注解角色,组合/包含/继承用 `*--` / `o--` / `<|--`。**即使该聚合只有一个 entity 也要画**(单 class 块也是图)。**Why**:类图给直觉,字段表给精确,二者形式互补;只给表格让用户脑补结构是反人类的。**How to apply**:Stage 2 compose 时按 §1.3 A.2 第 2 项执行;Stage 2 自检清单第 4 行勾选(grep `<div class="mermaid">` 数 ≥ 聚合根数,且分布到每个 H3 块下);Stage 4 dump md 时类图代码块原样保留,不要剥成纯文本。
+- **每个聚合根块强制内嵌 Entity 类图(画法按尺寸分流)** —— 每个 `### <AggregateName>` H3 块内**必须**出 Mermaid `classDiagram`。**画法决策**:class 总数(聚合根 + entity + VO + enum 展平计)≤ 10 → 单图全展开;> 10 → 切「骨架 + 详图」两层(骨架仅画名字,深度=1,自身 class ≤ 10;每个**非平凡 VO**——字段 ≥ 2——一张详图,深度=1)。**省略规则**:平凡 VO(单字段包装如 `OrderNumber { String value }`)只在骨架 class 块上标 `<<value object>>` + 类型 inline,不开详图;enum 类图里只出现名字 + `<<enum>>`,取值交给状态机 / 字段表。**Why**:聚合体量在域里差异大(3 class vs 30 class),一刀切单图会让大聚合糊作一团反而看不清,违背「让用户一眼看到结构」的初衷;两层制让骨架永远 ≤ 10 class 一屏看完,细节按需钻进对应详图。**How to apply**:Stage 2 compose 时按 §1.3 A.2 第 2 项的决策表与示例;Stage 2 自检清单第 4 行勾选(尺寸阈值 + `<<value object>>` 出现次数 = 详图数 + 单字段 inline 数,机械化校验);Stage 4 dump md 时所有 mermaid 代码块(骨架 + 全部详图)原样保留,不要剥成纯文本也不要只留骨架丢详图。
 - **评论 widget 永远可编辑(跨轮)** —— 任意 widget 在任意轮都不得 lock / disabled / readonly / pointer-events:none / click-no-op;每轮 push html 时所有 widget 重置为空草稿可写状态;视觉留痕(`data-modified-round` / `data-comment-count`)允许,但**绝对不影响交互**。**这条 skill 反复被违反**(产线 /bob-model 曾两次产出虚线锁死的 widget),所以 §Widget 跨轮可编辑性 配置了"反模式黑名单 + canonical 代码 + Stage 2 自检清单"三重保险。Stage 3 通报必须显式 3 行勾选,任一勾不上视为本阶段未完成。
 - **Stage 3.5 必经 Step 0:先打印 overview + 校验数量** —— 收到 events 后,Claude **第一动作**是按 kind 分组打印「本轮反馈 overview」到终端,让用户 sanity check 自己提了什么;**第二动作**是 `assert len(incoming_events) === new_submitted_total − old_submitted_total`,不一致立即中止 + 三段式问用户。这两步任一跳过都视为 skill 违规,会让"Claude 静默漏掉一两条反馈"的事故无法被发现。详见 §3.5.2 Step 0。
 - **widget 角标累计可视化** —— 每个 `.bob-widget` 必须有 `data-comment-count="N"` 属性,N = 该 widget 跨整个会话累计的已提交评论数,Claude 在每轮 compose html 时从 events 反查注入。CSS 状态机:空态灰虚线 / 本轮草稿蓝实线 / 累计 ≥1 绿实底 + 显示 count 数字 / 既累计又新加草稿则绿底 + 蓝边。无论哪种状态,点击都仍可展开 textarea 继续提交新反馈。顶部 sticky header 显示会话累计 `submitted-counter` 与本轮 `draft-counter` 两个数字。
