@@ -14,7 +14,7 @@ description: |
   Stage 1.2 先在**终端纯文本**多轮反馈确认聚合根边界,**用户 confirm 后才进入 html**。
   然后基于已确认聚合根展开:1) 按聚合根分组的术语 + Entity 一体(HTML 默认合并),
   2) 业务规则清单(BR-NNN,跨 story 共享),3) UseCase 初步清单,4) 开放问题。
-  关系标注 inline 在各聚合根块内(1:1 / 1:N / 包含 vs 引用);顶部 overview classDiagram 仅作鸟瞰(聚合根 ≥ 3 时可选)。
+  关系标注 inline 在各聚合根块内(1:1 / 1:N / 包含 vs 引用);**每个聚合根块强制内嵌一张 Mermaid `classDiagram` 类图**(实体 + 值对象 + 字段一图看完);顶部 overview classDiagram 仅作鸟瞰(聚合根 ≥ 3 时可选)。
   产出交互式 docs/bob/03-model-<slug>-<date>.html(Stage 2-3.5 review canvas,带 widget + WebSocket 反馈)
   + Stage 4 推进时从最终 html 状态 dump 出 docs/bob/03-model-<slug>-<date>.md(SSoT)。
 
@@ -208,7 +208,7 @@ description: |
 Widget 形态(按 §1 合并后的结构):
 
 1. **聚合根块头 widget**(per `### <Aggregate>` 标题):块顶 💬,接收针对该聚合根整体的反馈(改名 / 拆分 / 合并 / 删除)。
-2. **聚合根块内子段 widget**(关系 / 术语 / 属性 / 状态机 / 不变量 / 生命周期 / 值对象关系 8 子段):每子段尾 💬,逐段独立反馈。
+2. **聚合根块内子段 widget**(关系 / 术语 / 属性 / **类图** / 状态机 / 不变量 / 生命周期 / 值对象关系 8 子段):每子段尾 💬,逐段独立反馈。其中**类图子段必出**,即使该聚合只有一个 entity 也要画。
 3. **术语表行**(子段 3 表格内):每个 `<tr>` 末尾 💬,inline expand 行内反馈。
 4. **BR 卡**(卡底 details):每张 BR 卡底 `<details>` 包 textarea。
 5. **Mermaid 图**(图下 details):图块下 details/textarea,`data-target` 用图 slug。
@@ -337,6 +337,7 @@ Claude 在 Stage 3 启 server / push html 时,通报段必须包含以下 3 行�
 ✓ 已检查:所有 widget 的 click handler 都来自 canonical 片段,无 modified-round 分支
 ✓ 已检查:CSS 中 .bob-widget / .comment-toggle / .comment-input 选择器无 pointer-events / user-select / opacity:0 / disabled 屏蔽
 ✓ 已检查:所有 textarea 无 disabled / readonly 属性;所有 .comment-toggle 是 <button>
+✓ 已检查:**每个聚合根 H3 块内都有一张 Mermaid `classDiagram` 类图**(grep `<div class="mermaid">` × 聚合根数 ≥ 聚合根数;无类图的聚合根 = 0 个)
 ```
 
 任一勾不上 = 本阶段未完成,需立即修改 HTML 重新 push。
@@ -423,7 +424,7 @@ Claude 在 Stage 3 启 server / push html 时,通报段必须包含以下 3 行�
 | 出现位置 | Mermaid 类型 | 用途 |
 |---|---|---|
 | §1 顶部 overview(聚合根 ≥ 3 时可选) | `classDiagram` | 跨聚合根关系鸟瞰,只画基数 + 包含/引用;**关系细节不靠这张图传递**,以 §1 各聚合根块内 inline 文字为准 |
-| §1 各聚合根块 Entity class 图 | `classDiagram` | 该聚合根 + 内嵌实体/值对象的属性 class 块 + `<<value object>>` / `<<entity>>` 注解;sum type 子类用 `<|--` 继承箭头 |
+| §1 各聚合根块 Entity 类图(**强制**,每聚合根一张) | `classDiagram` | 该聚合根 + 内嵌实体/值对象的属性 class 块 + `<<value object>>` / `<<entity>>` 注解;sum type 子类用 `<|--` 继承箭头。**即使只有一个 entity 也必出**,目的是让用户一眼看到该聚合的结构而不必从字段表格脑补 |
 | §1 各聚合根块 状态机种子 | `stateDiagram-v2` | 已出现状态用实线 `-->`,未确认状态用虚线 `..>` |
 | §3 UseCase 流程 | `flowchart TD` 或 `flowchart LR` | 流程图,展示 UseCase 内部 step 串联 / 分支逻辑 |
 
@@ -887,16 +888,41 @@ classDiagram
 每个聚合根开一个 `### <AggregateName>` 三级标题,块内**按下列固定顺序**列出:
 
 1. **本聚合根的一句话定义**(自述,不靠词条)
-2. **与其他聚合根的关系**(inline,文字 + 基数 + 类型),例:
+2. **Entity 类图(强制)** —— 用 Mermaid `classDiagram` 把**该聚合根本身 + 内嵌实体 + 值对象**画成 class 块,字段写在 class 块内,`<<entity>>` / `<<value object>>` / `<<enum>>` 注解角色,组合/包含用 `*--` / `o--` / `<|--`,基数写在线上(`"1" --> "N"`)。**即使该聚合只有一个 entity 也必出图**(单 class 块也是图,目的是给用户一个视觉锚点,而不是让其从下文字段表格脑补结构)。该图与第 4 项「属性清单」内容上同源、形式互补:类图给直觉,清单给精确。例:
+
+       ```mermaid
+       classDiagram
+           class Order {
+               <<aggregate-root>>
+               +OrderNumber orderNumber
+               +Money totalAmountFee
+               +OrderStatus status
+           }
+           class OrderItem {
+               <<entity>>
+               +String foodItemName
+               +Money unitPriceFee
+               +Integer quantity
+           }
+           class Money {
+               <<value object>>
+               +Long amountFen
+               +Currency currency
+           }
+           Order "1" *-- "N" OrderItem : 包含
+           OrderItem ..> Money : 引用
+       ```
+
+3. **与其他聚合根的关系**(inline,文字 + 基数 + 类型),例:
    - `引用 AggregateB(1 ── 1,独立生命周期)`
    - `包含 AggregateC(1 ── N,父删则子删)`
    - **没有外部关系也要写一行"独立聚合根,与其他聚合无直接关系"**;不允许留空让人猜
-3. **术语表**(本聚合范围内的所有概念,中文/英文/角色/定义/来源/同义词,role ∈ `aggregate-root` / `entity` / `value-object` / `enum` / `field`)
-4. **属性清单**(本聚合根 + 内嵌实体的字段,名字 + 类型 + 必填;若已在术语表登记则只列名)
-5. **状态机种子**(若有,`stateDiagram-v2`;无则写"无显式状态机")
-6. **不变量**(AC 反推的 invariant,逐条编号)
-7. **生命周期事件**(可选,创建/提交/完结等 hook)
-8. **值对象 / 枚举之间的关系**(若该聚合内多个值对象间有关系,如"X 引用 Y 1:N",在此 inline 标注)
+4. **术语表**(本聚合范围内的所有概念,中文/英文/角色/定义/来源/同义词,role ∈ `aggregate-root` / `entity` / `value-object` / `enum` / `field`)
+5. **属性清单**(本聚合根 + 内嵌实体的字段,名字 + 类型 + 必填;若已在术语表登记则只列名)
+6. **状态机种子**(若有,`stateDiagram-v2`;无则写"无显式状态机")
+7. **不变量**(AC 反推的 invariant,逐条编号)
+8. **生命周期事件**(可选,创建/提交/完结等 hook)
+9. **值对象 / 枚举之间的关系**(若该聚合内多个值对象间有关系,如"X 引用 Y 1:N",在此 inline 标注)
 
 ##### A.3 跨聚合根引用的术语放哪
 
@@ -960,7 +986,7 @@ classDiagram
 - 左侧 TOC(sticky)+ 主内容区
 - **4 节内容**(术语+Entity 合并为一节按聚合根分组 / BR / UC / 开放问题),每节内 widget 见 §html widget 规范
 - 跨引用锚点:聚合根 / BR-NNN / INV / Q 全自动锚点
-- **§1 内部结构**:可选顶部 overview classDiagram(聚合根 ≥ 3 时)+ 每个聚合根 H3 块(块内固定 8 子段,见 §1.3 A.2)
+- **§1 内部结构**:可选顶部 overview classDiagram(聚合根 ≥ 3 时)+ 每个聚合根 H3 块(块内固定 8 子段 + **强制内嵌一张 Entity `classDiagram` 类图**,见 §1.3 A.2)
 - 嵌入 inline CSS(状态色标 / 布局)
 - 嵌入 inline JS(localStorage / 提交 / 自动保存,详见 §html widget 规范的 page-helper)
 - 顶部 `<script>window.BOB_MODEL_SLUG='<slug>'; window.BOB_MODEL_ROUND=1;</script>`(Claude 按当次会话填)
@@ -1212,6 +1238,7 @@ kill -TERM $(cat "$STATE_DIR/server.pid")
 - **聚合根识别独立成 mini-loop** —— Stage 1.2 必须先在**终端纯文本**多轮反馈识别聚合根,**用户 confirm 才进入 Stage 1.3**。聚合根错了所有下游 entity/字段/不变量都挂错地方,html canvas 一旦生成再重组成本极高,所以这步独立、必经、无轮数上限。详见 §Stage 1.2。
 - **HTML 默认合并 §1+§2(术语+Entity 一体)** —— html canvas 共 4 节(术语+Entity / BR / UC / 开放问题),术语+Entity 按聚合根分组,每聚合根块固定 8 子段(详见 §1.3 A.2)。**禁止再回到"独立术语表 + 独立 Entity 段"双段结构**。
 - **关系标注 inline,顶部 overview 仅鸟瞰** —— 各聚合根块内必须有「与其他聚合根的关系」子段(文字 + 基数 + 包含/引用);顶部 overview `classDiagram` 仅作鸟瞰(聚合根 ≥ 3 时可选),**关系细节不靠它传递**。
+- **每个聚合根块强制内嵌 Entity 类图** —— 每个 `### <AggregateName>` H3 块内**必须**出一张 Mermaid `classDiagram`,把该聚合根 + 内嵌实体 + 值对象画成 class 块,字段写在块内,`<<entity>>` / `<<value object>>` / `<<enum>>` 注解角色,组合/包含/继承用 `*--` / `o--` / `<|--`。**即使该聚合只有一个 entity 也要画**(单 class 块也是图)。**Why**:类图给直觉,字段表给精确,二者形式互补;只给表格让用户脑补结构是反人类的。**How to apply**:Stage 2 compose 时按 §1.3 A.2 第 2 项执行;Stage 2 自检清单第 4 行勾选(grep `<div class="mermaid">` 数 ≥ 聚合根数,且分布到每个 H3 块下);Stage 4 dump md 时类图代码块原样保留,不要剥成纯文本。
 - **评论 widget 永远可编辑(跨轮)** —— 任意 widget 在任意轮都不得 lock / disabled / readonly / pointer-events:none / click-no-op;每轮 push html 时所有 widget 重置为空草稿可写状态;视觉留痕(`data-modified-round` / `data-comment-count`)允许,但**绝对不影响交互**。**这条 skill 反复被违反**(产线 /bob-model 曾两次产出虚线锁死的 widget),所以 §Widget 跨轮可编辑性 配置了"反模式黑名单 + canonical 代码 + Stage 2 自检清单"三重保险。Stage 3 通报必须显式 3 行勾选,任一勾不上视为本阶段未完成。
 - **Stage 3.5 必经 Step 0:先打印 overview + 校验数量** —— 收到 events 后,Claude **第一动作**是按 kind 分组打印「本轮反馈 overview」到终端,让用户 sanity check 自己提了什么;**第二动作**是 `assert len(incoming_events) === new_submitted_total − old_submitted_total`,不一致立即中止 + 三段式问用户。这两步任一跳过都视为 skill 违规,会让"Claude 静默漏掉一两条反馈"的事故无法被发现。详见 §3.5.2 Step 0。
 - **widget 角标累计可视化** —— 每个 `.bob-widget` 必须有 `data-comment-count="N"` 属性,N = 该 widget 跨整个会话累计的已提交评论数,Claude 在每轮 compose html 时从 events 反查注入。CSS 状态机:空态灰虚线 / 本轮草稿蓝实线 / 累计 ≥1 绿实底 + 显示 count 数字 / 既累计又新加草稿则绿底 + 蓝边。无论哪种状态,点击都仍可展开 textarea 继续提交新反馈。顶部 sticky header 显示会话累计 `submitted-counter` 与本轮 `draft-counter` 两个数字。
