@@ -1857,3 +1857,24 @@ fn bob_survey_mentions_model_soft_prompt() {
         "bob-survey /bob-model prompt should hint at difficulty or source-doc gating"
     );
 }
+
+#[test]
+fn init_makes_sh_scripts_executable() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    run_bob::commands::init::run(target.to_str().unwrap(), false, false, true)
+        .expect("init failed");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let script_path = target.join(".claude/skills/bob-model/scripts/start-server.sh");
+        let meta = std::fs::metadata(&script_path).expect("script must exist");
+        let mode = meta.permissions().mode();
+        assert!(
+            mode & 0o111 != 0,
+            "start-server.sh should be executable; got mode {:o}",
+            mode
+        );
+    }
+}

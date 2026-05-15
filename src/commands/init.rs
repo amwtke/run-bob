@@ -84,8 +84,28 @@ fn write_file(path: &Path, content: &str, force: bool, display: &str) -> Result<
     }
     fs::write(path, content)
         .with_context(|| format!("Failed to write {}", path.display()))?;
+    set_executable_if_shell(path)?;
     crate::success(display);
     Ok(())
+}
+
+#[cfg(unix)]
+fn set_executable_if_shell(path: &Path) -> Result<()> {
+    if path.extension().and_then(|e| e.to_str()) == Some("sh") {
+        use std::os::unix::fs::PermissionsExt;
+        let metadata = fs::metadata(path)
+            .with_context(|| format!("Failed to stat {}", path.display()))?;
+        let mut perms = metadata.permissions();
+        perms.set_mode(perms.mode() | 0o111);
+        fs::set_permissions(path, perms)
+            .with_context(|| format!("Failed to chmod +x {}", path.display()))?;
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn set_executable_if_shell(_path: &Path) -> Result<()> {
+    Ok(())  // Windows: shell scripts run via bash; permission bit unused
 }
 
 fn ensure_dir_at(target: &Path, segments: &[&str]) -> Result<()> {
