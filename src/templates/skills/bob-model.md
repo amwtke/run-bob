@@ -100,6 +100,48 @@ description: |
 
 本规约是 model 阶段的**硬约束**(配合"强制阶段不可跳过"不变量)。下游(stories / spec / TDD / code review)若收到含光秃名词的 model md,等价于 model 阶段没跑完——必须 `/bob-model --refresh` 重抽。Reviewer 接到 model md 时,**优先扫名词族**(grep 金额族 / 比率族 / 时间族 / Boolean 前缀)做形式校验。
 
+## 产物报告规约(强制列出文件链接)
+
+**每次** `/bob-model` 产出或更新文件后的报告中,**必须显式列出文件的绝对路径**(md + html),让用户能直接复制 / 浏览器打开 review。
+
+### 必含项(任何"产物落盘"或"改动落点"的报告)
+
+- `<repo-absolute-path>/docs/bob/03-model-<slug>-<date>.md`(SSoT,可文本 diff)
+- `<repo-absolute-path>/docs/bob/03-model-<slug>-<date>.html`(团队视图,浏览器打开)
+
+### 格式示例
+
+**改动报告(Stage 3.5 每一轮)**:
+
+> 已应用改动:[N 处](简要列点)
+>
+> **产物**(可直接打开 review):
+> - md:`/Users/.../docs/bob/03-model-create-order-20260515.md`
+> - html:`/Users/.../docs/bob/03-model-create-order-20260515.html`
+
+**Stage 4 收口三段式**:
+
+> **Q: 建模完成。N 条术语 / ...**
+>
+> **产物**(review 直链):
+> - md(SSoT):`/Users/.../docs/bob/03-model-create-order-20260515.md`
+> - html(团队视图,浏览器打开):`/Users/.../docs/bob/03-model-create-order-20260515.html`
+>
+> **推测**:...
+> **推荐选择**:...
+
+### 明令禁止
+
+- ❌ 只说"html 已落盘 / 已更新"而不给路径 —— 用户没法直接打开
+- ❌ 只给相对路径(`docs/bob/...`)—— 用户在不同 cwd 时无法点击,IDE / 终端解析失败
+- ❌ 把路径埋在散文里 —— 必须用 list / table 醒目展示
+- ❌ 第二轮起省略路径 —— **每轮都要列**(即使路径没变),让用户随时定位
+- ❌ 只列其中一个文件 —— md + html 两个都要(就算用户只用 html,md 仍是 SSoT 应保持可见)
+
+### 为什么强制
+
+用户在多轮修改循环(§Stage 3.5)中频繁需要打开 html 验证 Mermaid 图 / 长表格 / 跨域命名;每次都要翻历史消息找路径是摩擦。把路径作为"每轮报告标配"消除噪音。
+
 ## 目标
 
 **翻译**散文需求文档为下游可消费的领域模型快照。只回答两个问题:
@@ -362,9 +404,10 @@ html 入 git,团队可以在 PR 里浏览器直接打开 review。每次跑 `/bo
 
 1. **入循环**:Stage 3 完成(html 落盘)后,Claude **默认等待**用户反馈,**不主动**追问"是否进入下一步"。
 2. **每轮处理**:
-   - 若指令清晰且不涉及歧义 → 直接执行 Edit md + html → grep 校验 → **简短报告改动落点**(到此为止)
+   - 若指令清晰且不涉及歧义 → 直接执行 Edit md + html → grep 校验 → **简短报告改动落点 + 列 md/html 绝对路径**(到此为止)。路径格式见 §产物报告规约
    - 若解读有歧义(如笔误判定、改动范围不明、命名风格冲突)→ **就该具体改动**用三段式确认
    - ❌ **不要趁机再问"是否进入 /bob-stories"** —— 那是 Stage 4 的专责,不混在改动报告里
+   - ❌ **不要省略文件路径** —— 即使路径没变,每轮都要列(用户随时打开 html 验 Mermaid / 表格)
 3. **退循环信号**(以下任一,触发 Stage 4):
    - 用户**显式说**"OK 推进" / "next" / "可以了" / "继续 stories" / "/bob-stories"
    - 用户连续多轮没有新改动且明显在等下一步 → Claude **一次**主动询问"还有改动吗?",收到"没了"再进 Stage 4
@@ -387,11 +430,15 @@ Stage 4 三段式**只在退循环信号触发时**发出。中途反复发"是�
 
 > **Q3: 建模完成。N 条术语 / M 个 Entity / K 条业务规则 / W 个开放问题。**
 >
+> **产物**(review 直链):
+> - md(SSoT):`<absolute path>/docs/bob/03-model-<slug>-<date>.md`
+> - html(团队视图,浏览器打开):`<absolute path>/docs/bob/03-model-<slug>-<date>.html`
+>
 > **推测**:难度 `<Medium/Hard>` → 建议 `/bob-stories`(基于本模型切片);如难度 `<Easy>` → 直接 `/bob-identify`
 > **理由**:从 /bob-survey 推荐 + 本模型规模综合判断
-> **推荐选择**:`继续 /bob-stories` / `直接 /bob-identify` / `打开 html 团队 review 后再决定`
+> **推荐选择**:`继续 /bob-stories` / `直接 /bob-identify` / `先 review html 后再决定`
 >
-> 是否同意?(回"是"按推荐;回"打开 html"提示文件路径 + 暂停)
+> 是否同意?(回"是"按推荐;回"先 review"暂停;回"回头再说"也可)
 
 ---
 
@@ -400,6 +447,7 @@ Stage 4 三段式**只在退循环信号触发时**发出。中途反复发"是�
 - **强制阶段(不可跳过)** —— Medium/Hard 链路上 `/bob-model` 必跑。`/bob-stories` 在 Stage 0 硬校验 `docs/bob/03-model-*.md` 存在,缺失立即拒绝。"极小需求"可走短路,但仍必须产出占位 md。
 - **命名表意强制(原则普适,具体词按域调整)** —— 术语 / Entity 字段 / 类型名必须显式编码 type + role,禁止光秃名词。**具体后缀按域换**:电商 `Fee` / 物流 `Gram` / IoT `Celsius` / 医疗 `Mg` ...,**不要把电商示例当唯一标准**。详见 §命名规约「核心原则」+「跨领域适用」。违反 = 本阶段未完成,需 `--refresh` 重抽。
 - **多轮修改是默认** —— Stage 3(html 落盘)与 Stage 4(收口)之间**默认进入修改循环**,3-8 轮迭代是常态。Claude **不主动**追问"是否进入下一步";**只在用户显式给推进信号**("OK 推进" / "继续 stories" / 等)时才发 Stage 4 三段式。详见 §Stage 3.5。
+- **报告必含文件链接** —— 每次产物落盘 / 改动报告 / Stage 4 收口都必须**显式列出 md 与 html 绝对路径**,方便用户直接打开 review。**每轮都要列**(即使路径没变),不要省略,不要藏在散文里。详见 §产物报告规约。
 - **md 是 SSoT** —— html 仅是视图,每次 `/bob-model` 运行重写
 - **html 入 git** —— 团队 PR review 用,差异可见
 - **Mermaid via CDN** —— 单 `<script>` 标签;离线时优雅降级为代码块
