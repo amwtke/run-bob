@@ -84,7 +84,7 @@ SESSION_ID="$$-$(date +%s)"
 if [[ -n "$PROJECT_DIR" ]]; then
   SESSION_DIR="${PROJECT_DIR}/.bob/model-review/${SESSION_ID}"
 else
-  SESSION_DIR="/tmp/brainstorm-${SESSION_ID}"
+  SESSION_DIR="/tmp/bob-review-${SESSION_ID}"
 fi
 
 STATE_DIR="${SESSION_DIR}/state"
