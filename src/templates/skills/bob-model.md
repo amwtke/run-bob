@@ -174,11 +174,15 @@ description: |
     </head>
     <body>
       <header class="bob-sticky">
-        <div class="title">{{title}}</div>
-        <div class="meta">已修改 <span id="draft-counter">0</span> 处 / 共 {{totalWidgets}} widget</div>
+        <div class="title">{{title}} · round {{round}}</div>
+        <div class="meta">
+          <span class="counter-pill"><b id="draft-counter">0</b> 本轮草稿</span>
+          <span class="counter-pill counter-submitted"><b id="submitted-counter">{{sessionSubmittedTotal}}</b> 累计已提交</span>
+          <span class="counter-meta">/ 共 {{totalWidgets}} widget</span>
+        </div>
         <div class="actions">
           <button id="clear-button">↻ 清空草稿</button>
-          <button id="submit-button" disabled>📋 提交本轮反馈</button>
+          <button id="submit-button" disabled>📋 提交本轮反馈 (<span id="submit-count">0</span>)</button>
         </div>
       </header>
       <div class="bob-layout">
@@ -199,7 +203,7 @@ description: |
 
 ### Widget DOM 模板
 
-每个 widget 必须有 3 个 data-* 属性:`data-comment-id`(唯一,= `<kind>:<target>` 或 'general')、`data-kind`、`data-target`,以及一个 `.comment-input` textarea。
+每个 widget 必须有 4 个 data-* 属性:`data-comment-id`(唯一,= `<kind>:<target>` 或 'general')、`data-kind`、`data-target`、`data-comment-count`(会话累计已提交评论数,Claude compose 时从 events 反查注入,默认 `"0"`),以及一个 `.comment-input` textarea。
 
 Widget 形态(按 §1 合并后的结构):
 
@@ -235,19 +239,62 @@ Widget 形态(按 §1 合并后的结构):
 **CSS**(visual hint only,不动 interaction):
 
 ```css
-/* 视觉提示:曾被修改过的 widget 显示橙色虚线边框 */
-.bob-widget[data-modified-round] .comment-toggle {
-  border-style: dashed;
-  border-color: var(--modified, #f59e0b);
-  background: var(--modified-bg, #fffbeb);
-  color: var(--modified, #f59e0b);
+/* === 状态 A:空态(默认)=== 灰虚线 💬 0 */
+.bob-widget .comment-toggle {
+  border: 1px dashed var(--border-strong, #d1d5db);
+  background: transparent;
+  color: var(--text-muted, #9ca3af);
 }
-/* 注意:不要在 .bob-widget[data-modified-round] 上加 pointer-events / opacity */
+
+/* === 状态 B:本轮有未提交草稿 === 蓝实线 */
+.bob-widget .comment-toggle.has-draft {
+  border: 1px solid var(--accent, #2563eb);
+  background: var(--accent-soft, #dbeafe);
+  color: var(--accent, #2563eb);
+}
+
+/* === 状态 C:累计 ≥ 1 条已提交评论 === 绿实底 💬 N(覆盖默认空态)*/
+.bob-widget:not([data-comment-count="0"]) .comment-toggle {
+  border: 1px solid var(--success, #10b981);
+  background: var(--success-bg, #d1fae5);
+  color: var(--success-text, #065f46);
+  font-weight: 600;
+}
+
+/* === 状态 D:既累计有评论,本轮又新加草稿 === 绿底 + 蓝边 */
+.bob-widget:not([data-comment-count="0"]) .comment-toggle.has-draft {
+  border-color: var(--accent, #2563eb);
+}
+
+/* 注意:任何状态都不要加 pointer-events / opacity / cursor:not-allowed */
 ```
 
-**JS**(统一 click handler,**不分** modified 与否):
+**计数显示**:绿色状态(状态 C/D)下,`.count` span 显示该 widget 的累计 submitted 数(从 `data-comment-count` 读)。空态下显示 0。**JS 必须同步**:每次重渲染时根据 `data-comment-count` 设置 `.count` 文本。
+
+**JS**(统一 click handler + 初始化 count badge,**不分** comment-count 是否 0):
 
 ```js
+// 初始化:把每个 widget 的 data-comment-count 同步到 .count 文本
+function syncCommentCounts() {
+  document.querySelectorAll('.bob-widget').forEach((w) => {
+    const cntEl = w.querySelector('.count');
+    if (cntEl) cntEl.textContent = w.dataset.commentCount || '0';
+  });
+}
+syncCommentCounts();
+
+// 顶部 submitted-counter:遍历所有 widget,把 data-comment-count 累加显示
+function syncSubmittedTotal() {
+  let total = 0;
+  document.querySelectorAll('.bob-widget').forEach((w) => {
+    total += parseInt(w.dataset.commentCount || '0', 10);
+  });
+  const el = document.getElementById('submitted-counter');
+  if (el) el.textContent = String(total);
+}
+syncSubmittedTotal();
+
+// 统一 click handler — 任何状态都展开 textarea
 document.addEventListener('click', (e) => {
   const toggle = e.target.closest('.comment-toggle');
   if (!toggle) return;
@@ -257,7 +304,7 @@ document.addEventListener('click', (e) => {
   if (!ta) return;
   ta.classList.toggle('show');
   if (ta.classList.contains('show')) ta.focus();
-  // 注意:没有任何 if (widget.dataset.modifiedRound) ... 的分支
+  // 注意:没有任何 if (widget.dataset.commentCount > 0) return 之类的分支
 });
 ```
 
@@ -921,24 +968,77 @@ Stage 3 至此结束。Claude **不主动追问**,等用户在终端发推进信
 
 ### 3.5.2 处理流程
 
+**Step 0 必经前置**(在 apply 任何东西之前,先做完这两步;违反 = skill 违规):
+
 1. **读 events**:
    ```bash
    tail -n+1 "$STATE_DIR/events"
    ```
-   Claude 内部 filter 出 `type === 'bob-model-feedback'` 且 `timestamp > last_processed_event_timestamp` 的行。
+   Claude 内部 filter 出 `type === 'bob-model-feedback'` 且 `timestamp > last_processed_event_timestamp` 的行;得到本轮 `incoming_events` 列表。
 
-2. **Parse + 分派**(按 §评论协议与 schema 的 6 种 kind):
+2. **打印「本轮反馈 overview」到终端**(强制,先打印再继续):
+
+   ```
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   📋 round <N> · 收到 <X> 条反馈
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+   按 kind 分组:
+   - <X1> 条 term(术语行)
+   - <X2> 条 entity-field(字段)
+   - <X3> 条 br(业务规则)
+   - <X4> 条 aggregate-head / aggregate-segment(聚合根整体或子段)
+   - <X5> 条 q(开放问题)
+   - <X6> 条 mermaid(图)
+   - <X7> 条 general(自由文本)
+
+   逐条摘要(target / 反馈一句话):
+   1. [term:menuItemId] 建议改名为 ... 因为 ...
+   2. [br:BR-001] 公式遗漏 ... 应改为 ...
+   ...
+
+   是否开始应用?(回 "继续" / "先调整" / "跳过 N/M/K")
+   ```
+
+   **为什么强制 overview**:用户提交后只有这一刻能 sanity check 自己提了什么、Claude 看到了什么 —— 错过这一刻,后面 Claude 静默丢一两条反馈就再也不可能被察觉。
+
+3. **校验数量与页面状态一致**(强制,Stage 3.5 第二必经步骤):
+
+   ```
+   assert len(incoming_events) === expected_count
+   ```
+
+   `expected_count` 来源:页面顶部 `submitted-counter` 在用户点提交后会 +N,Claude 应记录"上次 compose 时该数值 = old_total";本轮收到 events 后应满足 `new_total - old_total === len(incoming_events)`。
+
+   不一致(events 落盘缺漏 / 用户多次点提交去重失败 / server 抖动)→ **立即中止 + 三段式问用户**:
+
+   ```
+   ⚠️ 数量不匹配:页面 submitted-counter 显示新增 X 条,但 events 落盘只见 Y 条。
+   推测:server-side 落盘抖动 / 用户多次点击 / 网络丢包
+   推荐选择:`重新提交本轮反馈` / `按 events 实际收到的 Y 条继续(忽略差异)` / `中止本轮排查`
+   ```
+
+   **绝不静默吞掉差异 +1 条反馈直接 apply**。
+
+---
+
+**Step 1-3 应用 + 重写**(Step 0 两步过了才能进入):
+
+4. **Parse + 分派**(按 §评论协议与 schema 的 6 种 kind):
    - `term` → 改术语行 + 级联引用
    - `entity-field` → 改字段 + 级联引用
    - `br` → 改 BR 卡
    - `diagram` → 重画 Mermaid
    - `open-question` → 决议 / 改暂定 / 拆分
+   - `aggregate-head / aggregate-segment` → 修改聚合根整体或某子段
    - `general` → **先三段式**确认意图再动手
 
-3. **更新内部模型快照** + 更新 `last_processed_event_timestamp` + `processed_comment_ids`
+5. **更新内部模型快照** + 更新 `last_processed_event_timestamp` + `processed_comment_ids` + **per-widget 累计 count 表**(每条 event 让对应 widget 的 `data-comment-count` +1)
 
-4. **重写 html**:重新 compose html 字符串(per Stage 2 规范),关键变化:
+6. **重写 html**:重新 compose html 字符串(per Stage 2 规范),关键变化:
    - 对每个**已应用的 comment.id**,在对应 widget 上加 `data-applied="<comment-id>"` 属性
+   - **每个 widget 都重新计算并写入 `data-comment-count="N"`**(N = 该 widget 跨轮累计已提交评论数)—— 状态 C/D 的绿色角标全靠这个属性
+   - 顶部 `submitted-counter` 写入新总数 `{{sessionSubmittedTotal}}`
    - 重新生成跨引用锚点(因为可能 rename 了 Entity / BR)
    - BOB_MODEL_ROUND++
 
@@ -1036,7 +1136,9 @@ kill -TERM $(cat "$STATE_DIR/server.pid")
 - **聚合根识别独立成 mini-loop** —— Stage 1.2 必须先在**终端纯文本**多轮反馈识别聚合根,**用户 confirm 才进入 Stage 1.3**。聚合根错了所有下游 entity/字段/不变量都挂错地方,html canvas 一旦生成再重组成本极高,所以这步独立、必经、无轮数上限。详见 §Stage 1.2。
 - **HTML 默认合并 §1+§2(术语+Entity 一体)** —— html canvas 共 4 节(术语+Entity / BR / UC / 开放问题),术语+Entity 按聚合根分组,每聚合根块固定 8 子段(详见 §1.3 A.2)。**禁止再回到"独立术语表 + 独立 Entity 段"双段结构**。
 - **关系标注 inline,顶部 overview 仅鸟瞰** —— 各聚合根块内必须有「与其他聚合根的关系」子段(文字 + 基数 + 包含/引用);顶部 overview `classDiagram` 仅作鸟瞰(聚合根 ≥ 3 时可选),**关系细节不靠它传递**。
-- **评论 widget 永远可编辑(跨轮)** —— 任意 widget 在任意轮都不得 lock / disabled / readonly / pointer-events:none / click-no-op;每轮 push html 时所有 widget 重置为空草稿可写状态;视觉留痕(`data-modified-round`)允许,但**绝对不影响交互**。**这条 skill 反复被违反**(产线 /bob-model 曾两次产出虚线锁死的 widget),所以 §Widget 跨轮可编辑性 配置了"反模式黑名单 + canonical 代码 + Stage 2 自检清单"三重保险。Stage 3 通报必须显式 3 行勾选,任一勾不上视为本阶段未完成。
+- **评论 widget 永远可编辑(跨轮)** —— 任意 widget 在任意轮都不得 lock / disabled / readonly / pointer-events:none / click-no-op;每轮 push html 时所有 widget 重置为空草稿可写状态;视觉留痕(`data-modified-round` / `data-comment-count`)允许,但**绝对不影响交互**。**这条 skill 反复被违反**(产线 /bob-model 曾两次产出虚线锁死的 widget),所以 §Widget 跨轮可编辑性 配置了"反模式黑名单 + canonical 代码 + Stage 2 自检清单"三重保险。Stage 3 通报必须显式 3 行勾选,任一勾不上视为本阶段未完成。
+- **Stage 3.5 必经 Step 0:先打印 overview + 校验数量** —— 收到 events 后,Claude **第一动作**是按 kind 分组打印「本轮反馈 overview」到终端,让用户 sanity check 自己提了什么;**第二动作**是 `assert len(incoming_events) === new_submitted_total − old_submitted_total`,不一致立即中止 + 三段式问用户。这两步任一跳过都视为 skill 违规,会让"Claude 静默漏掉一两条反馈"的事故无法被发现。详见 §3.5.2 Step 0。
+- **widget 角标累计可视化** —— 每个 `.bob-widget` 必须有 `data-comment-count="N"` 属性,N = 该 widget 跨整个会话累计的已提交评论数,Claude 在每轮 compose html 时从 events 反查注入。CSS 状态机:空态灰虚线 / 本轮草稿蓝实线 / 累计 ≥1 绿实底 + 显示 count 数字 / 既累计又新加草稿则绿底 + 蓝边。无论哪种状态,点击都仍可展开 textarea 继续提交新反馈。顶部 sticky header 显示会话累计 `submitted-counter` 与本轮 `draft-counter` 两个数字。
 - **多轮修改是默认** —— Stage 3(html 落盘)与 Stage 4(收口)之间**默认进入修改循环**,3-8 轮迭代是常态。Claude **不主动**追问"是否进入下一步";**只在用户显式给推进信号**("OK 推进" / "继续 stories" / 等)时才发 Stage 4 三段式。详见 §Stage 3.5。
 - **报告必含文件链接** —— 每次产物落盘 / 改动报告 / Stage 4 收口都必须**显式列出 md 与 html 绝对路径**,方便用户直接打开 review。**每轮都要列**(即使路径没变),不要省略,不要藏在散文里。详见 §产物报告规约。
 - **html 是 review canvas(非只读)** —— Stage 2 起 html 含 widget / 状态机 / localStorage / WebSocket 提交;不再是只读视图。详见 §html widget 规范。
