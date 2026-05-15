@@ -1782,6 +1782,9 @@ fn init_creates_bob_model_skill() {
         // 不变量
         "不变量",
         "md 是 SSoT",
+        // bob-review (post-internalization, v0.5.0)
+        "window.bobReview",
+        ".claude/skills/bob-model/scripts/start-server.sh",
     ] {
         assert!(content.contains(token), "bob-model must mention {}", token);
     }
