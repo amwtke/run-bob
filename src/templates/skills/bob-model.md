@@ -48,6 +48,38 @@ description: |
 >
 > 是否同意?(回"是"走推荐;回"否,理由是 ..."重判;回"否,我选 X"切到 X)
 
+## 命名规约(强制表意,禁止光秃名词)
+
+**理由**:术语表的英文列 = 下游 `/bob-spec` → TDD 阶段代码的**变量名 / 类型名直接候选**。光秃名词(`total` / `rate` / `time` / `discount` / `info`)会让人读到字段时无法判断它是钱、是数量、是时间、还是 boolean,在 spec 阶段需要重新命名,造成术语漂移和返工。**消除歧义优先于简洁**。
+
+**通用心法**:**动词 + 名词 / 形容词 + 名词 / 修饰语 + 被动式** 组合,让命名自描述;不要让一个英文裸单词承担"判断它是什么类型"的认知负担。
+
+### 必守规则(对每个术语 / Entity 字段 / 类型名)
+
+| 类别 | 反模式(禁) | 推荐模式 | 说明 |
+|---|---|---|---|
+| **金额** | `total` / `price` / `discount` / `cost`(裸) | `itemTotalFee` / `discountAmount` / `unitPrice` / `packingFee` | 用 `Fee` / `Amount` / `Price` / `Cost` 后缀,让"是钱"显式 |
+| **比率** | `rate` / `ratio` | `discountRate` / `taxRate` / `commissionRate` | 用语义前缀 + `Rate`,说明"哪种比率" |
+| **数量** | `num` / `cnt` / `count`(裸) | `itemQuantity` / `bonusQuantity` / `attemptCount` | 用限定词 + `Quantity` / `Count`,说明"几个什么" |
+| **时间** | `time` / `date` | `createdAt` / `expiredAt` / `paidAt` | 用过去分词被动式 + `At`,说明"什么事件的时间" |
+| **类型(归属型)** | `MerchantDiscount`(只说归属) | `ActiveDiscountPlan` —— 形容词 + 抽象名词 | 类型名应表达"状态 / 角色 / 结果",归属由 repository 携带(`ActiveDiscountPlanRepository.findByMerchantId`) |
+| **类型(动作型)** | `Discount` / `Apply`(光秃) | `DiscountResult` / `ApplyDiscountCommand` / `AppliedDiscountSnapshot` | 用后缀(`Result` / `Command` / `Snapshot` / `Event`)消除"动词 vs 名词"歧义 |
+| **Boolean** | `valid` / `discount` / `active` | `isValid` / `hasActiveDiscount` / `wasApplied` / `canCancel` | 用 `has` / `is` / `was` / `can` 前缀 + 形容词或被动式,让"是 bool"显式 |
+
+### Stage 1 抽取过程内自检(强制)
+
+在写 §1 术语表之前,Claude 对每一个候选名做三项自检:
+
+1. **金额 / 比率 / 数量 / 时间字段**:有没有光秃名词?有就**直接重命名**,不抛 Q——这类歧义本规约已解决。
+2. **类型名**:只表达"归属"或裸"概念"?如是,问自己"它是什么**状态 / 角色 / 结果**?",加形容词或语义后缀。
+3. **脱离上下文测试**:任何字段名从术语表里抽出来单看,能否猜到 ≥ 80% 含义?不能就重命名。
+
+自检发现的歧义**直接在 §1 给出表意名**——不要写出光秃名再用 Q 兜底。Q 留给"两种表意名都合理需用户拍板"的真歧义(三段式),不留给本规约可消除的。
+
+### 违反 = 产出无效
+
+本规约是 model 阶段的**硬约束**(配合"强制阶段不可跳过"不变量)。下游(stories / spec / TDD / code review)若收到含光秃名词的 model md,等价于 model 阶段没跑完——必须 `/bob-model --refresh` 重抽。Reviewer 接到 model md 时,**优先扫名词族**(grep 金额族 / 比率族 / 时间族 / Boolean 前缀)做形式校验。
+
 ## 目标
 
 **翻译**散文需求文档为下游可消费的领域模型快照。只回答两个问题:
@@ -309,6 +341,7 @@ html 入 git,团队可以在 PR 里浏览器直接打开 review。每次跑 `/bo
 ## 不变量
 
 - **强制阶段(不可跳过)** —— Medium/Hard 链路上 `/bob-model` 必跑。`/bob-stories` 在 Stage 0 硬校验 `docs/bob/03-model-*.md` 存在,缺失立即拒绝。"极小需求"可走短路,但仍必须产出占位 md。
+- **命名表意强制** —— 术语 / Entity 字段 / 类型名必须显式表意(金额族 `Fee` 后缀 / 比率族 `xxxRate` / 时间族 `createdAt` 被动式 / 类型加状态形容词 / Boolean `is/has/was` 前缀),禁止光秃名词。详见 §命名规约。违反等价于本阶段未完成,需 `--refresh` 重抽。
 - **md 是 SSoT** —— html 仅是视图,每次 `/bob-model` 运行重写
 - **html 入 git** —— 团队 PR review 用,差异可见
 - **Mermaid via CDN** —— 单 `<script>` 标签;离线时优雅降级为代码块
