@@ -69,8 +69,8 @@ ycb 实测 session 暴露的问题:
 ```
 1. User 在 browser 写评论(localStorage 自动 cache 草稿,4 态色标)
 2. User 点 sticky 顶栏 [📋 提交本轮反馈 (N)]
-3. Browser JS collectFeedback() 聚合所有 textarea → POST /events
-4. Server append JSONL 到 $STATE_DIR/events
+3. Browser JS collectFeedback() 聚合所有 textarea → window.brainstorm.send(envelope)
+4. WebSocket server (server.cjs) 收到 → 检测 event.choice 非空 → append JSONL 到 $STATE_DIR/events
 5. User 在 Claude 终端发"继续" / "next" / "看反馈"
 6. Claude 读 $STATE_DIR/events(取 timestamp > last_processed)
 7. Claude parse → 按 kind 分派处理器 → 改内部模型快照 → 重写 html-vN → push screen_dir
@@ -125,7 +125,7 @@ TOC 上每节后**括号数字**是该节的 widget 总数(固定);**红色圆�
 |---|---|---|---|
 | **○ untouched** | 页面初始 | 灰边 textarea 收起,角标 `💬 0` | 无记录 |
 | **● draft** | `oninput` debounce 500ms | 蓝边 textarea 展开,角标 `💬 1`,sticky 计数 +1 | `drafts[key] = text` |
-| **✓ submitted** | POST /events 返 200 | 绿边 + textarea 收起 + ✓ 角标 | `drafts[key]` 删,加入 `submitted[]` |
+| **✓ submitted** | window.brainstorm.send() 返 200 | 绿边 + textarea 收起 + ✓ 角标 | `drafts[key]` 删,加入 `submitted[]` |
 | **⊘ applied** | Claude 重写 html 含 `data-applied="<comment-id>"` | 虚线灰边 + opacity 0.7 + "✓ Claude 已处理" | `submitted[]` 中对应 id 删 |
 
 ### 3.3 5 类元素的 widget 形态
@@ -187,7 +187,7 @@ floating "↑ 返回顶部" 按钮固定右下角。
 
 ## 4. 提交协议与事件 schema
 
-### 4.1 Event envelope(POST body / events JSONL 行)
+### 4.1 Event envelope(WebSocket message via window.brainstorm.send / events JSONL 行)
 
 ```json
 {
@@ -195,6 +195,7 @@ floating "↑ 返回顶部" 按钮固定右下角。
   "slug": "create-order",
   "round": 2,
   "timestamp": 1778820000000,
+  "choice": "submit",
   "comments": [
     {
       "id": "c-1778820000000-001",
@@ -223,6 +224,8 @@ floating "↑ 返回顶部" 按钮固定右下角。
   ]
 }
 ```
+
+字段语义补充:`choice` 是 brainstorming server 的记录触发字段(server.cjs:234 只记录 `event.choice` 非空的消息),固定为 `"submit"`;Claude 读 events 时按 `type === "bob-model-feedback"` 过滤,忽略 choice。
 
 字段语义:
 
@@ -329,7 +332,7 @@ floating "↑ 返回顶部" 按钮固定右下角。
 | 错 | 检测 | 恢复 |
 |---|---|---|
 | server 启动失败(端口占用 / 脚本缺失) | start-server.sh 退出非 0 | Claude 终端报错 + 降级到旧版只读 html(不带 widget) |
-| 浏览器 POST /events 失败 | page JS 收到非 200 | drafts 不清,toast 提示;用户重启 server |
+| 浏览器 window.brainstorm.send() 失败 | page JS 收到非 200 | drafts 不清,toast 提示;用户重启 server |
 | events JSON 解析失败 | Claude 终端 try/parse | 该行 skip + 报告 + 询问用户是否手动提供 comment |
 | target 找不到(typo / 用户编了不存在的 id) | apply 时 lookup miss | 三段式:列候选最相似 3 个,问用户哪个 |
 | server 中途死(idle timeout) | Claude 读 events 时检查 server-info / server-stopped | 复用之前的 screen_dir 重启(或新建);保留 events 历史 |
@@ -388,7 +391,7 @@ floating "↑ 返回顶部" 按钮固定右下角。
 
 | 风险 | 概率 | 影响 | 对策 |
 |---|---|---|---|
-| visual companion server 不支持自定义 POST body | 中 | 高(机制不成立) | 实施前先验证;若不支持,fall back 到把 envelope encode 进 `click` 事件的 `data` 字段 |
+| visual companion server 不支持自定义 POST body | 无(已验证) | 高(机制不成立) | 已验证通过 WebSocket + choice 触发字段实现 |
 | html JS 在不同浏览器表现不一致 | 低 | 中 | 只测 Chrome / Safari(macOS 主力);其它浏览器 V2 处理 |
 | Claude 解析自由文本的"应该是哪种 kind"判断错 | 中 | 中 | `data-kind` / `data-target` 由 page JS 写好,Claude 不靠猜 |
 | 多人误用同一 server URL | 低 | 中(comments 串了) | V1 文档明示单用户;sticky 顶栏显示 session-id 让用户察觉 |
