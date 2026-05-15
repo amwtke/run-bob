@@ -1,6 +1,6 @@
 [package]
 name = "run-bob"
-version = "0.7.3"
+version = "0.7.4"
 edition = "2021"
 authors = ["Jin <amwtke@github>"]
 description = "A CLI to bootstrap Bob's 4-ring Clean Architecture + Superpowers harness for Claude Code projects"
