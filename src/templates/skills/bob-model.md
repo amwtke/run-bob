@@ -348,6 +348,76 @@ Claude 在 Stage 3 启 server / push html 时,通报段必须包含以下 3 行�
 - 主内容区 `main.bob-main` 滚动区
 - 右下浮动 `.bob-back-top` 返顶按钮
 
+### Q 卡两态(强制)
+
+§4 开放问题区的每张 Q 卡**有状态**(per §1.3 §E),html 必须按状态切换视觉。**两态都仍带 💬 widget,可继续提反馈**(per §Widget 跨轮可编辑性)。
+
+#### 未决议态(default · 红/橙左边框)
+
+```html
+<div class="q-card q-unresolved" id="q-Q5" data-q-state="unresolved">
+  <h4>Q5 <span class="q-text">客户端传的 foodItemName / foodItemUnitPrice 与 Merchant 当前值不一致时?</span></h4>
+  <p class="q-impact">影响:spec</p>
+  <div class="q-tentative">暂定:A — 系统忽略客户端值,以 Merchant 为准 snapshot</div>
+  <details><summary>💬 评论此问题</summary>
+    <span class="bob-widget" data-comment-id="q:Q5" data-kind="q" data-target="Q5" data-section="q" data-comment-count="0">
+      <textarea class="comment-input show"></textarea>
+    </span>
+  </details>
+</div>
+```
+
+#### 已决议态(Round N 拍板 · 绿左边框 + ✅)
+
+```html
+<div class="q-card q-resolved" id="q-Q3" data-q-state="resolved" data-resolved-round="4">
+  <h4>Q3 ✅ <span class="q-text">订单超时未支付是否自动取消?</span></h4>
+  <p class="q-impact">影响:后续 story</p>
+  <div class="q-resolution">
+    ✅ <b>决议(Round 4)</b>:<b>不取消</b>(本需求 + 后续 story 均不实现自动 / 手动取消)。状态机因此无 CANCELLED 节点,linear 5 状态闭合。
+  </div>
+  <details><summary>💬 评论此问题</summary>
+    <span class="bob-widget" data-comment-id="q:Q3" data-kind="q" data-target="Q3" data-section="q" data-comment-count="0">
+      <textarea class="comment-input show"></textarea>
+    </span>
+  </details>
+</div>
+```
+
+带反链(决议落到新 BR / 字段时)版本:
+
+```html
+<div class="q-resolution">
+  ✅ <b>决议(Round 4)</b>:仅校验 <code>recipientPhoneNumber</code> 格式 ...;落到新 <a href="#br-BR-019">BR-019</a>。
+</div>
+```
+
+#### CSS(canonical · 直接拷)
+
+```css
+.q-card { border: 1px solid var(--border); border-radius: 6px; padding: 12px 16px; margin: 12px 0; background: var(--bg); }
+.q-card.q-unresolved { border-left: 5px solid var(--unresolved, #ef4444); }
+.q-card.q-resolved   { border-left: 5px solid var(--success,    #10b981); }
+.q-card h4 { margin: 0 0 4px; font-size: 15px; }
+.q-card .q-impact { color: var(--text-muted); font-size: 12px; margin: 0 0 8px; }
+.q-card .q-tentative { background: #eff6ff; border-radius: 4px; padding: 8px 12px; font-size: 13px; }
+.q-card .q-resolution {
+  background: #d1fae5;
+  border-radius: 4px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.q-card .q-resolution b { color: #065f46; }
+/* 注意:.q-resolved 仍允许底部 💬 widget 完全交互,per re-editability 规则 */
+```
+
+#### 状态切换规约
+
+- Stage 1.3 §E 表里 unresolved 行 → 渲染未决议态;resolved 行 → 渲染已决议态(用表里的"决议 / 决议轮次 / 决议反链到"字段填模板)
+- Stage 3.5.2 用户对某 Q 给出明确决议(kind=`q` 反馈,语义清晰非"再想想")→ Claude 内部模型快照更新 `resolved=true` + 三字段 → 下一轮 compose 时该 Q 自动切到已决议态
+- 用户后续若反悔 / 推翻决议 → 通过 💬 widget 再提反馈 → Claude 可把 resolved 回退到 unresolved(`resolved=false`,清空决议字段),也可保持 resolved 但更新 resolution 内容
+
 ### Mermaid 图清单(每节用什么类型)
 
 | 出现位置 | Mermaid 类型 | 用途 |
@@ -854,16 +924,18 @@ classDiagram
 
 #### E. 开放问题清单
 
-**显式列出**散文需求没说清楚的:
+**显式列出**散文需求没说清楚的。每条 Q 是**有状态**的(resolved / unresolved),状态决定 html 渲染态(详见 §HTML widget 规范 §Q 卡两态):
 
-| 编号 | 问题 | 影响哪个下游 | 暂定假设 |
-|---|---|---|---|
-| Q1 | YCB-003 多种折扣是否可以叠加?顺序? | spec / TDD | 暂定不可叠加,以最高优惠为准 |
-| Q2 | 除 PENDING_PAYMENT 外完整 Order 状态机? | onion / spec | 暂只建模 PENDING_PAYMENT;其他用虚线 |
-| Q3 | 订单超时未支付是否自动取消? | onion / spec | 暂不实现 |
-| Q4 | 配送地址校验?(手机号格式) | spec | 暂不校验 |
+| 编号 | 问题 | 影响 | 暂定假设 | 状态 | 决议(若 resolved) | 决议轮次 | 决议反链到 |
+|---|---|---|---|---|---|---|---|
+| Q1 | YCB-003 多种折扣是否可以叠加?顺序? | spec / TDD | 不可叠加,以最高优惠为准 | unresolved | — | — | — |
+| Q2 | 除 PENDING_PAYMENT 外完整 Order 状态机? | onion / spec | 只建模 PENDING_PAYMENT;其他虚线 | unresolved | — | — | — |
+| Q3 | 订单超时未支付是否自动取消? | onion / spec | 不实现 | resolved | **不取消**(本需求 + 后续 story 均不实现自动 / 手动取消) | Round 4 | — |
+| Q4 | 配送地址校验?(手机号格式) | spec | 不校验 | resolved | 仅校验 `recipientPhoneNumber` 11 位数字格式;name/address 仅非空 | Round 4 | BR-019(新增) |
 
-下游 `/bob-spec` 的"交给 Superpowers 的开放问题"段会进一步消化这些 Q。
+**状态切换契机**:Stage 3.5 用户在 kind=`q` widget 上给出明确回答 → Claude 应用反馈时更新 `resolved=true` + `resolvedRound=<N>` + `resolution=<文本>` + 可选 `resolutionLinksTo=<BR-ID/Entity/字段>`。下一轮重 compose html 时,该 Q 自动切到 resolved 视觉态(详见 §HTML §Q 卡两态)。
+
+下游 `/bob-spec` 的"交给 Superpowers 的开放问题"段会进一步消化这些 Q;**未 resolved 的 Q 才是真正交给下游的待办**,resolved 的属于"已沉淀"。
 
 ### 1.4 三段式确认完整抽取结果
 
@@ -1029,7 +1101,11 @@ Stage 3 至此结束。Claude **不主动追问**,等用户在终端发推进信
    - `entity-field` → 改字段 + 级联引用
    - `br` → 改 BR 卡
    - `diagram` → 重画 Mermaid
-   - `open-question` → 决议 / 改暂定 / 拆分
+   - `q` / `open-question` → **必须**显式分流:
+     - 明确决议(`不取消` / `按格式 XYZ 校验` / `用方案 A`)→ `resolved=true` + 填 `resolvedRound` + `resolution` + 可选 `resolutionLinksTo`(若决议派生出新 BR/字段)→ 下一轮 html 自动切已决议态(per §Q 卡两态)
+     - 改暂定假设(`暂定还按 X`)→ 仍 `resolved=false`,只更新 `tentative` 文本
+     - 拆分 / 升级到 BR(`这其实是一条业务规则`)→ 创建新 BR-NNN + Q 状态切 resolved + `resolutionLinksTo=BR-NNN`
+     - 含糊("再想想" / "保留" / "看下游")→ **先三段式**追问,不要默认按"维持暂定"处理
    - `aggregate-head / aggregate-segment` → 修改聚合根整体或某子段
    - `general` → **先三段式**确认意图再动手
 
@@ -1139,6 +1215,7 @@ kill -TERM $(cat "$STATE_DIR/server.pid")
 - **评论 widget 永远可编辑(跨轮)** —— 任意 widget 在任意轮都不得 lock / disabled / readonly / pointer-events:none / click-no-op;每轮 push html 时所有 widget 重置为空草稿可写状态;视觉留痕(`data-modified-round` / `data-comment-count`)允许,但**绝对不影响交互**。**这条 skill 反复被违反**(产线 /bob-model 曾两次产出虚线锁死的 widget),所以 §Widget 跨轮可编辑性 配置了"反模式黑名单 + canonical 代码 + Stage 2 自检清单"三重保险。Stage 3 通报必须显式 3 行勾选,任一勾不上视为本阶段未完成。
 - **Stage 3.5 必经 Step 0:先打印 overview + 校验数量** —— 收到 events 后,Claude **第一动作**是按 kind 分组打印「本轮反馈 overview」到终端,让用户 sanity check 自己提了什么;**第二动作**是 `assert len(incoming_events) === new_submitted_total − old_submitted_total`,不一致立即中止 + 三段式问用户。这两步任一跳过都视为 skill 违规,会让"Claude 静默漏掉一两条反馈"的事故无法被发现。详见 §3.5.2 Step 0。
 - **widget 角标累计可视化** —— 每个 `.bob-widget` 必须有 `data-comment-count="N"` 属性,N = 该 widget 跨整个会话累计的已提交评论数,Claude 在每轮 compose html 时从 events 反查注入。CSS 状态机:空态灰虚线 / 本轮草稿蓝实线 / 累计 ≥1 绿实底 + 显示 count 数字 / 既累计又新加草稿则绿底 + 蓝边。无论哪种状态,点击都仍可展开 textarea 继续提交新反馈。顶部 sticky header 显示会话累计 `submitted-counter` 与本轮 `draft-counter` 两个数字。
+- **Q 卡两态强制** —— §4 开放问题区每张 Q 卡必须按 `resolved` 状态切换视觉:未决议态 = 红/橙左边框 + 浅蓝 `暂定:` 块;已决议态 = 绿左边框 + 标题 ✅ 前缀 + 绿底 `✅ 决议(Round N): <文本>` 块,可选反链到新 BR/字段。两态都保留 💬 widget 完全交互(per 评论 widget 永远可编辑)。Stage 3.5.2 对 kind=`q` 反馈必须显式分流"明确决议 / 改暂定 / 拆分到 BR / 含糊先追问",含糊不可默认按"维持暂定"吞掉。详见 §Q 卡两态 + §3.5.2。
 - **多轮修改是默认** —— Stage 3(html 落盘)与 Stage 4(收口)之间**默认进入修改循环**,3-8 轮迭代是常态。Claude **不主动**追问"是否进入下一步";**只在用户显式给推进信号**("OK 推进" / "继续 stories" / 等)时才发 Stage 4 三段式。详见 §Stage 3.5。
 - **报告必含文件链接** —— 每次产物落盘 / 改动报告 / Stage 4 收口都必须**显式列出 md 与 html 绝对路径**,方便用户直接打开 review。**每轮都要列**(即使路径没变),不要省略,不要藏在散文里。详见 §产物报告规约。
 - **html 是 review canvas(非只读)** —— Stage 2 起 html 含 widget / 状态机 / localStorage / WebSocket 提交;不再是只读视图。详见 §html widget 规范。
