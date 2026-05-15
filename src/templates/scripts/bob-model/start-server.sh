@@ -20,6 +20,17 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# --- Node.js detection (added by run-bob bob-review internalization) ---
+if ! command -v node >/dev/null 2>&1; then
+  echo '{"error":"node not found","fix":"Install Node.js >=14 to use /bob-model interactive review. Without node, the skill falls back to read-only html."}' >&2
+  exit 2
+fi
+NODE_MAJOR=$(node -e 'process.stdout.write(String(process.versions.node.split(".")[0]))')
+if [ "$NODE_MAJOR" -lt 14 ]; then
+  echo "{\"error\":\"node $NODE_MAJOR too old\",\"fix\":\"Upgrade Node.js to >=14\"}" >&2
+  exit 3
+fi
+
 # Parse arguments
 PROJECT_DIR=""
 FOREGROUND="false"
