@@ -1903,3 +1903,95 @@ fn init_adds_bob_dir_to_gitignore() {
         gitignore_content
     );
 }
+
+#[test]
+fn init_installs_bob_model_scripts() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    run_bob::commands::init::run(target.to_str().unwrap(), false, false, true)
+        .expect("init failed");
+
+    let scripts_dir = target.join(".claude/skills/bob-model/scripts");
+    for fname in ["server.cjs", "helper.js", "start-server.sh", "stop-server.sh"] {
+        let path = scripts_dir.join(fname);
+        assert!(path.is_file(), "{} should be installed; not found", path.display());
+    }
+
+    // Verify server.cjs has new namespace
+    let server_content = std::fs::read_to_string(scripts_dir.join("server.cjs"))
+        .expect("server.cjs readable");
+    assert!(
+        server_content.contains("BOB_REVIEW_PORT"),
+        "server.cjs should contain BOB_REVIEW_PORT (got namespace-renamed); head: {}",
+        &server_content[..server_content.len().min(200)]
+    );
+    assert!(
+        !server_content.contains("BRAINSTORM_PORT"),
+        "server.cjs must NOT contain old BRAINSTORM_PORT after namespace rename"
+    );
+
+    // Verify helper.js has new namespace
+    let helper_content = std::fs::read_to_string(scripts_dir.join("helper.js"))
+        .expect("helper.js readable");
+    assert!(
+        helper_content.contains("window.bobReview"),
+        "helper.js should expose window.bobReview"
+    );
+    assert!(
+        !helper_content.contains("window.brainstorm"),
+        "helper.js must NOT contain old window.brainstorm"
+    );
+}
+
+#[test]
+fn start_server_script_has_node_detection() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    run_bob::commands::init::run(target.to_str().unwrap(), false, false, true)
+        .expect("init failed");
+
+    let content = std::fs::read_to_string(
+        target.join(".claude/skills/bob-model/scripts/start-server.sh")
+    ).expect("start-server.sh readable");
+
+    assert!(
+        content.contains("command -v node"),
+        "start-server.sh should detect missing node"
+    );
+    assert!(
+        content.contains("NODE_MAJOR") && (content.contains("-lt 14") || content.contains("< 14")),
+        "start-server.sh should reject Node < 14"
+    );
+}
+
+#[test]
+fn upgrade_replaces_stale_bob_model_scripts() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    // First init
+    run_bob::commands::init::run(target.to_str().unwrap(), false, false, true)
+        .expect("init failed");
+
+    // Tamper with server.cjs to simulate a stale version
+    let server_path = target.join(".claude/skills/bob-model/scripts/server.cjs");
+    std::fs::write(&server_path, "// stale version, should be replaced\n").unwrap();
+    let after_tamper = std::fs::read_to_string(&server_path).unwrap();
+    assert_eq!(after_tamper, "// stale version, should be replaced\n");
+
+    // Run upgrade — signature: (target_dir, dry_run, no_backup, no_gitignore)
+    run_bob::commands::upgrade::run(target.to_str().unwrap(), false, true, true)
+        .expect("upgrade failed");
+
+    // Verify content restored
+    let after_upgrade = std::fs::read_to_string(&server_path).unwrap();
+    assert!(
+        after_upgrade.contains("BOB_REVIEW_PORT"),
+        "upgrade should restore stale server.cjs with bob-review namespace"
+    );
+    assert!(
+        after_upgrade.len() > 100,
+        "upgrade should restore full content (got {} bytes)",
+        after_upgrade.len()
+    );
+}
