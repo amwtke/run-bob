@@ -283,8 +283,8 @@ floating "↑ 返回顶部" 按钮固定右下角。
 ### 5.2 关键时序
 
 1. 用户输入 → 500ms debounce → `localStorage.drafts` 写入 → UI 切 draft 态
-2. 用户点 Submit → 聚合所有 draft → POST → 等响应
-3. POST 200 → 清掉对应 drafts 项 → 加入 submitted set → 切 submitted 态
+2. 用户点 Submit → 聚合所有 draft → window.brainstorm.send() → 等响应
+3. window.brainstorm.send() 返 200 → 清掉对应 drafts 项 → 加入 submitted set → 切 submitted 态
 4. 用户在终端发"继续" → Claude 读 events → 应用 → 重写 html(含 `data-applied`)
 5. 用户刷新浏览器 → 新 html 加载 → JS 启动 → 扫 `data-applied` → 把 submitted set 中对应 id 删 → 切 applied 态
 6. 剩余 untouched / draft widget → JS 读 localStorage 恢复界面状态
@@ -295,7 +295,7 @@ floating "↑ 返回顶部" 按钮固定右下角。
 |---|---|
 | 浏览器刷新 / 关闭重开 | localStorage 持久;draft / submitted 都还在 |
 | 误点 Submit | 无 undo(KISS)。可在 Claude 处理前发"撤回 c-xxx"指令(走 general kind) |
-| POST 失败(server 死了) | drafts 不动,toast 提示。用户重启 server 后再 submit |
+| window.brainstorm.send() 失败(server 死了) | drafts 不动,toast 提示。用户重启 server 后再 submit |
 | Claude 部分应用失败 | html 中对应 `data-applied` 不发出 → 该 widget 仍 submitted 态 → 用户重新提交或终端补刀 |
 | 多 tab 打开同 URL | ⚠ V1 不支持(双写 localStorage 冲突);文档明示单 tab。BroadcastChannel 留 V2 |
 | server idle 超时(30 min) | 已提交事件已写盘,无丢失;新提交会失败 → 用户告诉 Claude 重启 server |
