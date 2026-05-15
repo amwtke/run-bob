@@ -8,7 +8,8 @@ description: |
   在 /bob-survey 之后、/bob-stories 之前运行。读 PM 风格的散文需求文档
   (.md / .pdf / .docx / .txt),抽取出:1) 术语表,2) Entity 草图(属性 + 状态机种子 + 不变量),
   3) 业务规则清单(BR-NNN,跨 story 共享),4) UseCase 初步清单,5) 开放问题。
-  同时产出 docs/bob/03-model-<slug>-<date>.md(下游 SSoT)和 .html(团队 PR review 用,Mermaid CDN)。
+  产出交互式 docs/bob/03-model-<slug>-<date>.html(Stage 2-3.5 review canvas,带 widget + WebSocket 反馈)
+  + Stage 4 推进时从最终 html 状态 dump 出 docs/bob/03-model-<slug>-<date>.md(SSoT)。
 
   适用于 Bob 4 环 Clean Architecture 工作流的领域建模 phase。结构上对称
   phase 2 (/bob-nfr) 和 phase 3 (/bob-compliance),都用 5 stage + 三段式。
@@ -106,8 +107,10 @@ description: |
 
 ### 必含项(任何"产物落盘"或"改动落点"的报告)
 
-- `<repo-absolute-path>/docs/bob/03-model-<slug>-<date>.md`(SSoT,可文本 diff)
-- `<repo-absolute-path>/docs/bob/03-model-<slug>-<date>.html`(团队视图,浏览器打开)
+- url(浏览器打开):`http://localhost:<port>`(Stage 3.5 期间提供;Stage 4 后 server 已停,可忽略)
+- screen_dir(html 本体):`/Users/.../03-model-<slug>-<date>-vN.html`(Stage 3.5 期间)
+- md(SSoT):`/Users/.../docs/bob/03-model-<slug>-<date>.md`(Stage 4 起才存在)
+- html(团队视图):`/Users/.../docs/bob/03-model-<slug>-<date>.html`(Stage 4 起从 screen_dir 复制)
 
 ### 格式示例
 
@@ -142,6 +145,341 @@ description: |
 
 用户在多轮修改循环(§Stage 3.5)中频繁需要打开 html 验证 Mermaid 图 / 长表格 / 跨域命名;每次都要翻历史消息找路径是摩擦。把路径作为"每轮报告标配"消除噪音。
 
+## html widget 规范(Stage 2 compose 时必照)
+
+每次 `/bob-model` Stage 2 生成 html 时,必须遵循以下结构 + 内嵌 CSS + 内嵌 JS。
+
+### Page-level 骨架
+
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+      <meta charset="UTF-8">
+      <title>领域模型 · {{title}} · {{date}}</title>
+      <script>
+        window.BOB_MODEL_SLUG = '{{slug}}';
+        window.BOB_MODEL_ROUND = {{round}};
+      </script>
+      <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+      <style>/* 见 §CSS */</style>
+    </head>
+    <body>
+      <header class="bob-sticky">
+        <div class="title">{{title}}</div>
+        <div class="meta">已修改 <span id="draft-counter">0</span> 处 / 共 {{totalWidgets}} widget</div>
+        <div class="actions">
+          <button id="clear-button">↻ 清空草稿</button>
+          <button id="submit-button" disabled>📋 提交本轮反馈</button>
+        </div>
+      </header>
+      <div class="bob-layout">
+        <nav class="bob-toc">...</nav>
+        <main class="bob-main">
+          <!-- §1 术语表 / §2 Entity / §3 BR / §4 UC / §5 Q -->
+        </main>
+      </div>
+      <script>/* 见 §JS */</script>
+    </body>
+    </html>
+
+### Widget DOM 模板
+
+每个 widget 必须有 3 个 data-* 属性:`data-comment-id`(唯一,= `<kind>:<target>` 或 'general')、`data-kind`、`data-target`,以及一个 `.comment-input` textarea。
+
+5 种形态详见 spec §3.3。统一格式(以 term 为例):
+
+    <div class="bob-widget" data-comment-id="term:discountRate" data-kind="term" data-target="discountRate" data-section="terms">
+      <button class="comment-toggle">💬 <span class="count">0</span></button>
+      <textarea class="comment-input" placeholder="对此 term 的修改意见..."></textarea>
+    </div>
+
+### CSS(嵌 head 内 <style>)
+
+    :root {
+      --c-untouched: #d0d7de;
+      --c-draft: #0969da;
+      --c-submitted: #1a7f37;
+      --c-applied: #57606a;
+      --c-bg: #fafbfc;
+      --c-fg: #1f2328;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--c-bg); color: var(--c-fg); }
+    .bob-sticky { position: sticky; top: 0; z-index: 100; background: var(--c-draft); color: white; padding: 12px 16px; display: flex; align-items: center; gap: 16px; }
+    .bob-sticky .title { font-weight: 700; font-size: 16px; }
+    .bob-sticky .meta { opacity: 0.85; font-size: 13px; }
+    .bob-sticky .actions { margin-left: auto; display: flex; gap: 8px; }
+    .bob-sticky button { padding: 4px 12px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.4); background: rgba(255,255,255,0.2); color: white; cursor: pointer; font-size: 13px; }
+    .bob-sticky #submit-button:not(:disabled) { background: white; color: var(--c-draft); font-weight: 600; }
+    .bob-sticky #submit-button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .bob-layout { display: flex; max-width: 1280px; margin: 0 auto; }
+    .bob-toc { width: 220px; padding: 16px; font-size: 13px; position: sticky; top: 56px; align-self: flex-start; max-height: calc(100vh - 56px); overflow-y: auto; border-right: 1px solid var(--c-untouched); }
+    .bob-toc a { display: block; padding: 4px 8px; color: var(--c-fg); text-decoration: none; border-radius: 4px; }
+    .bob-toc a:hover { background: #ddf4ff; color: var(--c-draft); }
+    .bob-toc .section-badge { display: inline-block; background: var(--c-draft); color: white; font-size: 11px; padding: 0 6px; border-radius: 8px; margin-left: 4px; }
+    .bob-toc .section-badge:empty { display: none; }
+    .bob-main { flex: 1; padding: 16px 40px 80px; }
+    .bob-widget { position: relative; }
+    .bob-widget .comment-toggle { background: transparent; border: 1px solid var(--c-untouched); padding: 2px 8px; border-radius: 12px; font-size: 11px; cursor: pointer; color: var(--c-fg); }
+    .bob-widget.expanded .comment-toggle { background: var(--c-draft); color: white; border-color: var(--c-draft); }
+    .bob-widget .comment-input { width: 100%; min-height: 60px; margin-top: 8px; padding: 8px; border: 2px solid var(--c-untouched); border-radius: 4px; font-size: 13px; resize: vertical; display: none; }
+    .bob-widget.expanded .comment-input { display: block; }
+    .bob-widget.state-draft .comment-input { border-color: var(--c-draft); background: #ddf4ff; }
+    .bob-widget.state-submitted .comment-input { border-color: var(--c-submitted); background: #dafbe1; display: none; }
+    .bob-widget.state-submitted .comment-toggle { background: var(--c-submitted); color: white; border-color: var(--c-submitted); }
+    .bob-widget.state-submitted .comment-toggle::after { content: ' ✓'; }
+    .bob-widget.state-applied { opacity: 0.6; }
+    .bob-widget.state-applied .comment-toggle { background: transparent; color: var(--c-applied); border: 2px dashed var(--c-applied); }
+    .bob-widget.state-applied .comment-input { border: 2px dashed var(--c-applied); background: #f6f8fa; color: var(--c-applied); display: none; }
+    .bob-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: #1f2328; color: white; padding: 10px 18px; border-radius: 6px; font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: transform 0.3s ease; z-index: 200; }
+    .bob-toast.show { transform: translateX(-50%) translateY(0); }
+    .bob-back-top { position: fixed; right: 24px; bottom: 24px; width: 40px; height: 40px; border-radius: 20px; background: var(--c-draft); color: white; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+
+### JS(嵌 body 末 <script>)
+
+    // bob-model interactive review · page helper (inline, no module system)
+    // Globals expected: window.BOB_MODEL_SLUG (str), window.BOB_MODEL_ROUND (int)
+    (function() {
+      if (!window.BOB_MODEL_SLUG) { console.error('BOB_MODEL_SLUG missing'); return; }
+      const SLUG = window.BOB_MODEL_SLUG;
+      const DRAFTS_KEY = `bob-model:${SLUG}:drafts`;
+      const SUBMITTED_KEY = `bob-model:${SLUG}:submitted`;
+    
+      // -- localStorage helpers --
+      const loadDrafts = () => JSON.parse(localStorage.getItem(DRAFTS_KEY) || '{}');
+      const saveDrafts = (d) => localStorage.setItem(DRAFTS_KEY, JSON.stringify(d));
+      const loadSubmitted = () => JSON.parse(localStorage.getItem(SUBMITTED_KEY) || '[]');
+      const saveSubmitted = (s) => localStorage.setItem(SUBMITTED_KEY, JSON.stringify(s));
+    
+      // -- widget key (= comment-id) helpers --
+      function widgetKey(widget) {
+        return widget.dataset.commentId;
+      }
+      function setState(widget, state) {
+        widget.classList.remove('state-untouched', 'state-draft', 'state-submitted', 'state-applied');
+        widget.classList.add('state-' + state);
+      }
+    
+      // -- hydrate UI from localStorage on page load --
+      function hydrate() {
+        const drafts = loadDrafts();
+        const submitted = new Set(loadSubmitted());
+        const cleanedSubmitted = new Set(submitted);
+    
+        document.querySelectorAll('[data-comment-id]').forEach(widget => {
+          const key = widgetKey(widget);
+          const textarea = widget.querySelector('.comment-input');
+    
+          if (widget.hasAttribute('data-applied')) {
+            setState(widget, 'applied');
+            cleanedSubmitted.delete(key);
+            return;
+          }
+    
+          if (submitted.has(key)) {
+            setState(widget, 'submitted');
+            return;
+          }
+    
+          if (drafts[key]) {
+            if (textarea) textarea.value = drafts[key];
+            setState(widget, 'draft');
+            return;
+          }
+    
+          setState(widget, 'untouched');
+        });
+    
+        saveSubmitted([...cleanedSubmitted]);
+        updateCounter();
+      }
+    
+      // -- debounced auto-save on input --
+      const saveTimers = new Map();
+      function setupAutoSave() {
+        document.querySelectorAll('.comment-input').forEach(textarea => {
+          textarea.addEventListener('input', () => {
+            const widget = textarea.closest('[data-comment-id]');
+            const key = widgetKey(widget);
+            if (saveTimers.has(key)) clearTimeout(saveTimers.get(key));
+            saveTimers.set(key, setTimeout(() => {
+              const drafts = loadDrafts();
+              const val = textarea.value.trim();
+              if (val) {
+                drafts[key] = textarea.value;
+                setState(widget, 'draft');
+              } else {
+                delete drafts[key];
+                setState(widget, 'untouched');
+              }
+              saveDrafts(drafts);
+              updateCounter();
+            }, 500));
+          });
+        });
+      }
+    
+      // -- sticky counter + submit button enable + per-section counters --
+      function updateCounter() {
+        const draftCount = document.querySelectorAll('.state-draft').length;
+        const counterEl = document.getElementById('draft-counter');
+        const submitBtn = document.getElementById('submit-button');
+        if (counterEl) counterEl.textContent = draftCount;
+        if (submitBtn) submitBtn.disabled = draftCount === 0;
+    
+        const sectionCounts = {};
+        document.querySelectorAll('.state-draft').forEach(w => {
+          const section = w.dataset.section;
+          if (section) sectionCounts[section] = (sectionCounts[section] || 0) + 1;
+        });
+        document.querySelectorAll('[data-section-counter]').forEach(el => {
+          const sec = el.dataset.sectionCounter;
+          const c = sectionCounts[sec] || 0;
+          el.textContent = c > 0 ? '●' + c : '';
+        });
+      }
+    
+      // -- collect feedback envelope --
+      function collectFeedback() {
+        const drafts = loadDrafts();
+        const ts = Date.now();
+        const comments = Object.entries(drafts).map(([key, comment], i) => {
+          const widget = document.querySelector(`[data-comment-id="${CSS.escape(key)}"]`);
+          const kind = widget.dataset.kind;
+          const target = widget.dataset.target || null;
+          return {
+            id: `c-${ts}-${String(i + 1).padStart(3, '0')}`,
+            kind,
+            target,
+            comment
+          };
+        });
+        return {
+          type: 'bob-model-feedback',
+          choice: 'submit',
+          slug: SLUG,
+          round: parseInt(window.BOB_MODEL_ROUND || '1', 10),
+          timestamp: ts,
+          comments
+        };
+      }
+    
+      // -- submit via window.brainstorm.send --
+      function submitFeedback() {
+        const envelope = collectFeedback();
+        if (envelope.comments.length === 0) return;
+    
+        if (!window.brainstorm || !window.brainstorm.send) {
+          showToast('WebSocket helper 未加载 (页面可能未通过 server 访问)');
+          return;
+        }
+        try {
+          window.brainstorm.send(envelope);
+          const submitted = loadSubmitted();
+          envelope.comments.forEach(c => {
+            const key = c.kind === 'general' ? 'general' : `${c.kind}:${c.target}`;
+            if (!submitted.includes(key)) submitted.push(key);
+          });
+          saveSubmitted(submitted);
+          saveDrafts({});
+    
+          document.querySelectorAll('.state-draft').forEach(w => setState(w, 'submitted'));
+          updateCounter();
+          showToast(`已提交 ${envelope.comments.length} 条反馈,等 Claude 处理`);
+        } catch (e) {
+          showToast(`提交失败: ${e.message}`);
+        }
+      }
+    
+      function clearDrafts() {
+        if (!confirm('清空所有未提交草稿?(已提交不受影响)')) return;
+        saveDrafts({});
+        document.querySelectorAll('.state-draft').forEach(w => {
+          setState(w, 'untouched');
+          const ta = w.querySelector('.comment-input');
+          if (ta) ta.value = '';
+        });
+        updateCounter();
+      }
+    
+      function showToast(msg) {
+        const t = document.createElement('div');
+        t.className = 'bob-toast';
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() => t.classList.add('show'), 10);
+        setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3000);
+      }
+    
+      function setupToggles() {
+        document.querySelectorAll('.comment-toggle').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const widget = btn.closest('[data-comment-id]');
+            widget.classList.toggle('expanded');
+          });
+        });
+      }
+    
+      document.addEventListener('DOMContentLoaded', () => {
+        hydrate();
+        setupAutoSave();
+        setupToggles();
+        const sb = document.getElementById('submit-button');
+        const cb = document.getElementById('clear-button');
+        if (sb) sb.addEventListener('click', submitFeedback);
+        if (cb) cb.addEventListener('click', clearDrafts);
+      });
+    })();
+
+### 不变量
+
+- 每个 widget 必有 `data-comment-id` / `data-kind` / `data-target` / `data-section`
+- 所有 cross-ref 必须是 `<a href="#br-001">BR-001</a>` 格式(自动生成,Claude compose 时正则替换)
+- Stage 4 dump md 时,**自动 strip** 所有 widget DOM(只保留语义内容)→ md 干净
+
+## 评论协议与 schema(Stage 3.5 必照)
+
+### Envelope schema(WebSocket message via window.brainstorm.send / events JSONL 行)
+
+    {
+      "type": "bob-model-feedback",
+      "choice": "submit",
+      "slug": "create-order",
+      "round": 2,
+      "timestamp": 1778820000000,
+      "comments": [
+        {"id": "c-1778820000000-001", "kind": "term", "target": "discountRate", "comment": "..."},
+        {"id": "c-1778820000000-002", "kind": "entity-field", "target": "Order.totalAmount", "comment": "..."},
+        {"id": "c-1778820000000-003", "kind": "br", "target": "BR-010", "comment": "..."},
+        {"id": "c-1778820000000-004", "kind": "diagram", "target": "order-state-machine", "comment": "..."},
+        {"id": "c-1778820000000-005", "kind": "open-question", "target": "Q14", "comment": "..."},
+        {"id": "c-1778820000000-006", "kind": "general", "target": null, "comment": "..."}
+      ]
+    }
+
+### 6 种 kind × Claude 处理
+
+| kind | target 格式 | Claude 处理 |
+|---|---|---|
+| `term` | 英文名 e.g. `discountRate` | 改术语行(改名/改定义/加同义词);改名 → 自动级联所有 BR / Entity / Q 引用 |
+| `entity-field` | `Entity.field` e.g. `Order.totalAmount` | 改字段(改名/改类型/改必填/加不变量);改名 → 级联 |
+| `br` | `BR-NNN` | 改公式/约束/来源/删/合并 |
+| `diagram` | 图 slug e.g. `order-state-machine` | 重画 Mermaid |
+| `open-question` | `QN` | 决议落 BR / 改暂定 / 拆分 |
+| `general` | `null` | **先三段式**确认意图再动手 |
+
+### 幂等与增量
+
+- `last_processed_event_timestamp`(Claude 内部 model snapshot 状态)
+- `processed_comment_ids` set(兜底防 timestamp 错位)
+- 每轮处理完更新两者
+
+### 自由文本兜底
+
+意图清晰(`kind=br / target=BR-010 / comment="rate=1 也应该允许"`)→ **直接执行**。
+
+意图不清(`kind=general / "BR 数太多了"` 或含 "看能否 / 我觉得 / 也许")→ **先三段式确认**(给 1 个推测 + 影响范围),用户回 OK 才动手。
+
 ## 目标
 
 **翻译**散文需求文档为下游可消费的领域模型快照。只回答两个问题:
@@ -149,16 +487,17 @@ description: |
 1. **这份需求里的术语 / Entity / 业务规则 / UseCase 各是什么?**
 2. **PM 没说清楚、需要交给 `/bob-spec` 进一步消化的开放问题有哪些?**
 
-**不写代码、不切 story、不画架构**。产出一份 md(SSoT)+ 一份 html(团队视图)。
+**不写代码、不切 story、不画架构**。产出一份**交互式 html**(Stage 2-3.5,review canvas)+ 一份 md(Stage 4 dump,SSoT)。
 
-## 工作流(5 个 Stage)
+## 工作流(6 个 Stage)
 
 ```
 Stage 0. 入口体检 + 短路判定(可跳过建模)
-Stage 1. 抽取(术语 / Entity / 规则 / UseCase / 开放问题)— 三段式追问填空
-Stage 2. 写 md(SSoT,下游消费)
-Stage 3. 写 html(视图,团队 PR review)
-Stage 4. 三段式收口 + 通报下一步(/bob-stories 或 /bob-identify)
+Stage 1. 抽取(术语 / Entity / 规则 / UseCase / 开放问题)— 三段式追问填空(in-memory snapshot,不写文件)
+Stage 2. 生成 interactive html 内容(Claude 在内存里 compose)
+Stage 3. 启 visual companion server + push html + 给用户 URL
+Stage 3.5. 多轮修改循环(event-driven,默认进入)
+Stage 4. 三段式收口(用户给推进信号 → dump md → 停 server)
 ```
 
 ---
@@ -183,7 +522,7 @@ Stage 4. 三段式收口 + 通报下一步(/bob-stories 或 /bob-identify)
 >
 > 是否同意?
 
-> **不变量**:无论选哪个分支,**必须产出 `docs/bob/03-model-<slug>-<date>.md`**(即使是占位)。下游 `/bob-stories` 在 Stage 0 硬校验本文件存在,无此文件则拒绝运行。"短路"≠"跳过 model" —— 它只是把内容压缩到一份带短路理由的占位 md,门禁照样通过。
+> **不变量**:**短路**分支 → Stage 0 立刻写一份**占位 md**(`docs/bob/03-model-<slug>-<date>.md`)+ 退出;**常规**分支 → md 不在此处写,会在 **Stage 4 推进**时从最终 html 状态 dump。无论哪条路径,最终都会落 md;下游 `/bob-stories` 在 Stage 0 硬校验本文件存在。"短路"≠"跳过 model" —— 它只是把内容压缩到占位 md。
 
 输出文件名计算:
 - `<slug>` = 源文档名去后缀(`ycb需求.md` → `ycb`,`阿里规约.pdf` → `阿里规约`)
@@ -276,169 +615,194 @@ Claude 按下列顺序识别,**每段三段式追问填空**(不抛开放问题)
 
 ---
 
-## Stage 2. 写 md(SSoT,下游消费)
+## Stage 2. 生成 interactive html 内容(Claude 在内存里 compose)
 
-输出 `docs/bob/03-model-<slug>-<date>.md`,固定 schema:
+**重要变化**:本阶段**不再写 md**(md 推迟到 Stage 4);本阶段 Claude **在内存里 compose 完整的 html 字符串**,Stage 3 才把它写盘 + 启 server。
 
-```
+### 2.1 html 必含组件(详见 §html widget 规范)
+
+- DOCTYPE + 完整 `<html><head><body>` 结构(本 html 由 server 直传不经 frame wrapper)
+- Sticky 顶栏:模型标题 / sticky 计数 / [↻ 清空草稿] / [📋 提交本轮反馈 (N)] 按钮
+- 左侧 TOC(sticky)+ 主内容区
+- 5 节内容(术语 / Entity / BR / UC / 开放问题),每节内 widget 见 §html widget 规范
+- 跨引用锚点:BR-NNN / Entity / INV / Q 全自动锚点
+- 嵌入 inline CSS(状态色标 / 布局)
+- 嵌入 inline JS(localStorage / 提交 / 自动保存,详见 §html widget 规范的 page-helper)
+- 顶部 `<script>window.BOB_MODEL_SLUG='<slug>'; window.BOB_MODEL_ROUND=1;</script>`(Claude 按当次会话填)
+
+### 2.2 文件名计算(与旧版相同)
+
+- `<slug>` = 源文档名去后缀 + 业务化("ycb需求.md" → "create-order")
+- `<date>` = `YYYYMMDD` UTC
+- 输出文件名(Stage 3 写盘时用):`screen_dir/03-model-<slug>-<date>.html`
+
+### 2.3 不在此阶段做的事
+
+- ❌ 写 md(由 Stage 4 dump)
+- ❌ 启 server(由 Stage 3 启)
+- ❌ 把 html 写到 `docs/bob/`(因为最终的 path 是 `screen_dir`,且 Stage 4 才把 html 复制 / 移到 `docs/bob/`)
+
 ---
-name: bob-model
-source_doc: /Users/.../ycb需求.md
-source_doc_sha256: a1b2c3...
-generated_at: 2026-05-14T03:21:00Z
-target_phase: pre-stories
----
 
-# 领域模型 · YCB 订餐 · 2026-05-14
+## Stage 3. 启 visual companion server + push html + 给用户 URL
 
-## 0. 元信息
-- 源文档:`ycb需求.md`(sha256 `a1b2c3...`)
-- 生成时间:`2026-05-14T03:21:00Z`
-- 后续步骤:`/bob-stories ycb需求.md`(基于本模型切片)
+### 3.1 启 server
 
-## 1. 术语表
-| 中文 | 英文 | 定义 | 来源 | 同义词 |
-|---|---|---|---|---|
-| 订单 | Order | 用户提交的餐品购买订单 | YCB-001 | 单子/单据 |
-...
-
-## 2. Entity 草图
-### 2.1 Order
-**属性**
-- orderId: String (必填,系统生成)
-- orderNumber: String (必填,系统生成,见 BR-002)
-- ...
-
-**状态机种子**(Mermaid `stateDiagram-v2`)
-- 已出现:PENDING_PAYMENT
-- 待确认:PAID / DELIVERED / CANCELLED / TIMEOUT_CANCELLED(虚线)
-
-**不变量**
-- INV-Order-1: 单个 Order 仅含一个商家(YCB-001 AC#5)
-- INV-Order-2: orderNumber 格式 `yyyyMMddHHmmss + 6 位随机数`(BR-002)
-
-## 3. 业务规则
-### BR-001 价格计算
-**公式**: `Σ(item.price × item.qty) + 打包费(1) + 配送费(3)`
-**精度**: 金额字段保留 2 位小数(YCB-001 1.3 AC#5)
-**来源**: YCB-001 1.2 全部 AC
-
-### BR-002 orderNumber 格式
-**格式**: `yyyyMMddHHmmss + 6 位随机数`(20 个字符)
-**来源**: YCB-001 AC#2
-
-## 4. UseCase 初步清单
-| UseCase | 涉及 Entity | 涉及规则 | 来源 story |
-...
-
-## 5. 开放问题
-| 编号 | 问题 | 影响哪个下游 | 暂定假设 |
-...
+```bash
+SCRIPT=/Users/xiaojin/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/skills/brainstorming/scripts/start-server.sh
+"$SCRIPT" --project-dir <repo-root>
 ```
 
-**写完 md → 在 frontmatter 的 `source_doc_sha256` 字段记录源文档 sha256**(对标 /bob-compliance 的 `.compliance.lock` 思路,但 model 把审计 trace 直接放进 frontmatter,不另起 lock 文件)。
+返回 JSON 包含 `port` / `url` / `screen_dir` / `state_dir`。Claude 在内部记下 `screen_dir` 与 `state_dir`。
 
----
+> **失败兜底**:若 start-server.sh 返回非 0,Claude 终端报错并降级 — 把 Stage 2 的 html 直接写到 `docs/bob/03-model-<slug>-<date>.html`(只读 fallback),并告知用户"interactive review 不可用,可作为只读 review"。
 
-## Stage 3. 写 html(视图,团队 PR review)
+### 3.2 写 html 到 screen_dir
 
-输出 `docs/bob/03-model-<slug>-<date>.html`:**单文件,自包含**,由 Claude 直接产出整段 html。
-
-### 3.1 页面结构
-
+把 Stage 2 compose 的 html 字符串写到:
 ```
-┌────────────────────────────────────────────┐
-│  顶部 metadata 卡片                          │
-│  (源文档 / 日期 / Claude 版本)              │
-├──────────┬─────────────────────────────────┤
-│ 粘性 TOC │ § 1. 术语表       (HTML 表)      │
-│          │ § 2. Entity 草图  (Mermaid)      │
-│  - 术语  │   2.1 Order       classDiagram   │
-│  - Entity│        + stateDiagram-v2         │
-│  - 规则  │ § 3. 业务规则     (卡片 + 表)    │
-│  - UC    │ § 4. UseCase      (Mermaid)      │
-│  - Q     │ § 5. 开放问题     (checklist)    │
-└──────────┴─────────────────────────────────┘
+<screen_dir>/03-model-<slug>-<date>.html
 ```
 
-### 3.2 Mermaid 图清单
+server 会自动检测新文件并 broadcast `{type: 'reload'}` 到所有连接的 browser(server.cjs:296)。
 
-| 段 | Mermaid 类型 | 内容 |
-|---|---|---|
-| 2.x Entity | `classDiagram` | 一个 class 块,列属性,加注释行 `<<entity>>` |
-| 2.x 状态机 | `stateDiagram-v2` | 已出现状态实线(`-->`),待确认虚线(`..>`) |
-| 4. UseCase 关系 | `flowchart LR` | UseCase 节点 + 依赖箭头 |
+### 3.3 通报用户(per §产物报告规约)
 
-### 3.3 资源策略
+```
+**产物**(review 直链):
+- url(浏览器打开):http://localhost:<port>
+- screen_dir(html 本体):/Users/.../03-model-<slug>-<date>.html
+- state_dir(events 文件):/Users/.../state/events(本轮还没,首次提交后才生成)
 
-- **CDN 一行**:`<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>` + 一段初始化 `mermaid.initialize({startOnLoad:true})`
-- **离线降级**:Mermaid 没加载到,代码块原样显示 —— Claude 必须用 `<pre><code class="language-mermaid">…</code></pre>` 包裹每张图,工程师即使没渲染仍能读 DSL
-- **CSS 内联**:`<style>` 标签,~200 行,实现:
-  - 左侧**粘性 TOC**(`position: sticky; top: 0`)
-  - 主区最大宽度 `960px` 居中
-  - 代码 / 表 / 标题字号、间距、配色(参考 Stripe / Tailwind 文档站的简洁风)
-- **暗黑模式:不做**(YAGNI)
-- **不内联 Mermaid 库**(节省 ~1MB)
-- **不内联字体 / 图标**(用系统 sans-serif)
-- 预期单文件 30-80 KB,git diff 友好
+请打开 URL,在 widget 里写评论 + 点 sticky 顶栏「📋 提交本轮反馈」。
+完成后在本终端发 "继续" 让我读 events。
+```
 
-### 3.4 html 入 git
+### 3.4 进入 Stage 3.5 等待
 
-html 入 git,团队可以在 PR 里浏览器直接打开 review。每次跑 `/bob-model` 会覆盖,git diff 显示模型变化(术语 / 规则 / 开放问题)。
+Stage 3 至此结束。Claude **不主动追问**,等用户在终端发推进信号。
 
 ---
 
-## Stage 3.5 · 多轮修改循环(默认进入,不主动追问 Stage 4)
+## Stage 3.5 · 多轮修改循环(event-driven,默认进入)
 
-`/bob-model` 的产出**很少在 Stage 1.3 一次性完美**。md + html 落盘后,用户通常会:
+**仍是默认进入,Claude 不主动追问 Stage 4**(per commit `6e21e53` 不变量);区别于旧版,本阶段改为 event-driven:用户在 browser 提交 → server 写 events → Claude 在终端被叫"继续" → 读 events → 应用 → 重写 html。
 
-- 指出术语 / 字段 / 类型命名不够表意(触发命名规约重审,可能涉及多处级联改名)
-- 补充遗漏的概念 / 不变量 / 业务规则
-- 修正暂定假设(确认下来,或反过来提为新 Q)
-- 调整公式 / 状态机 / 折扣应用顺序等语义细节
-- 触发跨域改名(如电商 → 物流时,数量族从 `Quantity` 改为 `Gram` / `Kg`)
+### 3.5.1 触发(用户在终端给出推进/继续/查反馈信号)
 
-**默认进入修改循环**,而**不是**马上跑 Stage 4 收口。**3-8 轮迭代是常态**,不是异常。
+监听以下信号(任一即进入处理):
+- "继续" / "next" / "看反馈" / "看下反馈" / "处理一下" / 类似
+- 默认假设用户已在 browser 点过 sticky 顶栏「📋 提交本轮反馈」
 
-### 循环协议
+> 若用户在终端发的不是上述信号(而是直接命令 / 别的问题),仍走 §Stage 3.5 旧版 protocol(直接 Edit md/html);**新版 event-driven 只在用户给"继续"类信号时启动**。
 
-1. **入循环**:Stage 3 完成(html 落盘)后,Claude **默认等待**用户反馈,**不主动**追问"是否进入下一步"。
-2. **每轮处理**:
-   - 若指令清晰且不涉及歧义 → 直接执行 Edit md + html → grep 校验 → **简短报告改动落点 + 列 md/html 绝对路径**(到此为止)。路径格式见 §产物报告规约
-   - 若解读有歧义(如笔误判定、改动范围不明、命名风格冲突)→ **就该具体改动**用三段式确认
-   - ❌ **不要趁机再问"是否进入 /bob-stories"** —— 那是 Stage 4 的专责,不混在改动报告里
-   - ❌ **不要省略文件路径** —— 即使路径没变,每轮都要列(用户随时打开 html 验 Mermaid / 表格)
-3. **退循环信号**(以下任一,触发 Stage 4):
-   - 用户**显式说**"OK 推进" / "next" / "可以了" / "继续 stories" / "/bob-stories"
-   - 用户连续多轮没有新改动且明显在等下一步 → Claude **一次**主动询问"还有改动吗?",收到"没了"再进 Stage 4
-4. **明令禁止**:
-   - 每轮改动后追问"还要不要继续 stories?" —— 用户没说就别问
-   - 把单点改动当 Stage 1.3 全量重审(只动相关段,其它段保留)
-   - 在改动报告里夹带 Stage 4 三段式
+### 3.5.2 处理流程
 
-### Stage 4 边界
+1. **读 events**:
+   ```bash
+   tail -n+1 "$STATE_DIR/events"
+   ```
+   Claude 内部 filter 出 `type === 'bob-model-feedback'` 且 `timestamp > last_processed_event_timestamp` 的行。
 
-Stage 4 三段式**只在退循环信号触发时**发出。中途反复发"是否进入 /bob-stories?"会:
+2. **Parse + 分派**(按 §评论协议与 schema 的 6 种 kind):
+   - `term` → 改术语行 + 级联引用
+   - `entity-field` → 改字段 + 级联引用
+   - `br` → 改 BR 卡
+   - `diagram` → 重画 Mermaid
+   - `open-question` → 决议 / 改暂定 / 拆分
+   - `general` → **先三段式**确认意图再动手
 
-- 制造打断用户思路的噪音
-- 暗示"现在就该结束"的隐性压力,违反「消除歧义优先」
-- 在用户还在打磨时过早收口
+3. **更新内部模型快照** + 更新 `last_processed_event_timestamp` + `processed_comment_ids`
+
+4. **重写 html**:重新 compose html 字符串(per Stage 2 规范),关键变化:
+   - 对每个**已应用的 comment.id**,在对应 widget 上加 `data-applied="<comment-id>"` 属性
+   - 重新生成跨引用锚点(因为可能 rename 了 Entity / BR)
+   - BOB_MODEL_ROUND++
+
+5. **写盘新 html**:**新文件名**(不覆盖旧版)避免 server 把它当 update 而 broadcast reload 之外的副作用。例如 `screen_dir/03-model-<slug>-<date>-v2.html`、`v3.html` 等。
+
+> server.cjs:287 新文件触发 `{type: 'screen-added'}` + **清空 events 文件**(server.cjs:290)。Claude 必须**先读完本批 events** 再写新文件;否则新提交事件会丢。
+
+6. **报告改动 + 列 URL**(per §产物报告规约):
+   ```
+   已应用本轮 N 条改动:
+   - <kind:target>: <一行总结>
+   - ...
+   
+   **产物**(review 直链):
+   - url: http://localhost:<port>(刷新看新版)
+   - screen_dir: /Users/.../03-model-<slug>-<date>-vN.html
+   ```
+
+### 3.5.3 自由文本兜底(per spec §4.4)
+
+`kind === 'general'` 或 comment 含"也许 / 看能否 / 我觉得"等不确定措辞 → **先三段式**确认意图(给出 1 个推测方案 + 影响范围),用户回 OK 才进 step 4。
+
+### 3.5.4 server 中途死
+
+读 events 前先 `ls "$STATE_DIR/server-info" "$STATE_DIR/server-stopped"`:
+- 只有 server-info:正常,继续读 events
+- server-stopped 存在 → 重启 server(复用同 screen_dir 不丢历史 html)+ 告知用户
+
+### 3.5.5 不要做的事(per commit `6e21e53` 多轮修改协议)
+
+- ❌ 改动后追问"是否进入 /bob-stories" —— 那是 Stage 4 的专责
+- ❌ 把单点改动当 Stage 1.3 全量重审
+- ❌ 在改动报告里夹带 Stage 4 三段式
 
 ---
 
-## Stage 4. 三段式收口 + 通报下一步
+## Stage 4. 三段式收口(用户给推进信号 → dump md → 停 server)
 
-> **Q3: 建模完成。N 条术语 / M 个 Entity / K 条业务规则 / W 个开放问题。**
+### 4.1 触发(用户显式给出退循环信号)
+
+- "OK 推进" / "可以了" / "继续 stories" / "/bob-stories" / "done with model" / 类似
+- 若用户多轮未动,Claude **可一次**主动问 "还有改动吗?",收到 "没了" 再进 Stage 4
+
+### 4.2 dump md(从最终内部模型快照)
+
+写 `<repo>/docs/bob/03-model-<slug>-<date>.md`(per 旧版 schema),frontmatter 含:
+- `name: bob-model`
+- `source_doc: <绝对路径>`
+- `source_doc_sha256: <shasum>`
+- `generated_at: <UTC ISO8601>`
+- `target_phase: pre-stories`
+- `slug: <slug>`
+- **新增**:`interactive_review: { rounds: <N>, comments_applied: <total>, final_html: <path> }`
+
+### 4.3 保留 final html 到 docs/bob/
+
+把 `screen_dir/03-model-<slug>-<date>-vN.html`(最终版)**复制**到 `<repo>/docs/bob/03-model-<slug>-<date>.html`(去掉 vN 后缀,作为 final;入 git)。
+
+### 4.4 停 server(优雅 SIGTERM)
+
+```bash
+kill -TERM $(cat "$STATE_DIR/server.pid")
+```
+
+(或调用 stop-server.sh 如存在)
+
+### 4.5 三段式收口(per §产物报告规约的 Stage 4 模板)
+
+```
+> **Q: 建模完成。N 条术语 / M 个 Entity / K 条业务规则 / W 个开放问题 + <rounds> 轮交互评审 / <applied> 条评论已应用。**
 >
 > **产物**(review 直链):
-> - md(SSoT):`<absolute path>/docs/bob/03-model-<slug>-<date>.md`
-> - html(团队视图,浏览器打开):`<absolute path>/docs/bob/03-model-<slug>-<date>.html`
+> - md(SSoT):/Users/.../docs/bob/03-model-<slug>-<date>.md
+> - html(团队视图,浏览器打开):/Users/.../docs/bob/03-model-<slug>-<date>.html
 >
-> **推测**:难度 `<Medium/Hard>` → 建议 `/bob-stories`(基于本模型切片);如难度 `<Easy>` → 直接 `/bob-identify`
-> **理由**:从 /bob-survey 推荐 + 本模型规模综合判断
-> **推荐选择**:`继续 /bob-stories` / `直接 /bob-identify` / `先 review html 后再决定`
+> **推测**:难度 `<Medium/Hard>` → 建议 `/bob-stories`;`<Easy>` → 直接 `/bob-identify`
+> **理由**:从 /bob-survey + 本模型规模综合
+> **推荐选择**:`继续 /bob-stories` / `直接 /bob-identify` / `先 review 后再决定`
 >
 > 是否同意?(回"是"按推荐;回"先 review"暂停;回"回头再说"也可)
+```
+
+### 4.6 失败兜底
+
+- md dump 失败(磁盘 / 权限)→ 不停 server,允许用户继续 review
+- final html 复制失败 → 用户从 screen_dir 手动复制,Claude 给出明确路径
+- server 已 idle 自杀 → SIGTERM no-op,跳过
 
 ---
 
@@ -448,7 +812,10 @@ Stage 4 三段式**只在退循环信号触发时**发出。中途反复发"是�
 - **命名表意强制(原则普适,具体词按域调整)** —— 术语 / Entity 字段 / 类型名必须显式编码 type + role,禁止光秃名词。**具体后缀按域换**:电商 `Fee` / 物流 `Gram` / IoT `Celsius` / 医疗 `Mg` ...,**不要把电商示例当唯一标准**。详见 §命名规约「核心原则」+「跨领域适用」。违反 = 本阶段未完成,需 `--refresh` 重抽。
 - **多轮修改是默认** —— Stage 3(html 落盘)与 Stage 4(收口)之间**默认进入修改循环**,3-8 轮迭代是常态。Claude **不主动**追问"是否进入下一步";**只在用户显式给推进信号**("OK 推进" / "继续 stories" / 等)时才发 Stage 4 三段式。详见 §Stage 3.5。
 - **报告必含文件链接** —— 每次产物落盘 / 改动报告 / Stage 4 收口都必须**显式列出 md 与 html 绝对路径**,方便用户直接打开 review。**每轮都要列**(即使路径没变),不要省略,不要藏在散文里。详见 §产物报告规约。
-- **md 是 SSoT** —— html 仅是视图,每次 `/bob-model` 运行重写
+- **html 是 review canvas(非只读)** —— Stage 2 起 html 含 widget / 状态机 / localStorage / WebSocket 提交;不再是只读视图。详见 §html widget 规范。
+- **md 仅 Stage 4 生成** —— Stage 2 不写 md;Stage 3.5 只动 html;md 在用户给 Stage 4 推进信号后从最终 html 状态 dump。下游 `/bob-stories` 通过"是否有 md"自然判断 model 是否 final。
+- **server 自启自停** —— Stage 3 自动 spawn visual companion server;Stage 4 自动 SIGTERM。idle 30 min 自杀由 server 自管;Claude 检测到 server-stopped 后自动重启。
+- **md 是 SSoT(Stage 4 起)** —— Stage 4 dump 后,md 即为下游消费的 final;html 仅是视图,每次 `/bob-model` 运行重写
 - **html 入 git** —— 团队 PR review 用,差异可见
 - **Mermaid via CDN** —— 单 `<script>` 标签;离线时优雅降级为代码块
 - **`docs/bob/03-` 槽位独占** —— model 用这个槽,其他 skill 不占
