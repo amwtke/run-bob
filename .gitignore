@@ -9,3 +9,6 @@
 
 # macOS
 .DS_Store
+
+# Superpowers brainstorming visual companion (per-session mockups)
+.superpowers/
