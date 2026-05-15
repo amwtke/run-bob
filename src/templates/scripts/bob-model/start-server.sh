@@ -3,7 +3,7 @@
 # Source: superpowers@5.1.0 (Anthropic, MIT)
 # Migrated to run-bob with namespace bob-review for /bob-model interactive review.
 # See docs/superpowers/specs/2026-05-15-bob-model-server-internalization-design.md
-# Start the brainstorm server and output connection info
+# Start the bob-review server and output connection info
 # Usage: start-server.sh [--project-dir <path>] [--host <bind-host>] [--url-host <display-host>] [--foreground] [--background]
 #
 # Starts server on a random high port, outputs JSON with URL.

@@ -3,7 +3,7 @@
 # Source: superpowers@5.1.0 (Anthropic, MIT)
 # Migrated to run-bob with namespace bob-review for /bob-model interactive review.
 # See docs/superpowers/specs/2026-05-15-bob-model-server-internalization-design.md
-# Stop the brainstorm server and clean up
+# Stop the bob-review server and clean up
 # Usage: stop-server.sh <session_dir>
 #
 # Kills the server process. Only deletes session directory if it's
