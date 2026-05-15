@@ -203,6 +203,23 @@ description: |
 4. **Mermaid 图**(图下 details):图块下 details/textarea,`data-target` 用图 slug。
 5. **开放问题卡**(卡底 details):同 BR 卡;`data-target` 用 Q 编号。
 
+### 布局与导航(粘性 TOC)
+
+- 顶部 `header.bob-sticky`(sticky 定位)固定可见,含计数 + 提交按钮
+- 左侧 `nav.bob-toc` **粘性 TOC**(`position: sticky; top: 56px`),5 节锚点 + 每节 draft 红角标
+- 主内容区 `main.bob-main` 滚动区
+- 右下浮动 `.bob-back-top` 返顶按钮
+
+### Mermaid 图清单(每节用什么类型)
+
+| 出现位置 | Mermaid 类型 | 用途 |
+|---|---|---|
+| Entity 草图 §2.x | `classDiagram` | 每个 Entity 的属性 class 块 + `<<value object>>` / `<<entity>>` 注解;sum type 子类用 `<|--` 继承箭头 |
+| Order 状态机种子 | `stateDiagram-v2` | 已出现状态用实线 `-->`,未确认状态用虚线 `..>` |
+| UseCase 折扣应用 §4.x | `flowchart TD` 或 `flowchart LR` | 流程图,展示 UseCase 内部 step 串联 / 分支逻辑 |
+
+每张图都包在 `<pre><code class="language-mermaid">...</code></pre>` 内便于离线降级,同时下方 `<div class="mermaid">...</div>` 让 CDN Mermaid 渲染。
+
 统一格式(以 term 为例):
 
     <div class="bob-widget" data-comment-id="term:discountRate" data-kind="term" data-target="discountRate" data-section="terms">
