@@ -10,9 +10,11 @@ description: |
   就必须跑 /bob-model;"极小需求"可走 Stage 0 短路分支,但仍产出占位 md。
   不存在"AC 看起来清晰所以跳过 model"或"端口数少于 N 就不跑 model"之类的阈值短路。
 
-  读 PM 风格的散文需求文档(.md / .pdf / .docx / .txt),抽取出:1) 术语表,
-  2) Entity 草图(属性 + 状态机种子 + 不变量),3) 业务规则清单(BR-NNN,跨 story 共享),
-  4) UseCase 初步清单,5) 开放问题。
+  读 PM 风格的散文需求文档(.md / .pdf / .docx / .txt)。**核心工作 = 识别聚合根(Aggregate Roots)**:
+  Stage 1.2 先在**终端纯文本**多轮反馈确认聚合根边界,**用户 confirm 后才进入 html**。
+  然后基于已确认聚合根展开:1) 按聚合根分组的术语 + Entity 一体(HTML 默认合并),
+  2) 业务规则清单(BR-NNN,跨 story 共享),3) UseCase 初步清单,4) 开放问题。
+  关系标注 inline 在各聚合根块内(1:1 / 1:N / 包含 vs 引用);顶部 overview classDiagram 仅作鸟瞰(聚合根 ≥ 3 时可选)。
   产出交互式 docs/bob/03-model-<slug>-<date>.html(Stage 2-3.5 review canvas,带 widget + WebSocket 反馈)
   + Stage 4 推进时从最终 html 状态 dump 出 docs/bob/03-model-<slug>-<date>.md(SSoT)。
 
@@ -181,14 +183,13 @@ description: |
       </header>
       <div class="bob-layout">
         <nav class="bob-toc">
-          <a href="#sec-terms">术语表 (18) <span class="section-badge" data-section-counter="terms"></span></a>
-          <a href="#sec-entities">Entity (6) <span class="section-badge" data-section-counter="entities"></span></a>
+          <a href="#sec-model">术语+Entity (6 聚合根 / 24 术语) <span class="section-badge" data-section-counter="model"></span></a>
           <a href="#sec-br">BR (14) <span class="section-badge" data-section-counter="br"></span></a>
           <a href="#sec-uc">UseCase (1) <span class="section-badge" data-section-counter="uc"></span></a>
           <a href="#sec-q">开放问题 (14) <span class="section-badge" data-section-counter="q"></span></a>
         </nav>
         <main class="bob-main">
-          <!-- §1 术语表 / §2 Entity / §3 BR / §4 UC / §5 Q -->
+          <!-- §1 术语+Entity(按聚合根分组,内含 §1 顶部关系图)/ §2 BR / §3 UC / §4 开放问题 -->
         </main>
       </div>
       <button class="bob-back-top" onclick="window.scrollTo({top:0, behavior:'smooth'})" aria-label="返回顶部">↑</button>
@@ -200,18 +201,32 @@ description: |
 
 每个 widget 必须有 3 个 data-* 属性:`data-comment-id`(唯一,= `<kind>:<target>` 或 'general')、`data-kind`、`data-target`,以及一个 `.comment-input` textarea。
 
-5 种 widget 形态:
+Widget 形态(按 §1 合并后的结构):
 
-1. **术语表行**(inline expand):每个 `<tr>` 末尾 💬 按钮 toggle 展开下方 textarea。
-2. **Entity 字段行**:同上 inline expand;每个属性 / 不变量行都加 💬。
-3. **BR 卡**(卡底 details):每张 BR 卡底加 `<details>` 包 textarea。
-4. **Mermaid 图**(图下 details):图块下 details/textarea,`data-target` 用图 slug。
-5. **开放问题卡**(卡底 details):同 BR 卡;`data-target` 用 Q 编号。
+1. **聚合根块头 widget**(per `### <Aggregate>` 标题):块顶 💬,接收针对该聚合根整体的反馈(改名 / 拆分 / 合并 / 删除)。
+2. **聚合根块内子段 widget**(关系 / 术语 / 属性 / 状态机 / 不变量 / 生命周期 / 值对象关系 8 子段):每子段尾 💬,逐段独立反馈。
+3. **术语表行**(子段 3 表格内):每个 `<tr>` 末尾 💬,inline expand 行内反馈。
+4. **BR 卡**(卡底 details):每张 BR 卡底 `<details>` 包 textarea。
+5. **Mermaid 图**(图下 details):图块下 details/textarea,`data-target` 用图 slug。
+6. **开放问题卡**(卡底 details):同 BR 卡;`data-target` 用 Q 编号。
+
+### Widget 跨轮可编辑性(强制)
+
+**所有 widget 在每一轮 push html 时都必须重置为「空草稿,可写,可提交」状态,任何情况下都不允许 lock / disabled / readonly**:
+
+- 上一轮提交并被 Claude 应用的反馈 → 本轮该 widget 的 textarea **清空 + 计数归 0 + 按钮可点击**,允许用户继续提新反馈
+- localStorage 草稿在"本轮提交完成"后清掉,但 widget 本身保持可写
+- 视觉上"曾在第 N 轮被修改过"的痕迹**只是提示**(可用 `data-modified-round="N"` + 浅色虚线边框 / 角标),**不影响交互**:点击仍展开 textarea,仍能输入,仍能提交
+- **禁止**任何"已应用,不可再改"的 UI 状态;建模阶段的本质是多轮逼近,任何字段都可能在第 N 轮才稳定
+
+实现要点(§JS 段必落):
+- `renderRound(round, snapshot)` 函数:每次 server push 新 html 时,遍历所有 `[data-comment-id]`,reset textarea / count / toggle state,但保留 `data-modified-round` 数据属性。
+- 没有 `widget.disabled = true` 之类语句,也没有 CSS class 给 widget 加 `pointer-events: none`。
 
 ### 布局与导航(粘性 TOC)
 
 - 顶部 `header.bob-sticky`(sticky 定位)固定可见,含计数 + 提交按钮
-- 左侧 `nav.bob-toc` **粘性 TOC**(`position: sticky; top: 56px`),5 节锚点 + 每节 draft 红角标
+- 左侧 `nav.bob-toc` **粘性 TOC**(`position: sticky; top: 56px`),4 节锚点(术语+Entity / BR / UC / 开放问题)+ 每节 draft 红角标
 - 主内容区 `main.bob-main` 滚动区
 - 右下浮动 `.bob-back-top` 返顶按钮
 
@@ -219,9 +234,10 @@ description: |
 
 | 出现位置 | Mermaid 类型 | 用途 |
 |---|---|---|
-| Entity 草图 §2.x | `classDiagram` | 每个 Entity 的属性 class 块 + `<<value object>>` / `<<entity>>` 注解;sum type 子类用 `<|--` 继承箭头 |
-| Order 状态机种子 | `stateDiagram-v2` | 已出现状态用实线 `-->`,未确认状态用虚线 `..>` |
-| UseCase 折扣应用 §4.x | `flowchart TD` 或 `flowchart LR` | 流程图,展示 UseCase 内部 step 串联 / 分支逻辑 |
+| §1 顶部 overview(聚合根 ≥ 3 时可选) | `classDiagram` | 跨聚合根关系鸟瞰,只画基数 + 包含/引用;**关系细节不靠这张图传递**,以 §1 各聚合根块内 inline 文字为准 |
+| §1 各聚合根块 Entity class 图 | `classDiagram` | 该聚合根 + 内嵌实体/值对象的属性 class 块 + `<<value object>>` / `<<entity>>` 注解;sum type 子类用 `<|--` 继承箭头 |
+| §1 各聚合根块 状态机种子 | `stateDiagram-v2` | 已出现状态用实线 `-->`,未确认状态用虚线 `..>` |
+| §3 UseCase 流程 | `flowchart TD` 或 `flowchart LR` | 流程图,展示 UseCase 内部 step 串联 / 分支逻辑 |
 
 每张图都包在 `<pre><code class="language-mermaid">...</code></pre>` 内便于离线降级,同时下方 `<div class="mermaid">...</div>` 让 CDN Mermaid 渲染。
 
@@ -551,8 +567,12 @@ description: |
 
 ```
 Stage 0. 入口体检 + 短路判定(可跳过建模)
-Stage 1. 抽取(术语 / Entity / 规则 / UseCase / 开放问题)— 三段式追问填空(in-memory snapshot,不写文件)
-Stage 2. 生成 interactive html 内容(Claude 在内存里 compose)
+Stage 1. 抽取(领域核心)
+  1.1 读源文档
+  1.2 识别聚合根(终端 mini-loop 多轮反馈,纯文本,不写盘 / 不出 html)— ★ model 阶段最重要的工作
+  1.3 基于已确认聚合根展开完整抽取(按聚合根分组的术语+Entity 一体 / BR / UC / Q)
+  1.4 三段式确认完整抽取结果
+Stage 2. 生成 interactive html 内容(Claude 在内存里 compose,按聚合根组织)
 Stage 3. 启 visual companion server + push html + 给用户 URL
 Stage 3.5. 多轮修改循环(event-driven,默认进入)
 Stage 4. 三段式收口(用户给推进信号 → dump md → 停 server)
@@ -605,28 +625,94 @@ Stage 4. 三段式收口(用户给推进信号 → dump md → 停 server)
 | `.md`、`.txt`、`.markdown` | 一次性 Read 全文 |
 | 其他 | 跳过,在 md/html 报告里标注"格式不支持" |
 
-### 1.2 抽取 5 段内容
+### 1.2 识别聚合根(必经,终端 mini-loop 多轮反馈)
 
-Claude 按下列顺序识别,**每段三段式追问填空**(不抛开放问题)。
+**model 阶段最重要的工作 = 识别聚合根(Aggregate Roots)**。本步**在终端、纯文本、不写盘、不生成 html**,目的是和用户**多轮反馈**确认聚合根边界,**直到用户显式 confirm 才进入 Stage 1.3 展开**。
 
-#### A. 术语表(Glossary)
+#### 1.2.1 首轮抽取(候选聚合根列表)
 
-| 字段 | 说明 |
-|---|---|
-| 中文 | 例:订单 |
-| 英文 | 例:Order |
-| 定义 | 一句话 |
-| 来源 | story / AC 编号 |
-| 同义词 | 散文里出现的其他叫法,统一指向此条 |
+读完源文档后,Claude 输出**候选聚合根列表 + 跨聚合根关系**:
 
-#### B. Entity 草图
+```
+候选聚合根(初步):
+- AggregateA(理由:有独立 ID + 独立生命周期 + 是事务一致性边界)
+- AggregateB(理由:被 AggregateA 引用但有独立生命周期)
+- AggregateC(理由:从 AC#N 反推,值对象 X / Y / Z 显然附属于它)
+...
 
-每个 Entity 一段:
+跨聚合根关系:
+- AggregateA 1 ── 1 AggregateB(引用,独立生命周期)
+- AggregateA 1 ── N AggregateC(包含,父删则子删)
 
-- **属性清单** —— 名字 + 类型 + 必填(从 AC 推断)
-- **状态机种子** —— 已出现的状态名 + 已知的迁移箭头;**未确认的状态用虚线**,标注"待 /bob-spec 确认"
-- **不变量** —— 用 AC 措辞反推的 invariant,例:"一个 Order 只能包含一个商家的餐品"(YCB-001 AC#5)
-- **生命周期事件**(可选) —— "创建时""提交时""完结时"等关键 hook
+排除项(故意不当聚合根的概念,标注理由):
+- ValueObjectX(只是 AggregateA 的属性,无独立 ID)
+- EnumY(状态枚举,不是 entity)
+```
+
+#### 1.2.2 三段式追问(每轮 mini-loop)
+
+```
+> **Q-AR<round>: 候选聚合根 N 个。**
+>
+> **推测**:边界划得对 / 还差几个 / 划多了
+> **理由**:基于源文档 AC + 独立 ID + 事务边界 + 生命周期独立性四维判断
+> **推荐选择**:`确认无误,进入 Stage 1.3 展开内容` / `调整聚合根(请告诉我加/删/改哪些)` / `重新读源文档`
+>
+> 是否同意?
+```
+
+#### 1.2.3 多轮 mini-loop 规约
+
+- 用户给出"加 X / 删 Y / 把 Z 从聚合根降级为值对象 / 把 W 从值对象升级为聚合根"等指令 → Claude 重新输出聚合根列表 + 关系 + 排除项 → 再次三段式
+- **没有轮数上限**,但每轮必须是**纯文本**(无 html / 无 md 落盘)
+- Claude **不主动**追问"是否进入下一步";**只在用户回答 "确认无误" / "OK 推进 1.3" / 等明确推进信号时**才进入 Stage 1.3
+- 用户如说"先这样,但 X 我后面在 html 里再调",Claude 标注该项为"tentative,Stage 3.5 可再改"后即可进入 1.3
+
+#### 1.2.4 为什么这步独立成 mini-loop
+
+聚合根识别错了,后面所有 entity 字段 / 值对象 / 不变量 / BR 都挂错地方,html canvas 一旦生成再大范围重组成本极高。所以**在 html 之前用终端纯文本快速迭代聚合根边界**,是 model 阶段性价比最高的环节。
+
+---
+
+### 1.3 基于已确认聚合根展开完整抽取
+
+Stage 1.2 用户 confirm 之后,Claude 按下列顺序展开 5 段内容,**每段三段式追问填空**(不抛开放问题)。**所有内容都按 Stage 1.2 确认的聚合根列表组织**。
+
+#### A. 按聚合根分组的术语 + Entity 一体表(Glossary + Entity merged)
+
+**HTML 默认把术语表与 Entity 草图合并成一节**,按聚合根分组。每个聚合根一个块,块内**一次给完**该聚合根的术语、字段、值对象、状态机、不变量、与其他聚合的关系 —— 用户在一个块内就能 review 完该聚合的全部建模信息,不必跨章节跳转。
+
+##### A.1 §1 顶部:领域关系总览图(overview,可选)
+
+仅当聚合根 ≥ 3 个时输出。用 Mermaid `classDiagram` 画**所有跨聚合根的关系**作为鸟瞰,例:
+
+```mermaid
+classDiagram
+    AggregateA "1" --> "N" AggregateB : 包含
+    AggregateA "1" --> "1" AggregateC : 引用
+```
+
+**关系细节不靠这张图传递**(它只是导航 / 总览)。**真正可信的关系标注在 §A.2 各聚合根块内的"与其他聚合根关系"段** —— 这样改 inline 描述时不必同步改图,降低维护成本。
+
+##### A.2 每个聚合根一个块(强制)
+
+每个聚合根开一个 `### <AggregateName>` 三级标题,块内**按下列固定顺序**列出:
+
+1. **本聚合根的一句话定义**(自述,不靠词条)
+2. **与其他聚合根的关系**(inline,文字 + 基数 + 类型),例:
+   - `引用 AggregateB(1 ── 1,独立生命周期)`
+   - `包含 AggregateC(1 ── N,父删则子删)`
+   - **没有外部关系也要写一行"独立聚合根,与其他聚合无直接关系"**;不允许留空让人猜
+3. **术语表**(本聚合范围内的所有概念,中文/英文/角色/定义/来源/同义词,role ∈ `aggregate-root` / `entity` / `value-object` / `enum` / `field`)
+4. **属性清单**(本聚合根 + 内嵌实体的字段,名字 + 类型 + 必填;若已在术语表登记则只列名)
+5. **状态机种子**(若有,`stateDiagram-v2`;无则写"无显式状态机")
+6. **不变量**(AC 反推的 invariant,逐条编号)
+7. **生命周期事件**(可选,创建/提交/完结等 hook)
+8. **值对象 / 枚举之间的关系**(若该聚合内多个值对象间有关系,如"X 引用 Y 1:N",在此 inline 标注)
+
+##### A.3 跨聚合根引用的术语放哪
+
+只在**主属**聚合根块里登记一次,其他块引用时用 `[[英文名]]` 跨链(html 中渲染成锚点跳转)。**禁止在多个块里重复登记同一术语**。
 
 #### C. 业务规则清单(Business Rules)
 
@@ -661,13 +747,13 @@ Claude 按下列顺序识别,**每段三段式追问填空**(不抛开放问题)
 
 下游 `/bob-spec` 的"交给 Superpowers 的开放问题"段会进一步消化这些 Q。
 
-### 1.3 三段式确认抽取结果
+### 1.4 三段式确认完整抽取结果
 
-> **Q1: 抽取完成。N 条术语 / M 个 Entity / K 条业务规则 / U 个 UseCase / W 个开放问题。**
+> **Q1: 完整抽取完成。M 个聚合根(已在 Stage 1.2 确认)/ N 条术语 / K 条业务规则 / U 个 UseCase / W 个开放问题。**
 >
-> **推测**:看起来覆盖完整 / 还有遗漏(列出我看到但未确认的概念)
-> **理由**:基于源文档的 grep + AC 反推
-> **推荐选择**:`确认无误,进入 Stage 2 写 md` / `补充遗漏后再写`
+> **推测**:看起来覆盖完整 / 还有遗漏(列出我看到但未确认的概念,按聚合根归属列出)
+> **理由**:基于 Stage 1.2 已确认聚合根列表 + 源文档 grep + AC 反推
+> **推荐选择**:`确认无误,进入 Stage 2 compose html` / `补充遗漏后再 compose` / `聚合根边界要回炉(回到 Stage 1.2)`
 >
 > 是否同意?
 
@@ -682,8 +768,9 @@ Claude 按下列顺序识别,**每段三段式追问填空**(不抛开放问题)
 - DOCTYPE + 完整 `<html><head><body>` 结构(本 html 由 server 直传不经 frame wrapper)
 - Sticky 顶栏:模型标题 / sticky 计数 / [↻ 清空草稿] / [📋 提交本轮反馈 (N)] 按钮
 - 左侧 TOC(sticky)+ 主内容区
-- 5 节内容(术语 / Entity / BR / UC / 开放问题),每节内 widget 见 §html widget 规范
-- 跨引用锚点:BR-NNN / Entity / INV / Q 全自动锚点
+- **4 节内容**(术语+Entity 合并为一节按聚合根分组 / BR / UC / 开放问题),每节内 widget 见 §html widget 规范
+- 跨引用锚点:聚合根 / BR-NNN / INV / Q 全自动锚点
+- **§1 内部结构**:可选顶部 overview classDiagram(聚合根 ≥ 3 时)+ 每个聚合根 H3 块(块内固定 8 子段,见 §1.3 A.2)
 - 嵌入 inline CSS(状态色标 / 布局)
 - 嵌入 inline JS(localStorage / 提交 / 自动保存,详见 §html widget 规范的 page-helper)
 - 顶部 `<script>window.BOB_MODEL_SLUG='<slug>'; window.BOB_MODEL_ROUND=1;</script>`(Claude 按当次会话填)
@@ -868,6 +955,10 @@ kill -TERM $(cat "$STATE_DIR/server.pid")
 
 - **强制阶段(不可跳过)** —— Medium/Hard 链路上 `/bob-model` 必跑。`/bob-stories` 在 Stage 0 硬校验 `docs/bob/03-model-*.md` 存在,缺失立即拒绝。"极小需求"可走短路,但仍必须产出占位 md。
 - **命名表意强制(原则普适,具体词按域调整)** —— 术语 / Entity 字段 / 类型名必须显式编码 type + role,禁止光秃名词。**具体后缀按域换**:电商 `Fee` / 物流 `Gram` / IoT `Celsius` / 医疗 `Mg` ...,**不要把电商示例当唯一标准**。详见 §命名规约「核心原则」+「跨领域适用」。违反 = 本阶段未完成,需 `--refresh` 重抽。
+- **聚合根识别独立成 mini-loop** —— Stage 1.2 必须先在**终端纯文本**多轮反馈识别聚合根,**用户 confirm 才进入 Stage 1.3**。聚合根错了所有下游 entity/字段/不变量都挂错地方,html canvas 一旦生成再重组成本极高,所以这步独立、必经、无轮数上限。详见 §Stage 1.2。
+- **HTML 默认合并 §1+§2(术语+Entity 一体)** —— html canvas 共 4 节(术语+Entity / BR / UC / 开放问题),术语+Entity 按聚合根分组,每聚合根块固定 8 子段(详见 §1.3 A.2)。**禁止再回到"独立术语表 + 独立 Entity 段"双段结构**。
+- **关系标注 inline,顶部 overview 仅鸟瞰** —— 各聚合根块内必须有「与其他聚合根的关系」子段(文字 + 基数 + 包含/引用);顶部 overview `classDiagram` 仅作鸟瞰(聚合根 ≥ 3 时可选),**关系细节不靠它传递**。
+- **评论 widget 永远可编辑(跨轮)** —— 任意 widget 在任意轮都不得 lock / disabled / readonly;每轮 push html 时所有 widget 重置为空草稿可写状态;视觉留痕(`data-modified-round`)允许,但不影响交互。详见 §Widget 跨轮可编辑性。
 - **多轮修改是默认** —— Stage 3(html 落盘)与 Stage 4(收口)之间**默认进入修改循环**,3-8 轮迭代是常态。Claude **不主动**追问"是否进入下一步";**只在用户显式给推进信号**("OK 推进" / "继续 stories" / 等)时才发 Stage 4 三段式。详见 §Stage 3.5。
 - **报告必含文件链接** —— 每次产物落盘 / 改动报告 / Stage 4 收口都必须**显式列出 md 与 html 绝对路径**,方便用户直接打开 review。**每轮都要列**(即使路径没变),不要省略,不要藏在散文里。详见 §产物报告规约。
 - **html 是 review canvas(非只读)** —— Stage 2 起 html 含 widget / 状态机 / localStorage / WebSocket 提交;不再是只读视图。详见 §html widget 规范。
