@@ -17,9 +17,11 @@ fn binary_prints_version() {
         .expect("run run-bob --version");
     assert!(output.status.success(), "run-bob --version failed");
     let stdout = String::from_utf8(output.stdout).unwrap();
+    let expected = format!("run-bob {}", env!("CARGO_PKG_VERSION"));
     assert!(
-        stdout.contains("run-bob 0.3.0"),
-        "expected version in output, got: {}",
+        stdout.contains(&expected),
+        "expected '{}' in output, got: {}",
+        expected,
         stdout
     );
 }
