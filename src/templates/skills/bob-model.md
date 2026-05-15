@@ -116,11 +116,12 @@ description: |
 
 **改动报告(Stage 3.5 每一轮)**:
 
-> 已应用改动:[N 处](简要列点)
+> 已应用本轮 N 条改动:
+> - <kind:target>: <一行总结>
 >
 > **产物**(可直接打开 review):
-> - md:`/Users/.../docs/bob/03-model-create-order-20260515.md`
-> - html:`/Users/.../docs/bob/03-model-create-order-20260515.html`
+> - url(浏览器打开):`http://localhost:<port>`
+> - screen_dir(html 本体):`/Users/.../03-model-create-order-20260515-v2.html`
 
 **Stage 4 收口三段式**:
 
@@ -161,6 +162,7 @@ description: |
         window.BOB_MODEL_ROUND = {{round}};
       </script>
       <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+      <script>mermaid.initialize({ startOnLoad: true });</script>
       <style>/* 见 §CSS */</style>
     </head>
     <body>
@@ -173,11 +175,18 @@ description: |
         </div>
       </header>
       <div class="bob-layout">
-        <nav class="bob-toc">...</nav>
+        <nav class="bob-toc">
+          <a href="#sec-terms">术语表 (18) <span class="section-badge" data-section-counter="terms"></span></a>
+          <a href="#sec-entities">Entity (6) <span class="section-badge" data-section-counter="entities"></span></a>
+          <a href="#sec-br">BR (14) <span class="section-badge" data-section-counter="br"></span></a>
+          <a href="#sec-uc">UseCase (1) <span class="section-badge" data-section-counter="uc"></span></a>
+          <a href="#sec-q">开放问题 (14) <span class="section-badge" data-section-counter="q"></span></a>
+        </nav>
         <main class="bob-main">
           <!-- §1 术语表 / §2 Entity / §3 BR / §4 UC / §5 Q -->
         </main>
       </div>
+      <button class="bob-back-top" onclick="window.scrollTo({top:0, behavior:'smooth'})" aria-label="返回顶部">↑</button>
       <script>/* 见 §JS */</script>
     </body>
     </html>
@@ -186,7 +195,15 @@ description: |
 
 每个 widget 必须有 3 个 data-* 属性:`data-comment-id`(唯一,= `<kind>:<target>` 或 'general')、`data-kind`、`data-target`,以及一个 `.comment-input` textarea。
 
-5 种形态详见 spec §3.3。统一格式(以 term 为例):
+5 种 widget 形态:
+
+1. **术语表行**(inline expand):每个 `<tr>` 末尾 💬 按钮 toggle 展开下方 textarea。
+2. **Entity 字段行**:同上 inline expand;每个属性 / 不变量行都加 💬。
+3. **BR 卡**(卡底 details):每张 BR 卡底加 `<details>` 包 textarea。
+4. **Mermaid 图**(图下 details):图块下 details/textarea,`data-target` 用图 slug。
+5. **开放问题卡**(卡底 details):同 BR 卡;`data-target` 用 Q 编号。
+
+统一格式(以 term 为例):
 
     <div class="bob-widget" data-comment-id="term:discountRate" data-kind="term" data-target="discountRate" data-section="terms">
       <button class="comment-toggle">💬 <span class="count">0</span></button>
@@ -246,9 +263,15 @@ description: |
       const SUBMITTED_KEY = `bob-model:${SLUG}:submitted`;
     
       // -- localStorage helpers --
-      const loadDrafts = () => JSON.parse(localStorage.getItem(DRAFTS_KEY) || '{}');
+      const loadDrafts = () => {
+        try { return JSON.parse(localStorage.getItem(DRAFTS_KEY) || '{}'); }
+        catch (e) { console.warn('drafts localStorage corrupted, resetting:', e); return {}; }
+      };
       const saveDrafts = (d) => localStorage.setItem(DRAFTS_KEY, JSON.stringify(d));
-      const loadSubmitted = () => JSON.parse(localStorage.getItem(SUBMITTED_KEY) || '[]');
+      const loadSubmitted = () => {
+        try { return JSON.parse(localStorage.getItem(SUBMITTED_KEY) || '[]'); }
+        catch (e) { console.warn('submitted localStorage corrupted, resetting:', e); return []; }
+      };
       const saveSubmitted = (s) => localStorage.setItem(SUBMITTED_KEY, JSON.stringify(s));
     
       // -- widget key (= comment-id) helpers --
@@ -345,6 +368,10 @@ description: |
         const ts = Date.now();
         const comments = Object.entries(drafts).map(([key, comment], i) => {
           const widget = document.querySelector(`[data-comment-id="${CSS.escape(key)}"]`);
+          if (!widget) {
+            console.warn('orphaned draft key has no widget; skipping:', key);
+            return null;
+          }
           const kind = widget.dataset.kind;
           const target = widget.dataset.target || null;
           return {
@@ -353,7 +380,7 @@ description: |
             target,
             comment
           };
-        });
+        }).filter(Boolean);
         return {
           type: 'bob-model-feedback',
           choice: 'submit',
@@ -525,7 +552,7 @@ Stage 4. 三段式收口(用户给推进信号 → dump md → 停 server)
 > **不变量**:**短路**分支 → Stage 0 立刻写一份**占位 md**(`docs/bob/03-model-<slug>-<date>.md`)+ 退出;**常规**分支 → md 不在此处写,会在 **Stage 4 推进**时从最终 html 状态 dump。无论哪条路径,最终都会落 md;下游 `/bob-stories` 在 Stage 0 硬校验本文件存在。"短路"≠"跳过 model" —— 它只是把内容压缩到占位 md。
 
 输出文件名计算:
-- `<slug>` = 源文档名去后缀(`ycb需求.md` → `ycb`,`阿里规约.pdf` → `阿里规约`)
+- `<slug>` = Claude 从源文档名 + 业务语义生成的 3-5 字符 kebab-case 标识符(如 "ycb需求.md" + 业务"创建订单" → "create-order");**同一 slug 贯穿 Stage 0/2/3/4 所有阶段**(短路占位 md / 交互式 html / Stage 4 dump 都用此值)
 - `<date>` = `YYYYMMDD`(UTC)
 - 输出:`docs/bob/03-model-<slug>-<date>.md` + `docs/bob/03-model-<slug>-<date>.html`
 - **同一天再跑** → 覆盖同名文件;**跨天** → 新文件,旧文件保留(团队可手动清理)
