@@ -210,18 +210,89 @@ Widget 形态(按 §1 合并后的结构):
 5. **Mermaid 图**(图下 details):图块下 details/textarea,`data-target` 用图 slug。
 6. **开放问题卡**(卡底 details):同 BR 卡;`data-target` 用 Q 编号。
 
-### Widget 跨轮可编辑性(强制)
+### Widget 跨轮可编辑性(强制 · 这条 SKill 反复被违反,三重保险落地)
 
-**所有 widget 在每一轮 push html 时都必须重置为「空草稿,可写,可提交」状态,任何情况下都不允许 lock / disabled / readonly**:
+**所有 widget 在每一轮 push html 时都必须重置为「空草稿,可写,可提交」状态,任何情况下都不允许 lock / disabled / readonly / pointer-events:none / 点不开**:
 
 - 上一轮提交并被 Claude 应用的反馈 → 本轮该 widget 的 textarea **清空 + 计数归 0 + 按钮可点击**,允许用户继续提新反馈
 - localStorage 草稿在"本轮提交完成"后清掉,但 widget 本身保持可写
 - 视觉上"曾在第 N 轮被修改过"的痕迹**只是提示**(可用 `data-modified-round="N"` + 浅色虚线边框 / 角标),**不影响交互**:点击仍展开 textarea,仍能输入,仍能提交
 - **禁止**任何"已应用,不可再改"的 UI 状态;建模阶段的本质是多轮逼近,任何字段都可能在第 N 轮才稳定
 
-实现要点(§JS 段必落):
-- `renderRound(round, snapshot)` 函数:每次 server push 新 html 时,遍历所有 `[data-comment-id]`,reset textarea / count / toggle state,但保留 `data-modified-round` 数据属性。
-- 没有 `widget.disabled = true` 之类语句,也没有 CSS class 给 widget 加 `pointer-events: none`。
+#### 反模式黑名单(以下任何一项出现都算 skill 违反)
+
+| 反模式 | 错误示例 | 后果 |
+|---|---|---|
+| CSS 屏蔽点击 | `.bob-widget[data-modified-round] { pointer-events: none; }` | 用户看到虚线 widget 但点不开 |
+| Click handler early-return | `if (widget.dataset.modifiedRound) return;` | 同上 |
+| textarea 加只读属性 | `<textarea disabled>` / `<textarea readonly>` | 能点开但不能输入 |
+| 按钮被换成 span | `<span class="comment-toggle">💬</span>` | 失去 native click 语义 |
+| 整体替换为静态文本 | 把 widget DOM 整个换成 `<span>已应用 ✓</span>` | 用户彻底失去交互入口 |
+| user-select 屏蔽 | `.comment-input { user-select: none; }` | 能点开但选不到文字 |
+
+#### 可拷贝的 canonical 实现(Claude compose 时**直接抄,不要重写**)
+
+**CSS**(visual hint only,不动 interaction):
+
+```css
+/* 视觉提示:曾被修改过的 widget 显示橙色虚线边框 */
+.bob-widget[data-modified-round] .comment-toggle {
+  border-style: dashed;
+  border-color: var(--modified, #f59e0b);
+  background: var(--modified-bg, #fffbeb);
+  color: var(--modified, #f59e0b);
+}
+/* 注意:不要在 .bob-widget[data-modified-round] 上加 pointer-events / opacity */
+```
+
+**JS**(统一 click handler,**不分** modified 与否):
+
+```js
+document.addEventListener('click', (e) => {
+  const toggle = e.target.closest('.comment-toggle');
+  if (!toggle) return;
+  const widget = toggle.closest('.bob-widget');
+  if (!widget) return;
+  const ta = widget.querySelector('.comment-input');
+  if (!ta) return;
+  ta.classList.toggle('show');
+  if (ta.classList.contains('show')) ta.focus();
+  // 注意:没有任何 if (widget.dataset.modifiedRound) ... 的分支
+});
+```
+
+**重置函数**(每轮 push 新 html 时,server 重发 html 自动 reload,localStorage 清掉,widget DOM 重建,**不需要**特别 reset 逻辑;但若 SPA 化未来不 reload,则必须实现):
+
+```js
+function resetWidgetsForNewRound() {
+  document.querySelectorAll('.bob-widget').forEach((w) => {
+    const ta = w.querySelector('.comment-input');
+    if (ta) {
+      ta.value = '';
+      ta.classList.remove('show');
+      ta.removeAttribute('disabled');   // 防御性清除
+      ta.removeAttribute('readonly');   // 防御性清除
+    }
+    const cnt = w.querySelector('.count');
+    if (cnt) cnt.textContent = '0';
+    const tog = w.querySelector('.comment-toggle');
+    if (tog) tog.classList.remove('has-draft');
+    // 保留 data-modified-round 数据属性,只用于视觉提示
+  });
+}
+```
+
+#### Stage 2 自检清单(compose 完 HTML 必须自查 + 在 Stage 3 通报里显式承诺)
+
+Claude 在 Stage 3 启 server / push html 时,通报段必须包含以下 3 行勾选(用真实结果填):
+
+```
+✓ 已检查:所有 widget 的 click handler 都来自 canonical 片段,无 modified-round 分支
+✓ 已检查:CSS 中 .bob-widget / .comment-toggle / .comment-input 选择器无 pointer-events / user-select / opacity:0 / disabled 屏蔽
+✓ 已检查:所有 textarea 无 disabled / readonly 属性;所有 .comment-toggle 是 <button>
+```
+
+任一勾不上 = 本阶段未完成,需立即修改 HTML 重新 push。
 
 ### 布局与导航(粘性 TOC)
 
@@ -819,9 +890,16 @@ server 会自动检测新文件并 broadcast `{type: 'reload'}` 到所有连接�
 - screen_dir(html 本体):/Users/.../03-model-<slug>-<date>.html
 - state_dir(events 文件):/Users/.../state/events(本轮还没,首次提交后才生成)
 
+**Widget 可编辑性自检**(per §Widget 跨轮可编辑性):
+✓ 已检查:所有 widget 的 click handler 来自 canonical 片段,无 modified-round 分支
+✓ 已检查:CSS 中 .bob-widget / .comment-toggle / .comment-input 选择器无 pointer-events / user-select / opacity 屏蔽
+✓ 已检查:所有 textarea 无 disabled / readonly 属性;所有 .comment-toggle 是 <button>
+
 请打开 URL,在 widget 里写评论 + 点 sticky 顶栏「📋 提交本轮反馈」。
 完成后在本终端发 "继续" 让我读 events。
 ```
+
+**3 行勾选任一勾不上,视为 Stage 3 未完成,需立即修改 HTML 重新 push,不要假装通过。**
 
 ### 3.4 进入 Stage 3.5 等待
 
@@ -958,7 +1036,7 @@ kill -TERM $(cat "$STATE_DIR/server.pid")
 - **聚合根识别独立成 mini-loop** —— Stage 1.2 必须先在**终端纯文本**多轮反馈识别聚合根,**用户 confirm 才进入 Stage 1.3**。聚合根错了所有下游 entity/字段/不变量都挂错地方,html canvas 一旦生成再重组成本极高,所以这步独立、必经、无轮数上限。详见 §Stage 1.2。
 - **HTML 默认合并 §1+§2(术语+Entity 一体)** —— html canvas 共 4 节(术语+Entity / BR / UC / 开放问题),术语+Entity 按聚合根分组,每聚合根块固定 8 子段(详见 §1.3 A.2)。**禁止再回到"独立术语表 + 独立 Entity 段"双段结构**。
 - **关系标注 inline,顶部 overview 仅鸟瞰** —— 各聚合根块内必须有「与其他聚合根的关系」子段(文字 + 基数 + 包含/引用);顶部 overview `classDiagram` 仅作鸟瞰(聚合根 ≥ 3 时可选),**关系细节不靠它传递**。
-- **评论 widget 永远可编辑(跨轮)** —— 任意 widget 在任意轮都不得 lock / disabled / readonly;每轮 push html 时所有 widget 重置为空草稿可写状态;视觉留痕(`data-modified-round`)允许,但不影响交互。详见 §Widget 跨轮可编辑性。
+- **评论 widget 永远可编辑(跨轮)** —— 任意 widget 在任意轮都不得 lock / disabled / readonly / pointer-events:none / click-no-op;每轮 push html 时所有 widget 重置为空草稿可写状态;视觉留痕(`data-modified-round`)允许,但**绝对不影响交互**。**这条 skill 反复被违反**(产线 /bob-model 曾两次产出虚线锁死的 widget),所以 §Widget 跨轮可编辑性 配置了"反模式黑名单 + canonical 代码 + Stage 2 自检清单"三重保险。Stage 3 通报必须显式 3 行勾选,任一勾不上视为本阶段未完成。
 - **多轮修改是默认** —— Stage 3(html 落盘)与 Stage 4(收口)之间**默认进入修改循环**,3-8 轮迭代是常态。Claude **不主动**追问"是否进入下一步";**只在用户显式给推进信号**("OK 推进" / "继续 stories" / 等)时才发 Stage 4 三段式。详见 §Stage 3.5。
 - **报告必含文件链接** —— 每次产物落盘 / 改动报告 / Stage 4 收口都必须**显式列出 md 与 html 绝对路径**,方便用户直接打开 review。**每轮都要列**(即使路径没变),不要省略,不要藏在散文里。详见 §产物报告规约。
 - **html 是 review canvas(非只读)** —— Stage 2 起 html 含 widget / 状态机 / localStorage / WebSocket 提交;不再是只读视图。详见 §html widget 规范。
