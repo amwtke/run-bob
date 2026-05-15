@@ -417,17 +417,17 @@ description: |
         };
       }
     
-      // -- submit via window.brainstorm.send --
+      // -- submit via window.bobReview.send --
       function submitFeedback() {
         const envelope = collectFeedback();
         if (envelope.comments.length === 0) return;
     
-        if (!window.brainstorm || !window.brainstorm.send) {
+        if (!window.bobReview || !window.bobReview.send) {
           showToast('WebSocket helper 未加载 (页面可能未通过 server 访问)');
           return;
         }
         try {
-          window.brainstorm.send(envelope);
+          window.bobReview.send(envelope);
           const submitted = loadSubmitted();
           envelope.comments.forEach(c => {
             const key = c.kind === 'general' ? 'general' : `${c.kind}:${c.target}`;
@@ -492,7 +492,7 @@ description: |
 
 ## 评论协议与 schema(Stage 3.5 必照)
 
-### Envelope schema(WebSocket message via window.brainstorm.send / events JSONL 行)
+### Envelope schema(WebSocket message via window.bobReview.send / events JSONL 行)
 
     {
       "type": "bob-model-feedback",
@@ -702,8 +702,8 @@ Claude 按下列顺序识别,**每段三段式追问填空**(不抛开放问题)
 ### 3.1 启 server
 
 ```bash
-SCRIPT=/Users/xiaojin/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/skills/brainstorming/scripts/start-server.sh
-"$SCRIPT" --project-dir <repo-root>
+SCRIPT="<project-root>/.claude/skills/bob-model/scripts/start-server.sh"
+"$SCRIPT" --project-dir <project-root>
 ```
 
 返回 JSON 包含 `port` / `url` / `screen_dir` / `state_dir`。Claude 在内部记下 `screen_dir` 与 `state_dir`。
