@@ -350,11 +350,12 @@ description: |
         if (counterEl) counterEl.textContent = draftCount;
         if (submitBtn) submitBtn.disabled = draftCount === 0;
     
-        // Per-widget count badge: 1 if draft, 0 otherwise
+        // Per-widget count badge: 1 if widget has content (draft or submitted), 0 if untouched/applied
         document.querySelectorAll('[data-comment-id]').forEach(widget => {
           const countEl = widget.querySelector('.comment-toggle .count');
           if (countEl) {
-            countEl.textContent = widget.classList.contains('state-draft') ? '1' : '0';
+            const hasContent = widget.classList.contains('state-draft') || widget.classList.contains('state-submitted');
+            countEl.textContent = hasContent ? '1' : '0';
           }
         });
     
