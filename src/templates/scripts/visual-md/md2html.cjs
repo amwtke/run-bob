@@ -10,8 +10,9 @@ function renderToHtml(md) {
   let widgetCounter = 0;
   const widget = (scope, kind, target, locator) => {
     widgetCounter++;
-    const loc = locator ? ` data-vmd-locator="${escapeAttr(locator)}"` : '';
-    return `<div data-vmd-widget="${widgetCounter}" data-vmd-scope="${scope}" data-vmd-kind="${kind}" data-vmd-target="${target}"${loc}></div>`;
+    const auto = `${scope} · ${kind} · ${target}`;
+    const loc = ` data-vmd-locator="${escapeAttr(locator || auto)}"`;
+    return `<button type="button" class="vmd-block-widget" data-vmd-widget="${widgetCounter}" data-vmd-scope="${scope}" data-vmd-kind="${kind}" data-vmd-target="${target}"${loc} title="${escapeAttr(auto)}">💬</button>`;
   };
 
   const renderer = mdParser.renderer;

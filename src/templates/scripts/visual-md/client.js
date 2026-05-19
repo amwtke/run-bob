@@ -29,24 +29,72 @@
     else eventQueue.push(event);
   }
 
-  // ===== Persistent widget: inject textarea on first render =====
-  document.querySelectorAll('div[data-vmd-widget]').forEach(w => {
-    const ta = document.createElement('textarea');
-    ta.placeholder = 'prompt for this scope (leave empty to skip)';
-    ta.addEventListener('input', () => {
-      if (ta.value.trim()) w.classList.add('vmd-filled');
-      else w.classList.remove('vmd-filled');
-      updatePendingCount();
+  // ===== Build left TOC from headings =====
+  function buildToc() {
+    const list = document.getElementById('vmd-toc-list');
+    const scroller = document.getElementById('vmd-content');
+    if (!list || !scroller) return;
+    const headings = scroller.querySelectorAll(
+      'article[data-vmd-doc] h1, article[data-vmd-doc] h2, article[data-vmd-doc] h3, ' +
+      'article[data-vmd-doc] h4, article[data-vmd-doc] h5, article[data-vmd-doc] h6'
+    );
+    if (headings.length === 0) {
+      list.innerHTML = '<li class="vmd-toc-empty">(无标题)</li>';
+      return;
+    }
+    const links = [];
+    headings.forEach((h, i) => {
+      // Give each heading a stable id for scroll/anchor purposes
+      if (!h.id) h.id = h.dataset.vmdId || `vmd-h-${i}`;
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = '#' + h.id;
+      a.className = 'vmd-toc-' + h.tagName.toLowerCase();
+      a.textContent = h.textContent.trim();
+      a.title = a.textContent;
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setActive(a);
+      });
+      li.appendChild(a);
+      list.appendChild(li);
+      links.push({ a, h });
     });
-    w.appendChild(ta);
-  });
 
-  // ===== Floating widget (cell/item): popover on click =====
+    function setActive(activeA) {
+      links.forEach(({ a }) => a.classList.toggle('vmd-toc-active', a === activeA));
+    }
+
+    // Highlight TOC entry for the heading currently nearest the top of viewport.
+    let ticking = false;
+    scroller.addEventListener('scroll', () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const top = scroller.getBoundingClientRect().top;
+        let current = links[0];
+        for (const item of links) {
+          const r = item.h.getBoundingClientRect();
+          if (r.top - top <= 80) current = item;
+          else break;
+        }
+        if (current) setActive(current.a);
+        ticking = false;
+      });
+    });
+  }
+  buildToc();
+
+  // ===== Unified popover handling for all widget scopes =====
   let currentPopover = null;
-  // Map of target_id -> stored prompt (so popover re-open shows previous value)
-  const subBlockPrompts = new Map();
+  // Map of "scope::target_id" -> stored prompt (so popover re-open shows previous value)
+  const widgetPrompts = new Map();
+  const keyFor = (btn) => `${btn.dataset.vmdScope}::${btn.dataset.vmdTarget}`;
 
-  document.querySelectorAll('button.vmd-cell-widget, button.vmd-item-widget').forEach(btn => {
+  document.querySelectorAll(
+    'button.vmd-block-widget, button.vmd-cell-widget, button.vmd-item-widget'
+  ).forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       openPopover(btn);
@@ -55,15 +103,15 @@
 
   function openPopover(btn) {
     if (currentPopover) currentPopover.remove();
-    const target = btn.dataset.vmdTarget;
+    const key = keyFor(btn);
     const locator = btn.dataset.vmdLocator || '';
-    const existing = subBlockPrompts.get(target) || '';
+    const existing = widgetPrompts.get(key) || '';
 
     const pop = document.createElement('div');
     pop.className = 'vmd-popover';
     pop.innerHTML = `
       <div class="vmd-popover-locator">${locator}</div>
-      <textarea>${escapeHtml(existing)}</textarea>
+      <textarea placeholder="prompt for this scope (leave empty to skip)">${escapeHtml(existing)}</textarea>
       <div class="vmd-popover-actions">
         <button data-act="cancel">Cancel</button>
         <button data-act="clear">Clear</button>
@@ -73,22 +121,23 @@
     document.body.appendChild(pop);
 
     const rect = btn.getBoundingClientRect();
-    pop.style.left = Math.min(rect.left, window.innerWidth - 340) + 'px';
+    pop.style.left = Math.min(Math.max(rect.left, 8), window.innerWidth - 340) + 'px';
     pop.style.top = (rect.bottom + 4) + 'px';
 
     const ta = pop.querySelector('textarea');
     ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
 
     pop.addEventListener('click', (e) => {
       const act = e.target.dataset?.act;
       if (act === 'save') {
         const v = ta.value.trim();
-        if (v) { subBlockPrompts.set(target, v); btn.classList.add('vmd-filled'); }
-        else { subBlockPrompts.delete(target); btn.classList.remove('vmd-filled'); }
+        if (v) { widgetPrompts.set(key, v); btn.classList.add('vmd-filled'); }
+        else { widgetPrompts.delete(key); btn.classList.remove('vmd-filled'); }
         closePopover();
         updatePendingCount();
       } else if (act === 'clear') {
-        subBlockPrompts.delete(target);
+        widgetPrompts.delete(key);
         btn.classList.remove('vmd-filled');
         closePopover();
         updatePendingCount();
@@ -116,23 +165,16 @@
   // ===== Submit Round =====
   function collectPayload() {
     const items = [];
-    document.querySelectorAll('div[data-vmd-widget]').forEach(w => {
-      const ta = w.querySelector('textarea');
-      const v = ta && ta.value.trim();
-      if (!v) return;
+    widgetPrompts.forEach((prompt, key) => {
+      const sepIdx = key.indexOf('::');
+      const scope = key.slice(0, sepIdx);
+      const target_id = key.slice(sepIdx + 2);
+      const btn = document.querySelector(
+        `button[data-vmd-scope="${scope}"][data-vmd-target="${target_id}"]`
+      );
       items.push({
-        scope: w.dataset.vmdScope,
-        kind: w.dataset.vmdKind,
-        target_id: w.dataset.vmdTarget,
-        locator: w.dataset.vmdLocator || null,
-        prompt: v
-      });
-    });
-    subBlockPrompts.forEach((prompt, target_id) => {
-      const btn = document.querySelector(`button[data-vmd-target="${target_id}"]`);
-      items.push({
-        scope: 'sub-block',
-        kind: btn?.dataset.vmdKind || 'cell',
+        scope,
+        kind: btn?.dataset.vmdKind || null,
         target_id,
         locator: btn?.dataset.vmdLocator || null,
         prompt
@@ -155,14 +197,9 @@
     // Clear all widget state so the user can immediately stage more changes
     // for the SAME round (events file accumulates) or just be ready when the
     // server's reload arrives. Per spec: widgets are never locked.
-    document.querySelectorAll('div[data-vmd-widget]').forEach(w => {
-      const ta = w.querySelector('textarea');
-      if (ta) ta.value = '';
-      w.classList.remove('vmd-filled');
-    });
-    document.querySelectorAll('button.vmd-cell-widget.vmd-filled, button.vmd-item-widget.vmd-filled')
+    document.querySelectorAll('button[data-vmd-widget].vmd-filled')
       .forEach(b => b.classList.remove('vmd-filled'));
-    subBlockPrompts.clear();
+    widgetPrompts.clear();
     updatePendingCount();
     // Brief status flash so the user knows the submit landed
     const status = document.getElementById('vmd-status');

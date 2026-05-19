@@ -33,7 +33,52 @@
     }
     .vmd-header h1 { font-size: 0.9rem; font-weight: 500; color: var(--muted); }
     .vmd-header .vmd-status { font-size: 0.75rem; color: var(--success); }
-    .vmd-main { flex: 1; overflow-y: auto; padding: 2rem; max-width: 880px; margin: 0 auto; width: 100%; }
+    .vmd-main {
+      flex: 1; overflow: hidden;
+      display: flex; flex-direction: row;
+      width: 100%;
+    }
+    /* ===== Left TOC sidebar ===== */
+    .vmd-toc {
+      width: 240px; flex-shrink: 0;
+      overflow-y: auto;
+      background: var(--panel); border-right: 1px solid var(--border);
+      padding: 1rem 0.4rem 1rem 0.6rem; font-size: 0.85rem;
+    }
+    .vmd-toc-title {
+      font-size: 0.7rem; color: var(--muted); text-transform: uppercase;
+      padding: 0 0.6rem 0.5rem; font-weight: 500; letter-spacing: 0.04em;
+    }
+    .vmd-toc ul { list-style: none; padding: 0; margin: 0; }
+    .vmd-toc li { margin: 0; }
+    .vmd-toc a {
+      display: block; padding: 0.2rem 0.6rem;
+      color: var(--text); text-decoration: none;
+      border-radius: 4px; cursor: pointer; line-height: 1.35;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      border-left: 2px solid transparent;
+    }
+    .vmd-toc a:hover { background: var(--widget-bg); }
+    .vmd-toc a.vmd-toc-active {
+      background: var(--widget-bg); border-left-color: var(--accent);
+      color: var(--accent);
+    }
+    .vmd-toc a.vmd-toc-h1 { font-weight: 600; }
+    .vmd-toc a.vmd-toc-h2 { padding-left: 1.4rem; }
+    .vmd-toc a.vmd-toc-h3 { padding-left: 2.2rem; color: var(--muted); }
+    .vmd-toc a.vmd-toc-h4 { padding-left: 3rem; color: var(--muted); }
+    .vmd-toc a.vmd-toc-h5 { padding-left: 3.8rem; color: var(--muted); }
+    .vmd-toc a.vmd-toc-h6 { padding-left: 4.6rem; color: var(--muted); }
+    .vmd-toc-empty { padding: 0.4rem 0.6rem; color: var(--muted); font-style: italic; }
+    @media (max-width: 900px) { .vmd-toc { display: none; } }
+
+    /* ===== Content column ===== */
+    .vmd-content {
+      flex: 1; overflow-y: auto; padding: 2rem;
+    }
+    .vmd-content > article {
+      max-width: 880px; margin: 0 auto;
+    }
     article[data-vmd-doc] > * { margin-bottom: 0.9rem; }
     article[data-vmd-doc] h1, article[data-vmd-doc] h2, article[data-vmd-doc] h3,
     article[data-vmd-doc] h4, article[data-vmd-doc] h5, article[data-vmd-doc] h6 {
@@ -55,48 +100,43 @@
     }
     article[data-vmd-doc] li { margin-left: 1.4rem; position: relative; }
 
-    /* ===== Persistent widgets ===== */
-    div[data-vmd-widget] {
-      background: var(--widget-bg); border: 1px solid var(--widget-border);
-      border-radius: 6px; padding: 0.5rem; margin: 0.3rem 0 1rem;
-      display: flex; flex-direction: column; gap: 0.3rem;
-    }
-    div[data-vmd-widget][data-vmd-scope="doc"] {
-      /* Not sticky — would overlap content while scrolling.
-         Doc widget sits at top of article; scroll back up to use it. */
-      border-color: var(--accent); background: var(--widget-bg);
-    }
-    div[data-vmd-widget]::before {
-      content: attr(data-vmd-scope) " · " attr(data-vmd-kind) " · " attr(data-vmd-target);
-      font-size: 0.7rem; color: var(--muted); text-transform: uppercase;
-    }
-    div[data-vmd-widget] textarea {
-      width: 100%; min-height: 2.2rem; resize: vertical;
-      font-family: inherit; font-size: 0.9rem;
-      border: 1px solid var(--border); border-radius: 4px;
-      padding: 0.3rem; background: var(--panel); color: var(--text);
-    }
-    div[data-vmd-widget].vmd-filled { border-color: var(--success); }
-    div[data-vmd-widget].vmd-filled::before { color: var(--success); }
-
-    /* ===== Floating sub-block widgets (cell / item) ===== */
-    button.vmd-cell-widget, button.vmd-item-widget {
+    /* ===== Floating widgets (unified: all scopes are clickable 💬 clouds) ===== */
+    button.vmd-block-widget,
+    button.vmd-cell-widget,
+    button.vmd-item-widget {
       background: transparent; border: 1px solid transparent;
       cursor: pointer; font-size: 0.85rem; opacity: 0.4;
       transition: opacity 0.15s, background 0.15s, border-color 0.15s;
       padding: 0 4px; border-radius: 999px; line-height: 1;
     }
+    /* Block-level cloud: small, right-aligned, pulled up to hug the preceding block. */
+    button.vmd-block-widget {
+      display: block;
+      margin: -0.4rem 0 0.4rem auto;
+      position: relative;
+    }
+    button.vmd-block-widget[data-vmd-scope="doc"] {
+      margin: 0 0 1rem auto;
+    }
     button.vmd-cell-widget { position: absolute; top: 1px; right: 1px; }
     button.vmd-item-widget { position: absolute; left: -1.4rem; top: 0.1rem; }
-    button.vmd-cell-widget:hover, button.vmd-item-widget:hover { opacity: 1; }
+    button.vmd-block-widget:hover,
+    button.vmd-cell-widget:hover,
+    button.vmd-item-widget:hover { opacity: 1; }
     /* Filled state: green pill background + "1" badge.
        Emoji glyph can't be recolored, so we change the surroundings instead. */
-    button.vmd-cell-widget.vmd-filled, button.vmd-item-widget.vmd-filled {
+    button.vmd-block-widget.vmd-filled,
+    button.vmd-cell-widget.vmd-filled,
+    button.vmd-item-widget.vmd-filled {
       opacity: 1;
       background: var(--success);
       border-color: var(--success);
+    }
+    button.vmd-cell-widget.vmd-filled,
+    button.vmd-item-widget.vmd-filled {
       position: absolute;
     }
+    button.vmd-block-widget.vmd-filled::after,
     button.vmd-cell-widget.vmd-filled::after,
     button.vmd-item-widget.vmd-filled::after {
       content: '1';
@@ -159,7 +199,13 @@
     <span class="vmd-status" id="vmd-status">connected</span>
   </div>
   <div class="vmd-main">
-    <!-- CONTENT -->
+    <nav class="vmd-toc" id="vmd-toc" aria-label="Document outline">
+      <div class="vmd-toc-title">目录</div>
+      <ul id="vmd-toc-list"></ul>
+    </nav>
+    <div class="vmd-content" id="vmd-content">
+      <!-- CONTENT -->
+    </div>
   </div>
   <div class="vmd-submit-bar">
     <span class="vmd-pending-count" id="vmd-pending-count">no changes</span>
