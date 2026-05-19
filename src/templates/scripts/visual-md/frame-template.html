@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>visual-md canvas</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    :root {
+      --bg: #f5f5f7; --panel: #ffffff; --border: #d1d1d6;
+      --text: #1d1d1f; --muted: #86868b; --accent: #0071e3;
+      --widget-bg: #eef6ff; --widget-border: #99c8ff;
+      --success: #34c759;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1d1d1f; --panel: #2d2d2f; --border: #424245;
+        --text: #f5f5f7; --muted: #86868b; --accent: #0a84ff;
+        --widget-bg: #1a2a3f; --widget-border: #2c4a78;
+        --success: #30d158;
+      }
+    }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg); color: var(--text);
+      display: flex; flex-direction: column; line-height: 1.6;
+    }
+    .vmd-header {
+      background: var(--panel); padding: 0.5rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+      flex-shrink: 0;
+    }
+    .vmd-header h1 { font-size: 0.9rem; font-weight: 500; color: var(--muted); }
+    .vmd-header .vmd-status { font-size: 0.75rem; color: var(--success); }
+    .vmd-main { flex: 1; overflow-y: auto; padding: 2rem; max-width: 880px; margin: 0 auto; width: 100%; }
+    article[data-vmd-doc] > * { margin-bottom: 0.9rem; }
+    article[data-vmd-doc] h1, article[data-vmd-doc] h2, article[data-vmd-doc] h3,
+    article[data-vmd-doc] h4, article[data-vmd-doc] h5, article[data-vmd-doc] h6 {
+      margin-top: 1.6rem; margin-bottom: 0.4rem;
+    }
+    article[data-vmd-doc] pre {
+      background: var(--panel); border: 1px solid var(--border);
+      padding: 0.8rem; border-radius: 6px; overflow-x: auto;
+    }
+    article[data-vmd-doc] blockquote {
+      border-left: 3px solid var(--accent); padding-left: 1rem; color: var(--muted);
+    }
+    article[data-vmd-doc] table {
+      border-collapse: collapse; width: 100%;
+    }
+    article[data-vmd-doc] th, article[data-vmd-doc] td {
+      border: 1px solid var(--border); padding: 0.4rem 0.6rem;
+      position: relative;
+    }
+    article[data-vmd-doc] li { margin-left: 1.4rem; position: relative; }
+
+    /* ===== Persistent widgets ===== */
+    div[data-vmd-widget] {
+      background: var(--widget-bg); border: 1px solid var(--widget-border);
+      border-radius: 6px; padding: 0.5rem; margin: 0.3rem 0 1rem;
+      display: flex; flex-direction: column; gap: 0.3rem;
+    }
+    div[data-vmd-widget][data-vmd-scope="doc"] {
+      /* Not sticky — would overlap content while scrolling.
+         Doc widget sits at top of article; scroll back up to use it. */
+      border-color: var(--accent); background: var(--widget-bg);
+    }
+    div[data-vmd-widget]::before {
+      content: attr(data-vmd-scope) " · " attr(data-vmd-kind) " · " attr(data-vmd-target);
+      font-size: 0.7rem; color: var(--muted); text-transform: uppercase;
+    }
+    div[data-vmd-widget] textarea {
+      width: 100%; min-height: 2.2rem; resize: vertical;
+      font-family: inherit; font-size: 0.9rem;
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 0.3rem; background: var(--panel); color: var(--text);
+    }
+    div[data-vmd-widget].vmd-filled { border-color: var(--success); }
+    div[data-vmd-widget].vmd-filled::before { color: var(--success); }
+
+    /* ===== Floating sub-block widgets (cell / item) ===== */
+    button.vmd-cell-widget, button.vmd-item-widget {
+      background: transparent; border: 1px solid transparent;
+      cursor: pointer; font-size: 0.85rem; opacity: 0.4;
+      transition: opacity 0.15s, background 0.15s, border-color 0.15s;
+      padding: 0 4px; border-radius: 999px; line-height: 1;
+    }
+    button.vmd-cell-widget { position: absolute; top: 1px; right: 1px; }
+    button.vmd-item-widget { position: absolute; left: -1.4rem; top: 0.1rem; }
+    button.vmd-cell-widget:hover, button.vmd-item-widget:hover { opacity: 1; }
+    /* Filled state: green pill background + "1" badge.
+       Emoji glyph can't be recolored, so we change the surroundings instead. */
+    button.vmd-cell-widget.vmd-filled, button.vmd-item-widget.vmd-filled {
+      opacity: 1;
+      background: var(--success);
+      border-color: var(--success);
+      position: absolute;
+    }
+    button.vmd-cell-widget.vmd-filled::after,
+    button.vmd-item-widget.vmd-filled::after {
+      content: '1';
+      position: absolute;
+      top: -6px; right: -6px;
+      background: var(--accent); color: white;
+      font-size: 0.6rem; font-weight: 700; line-height: 1;
+      min-width: 14px; height: 14px; padding: 0 3px;
+      border-radius: 8px; border: 1.5px solid var(--bg);
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* ===== Popover ===== */
+    .vmd-popover {
+      position: fixed; z-index: 100;
+      background: var(--panel); border: 1px solid var(--widget-border);
+      border-radius: 6px; padding: 0.5rem; box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      width: 320px;
+    }
+    .vmd-popover .vmd-popover-locator {
+      font-size: 0.7rem; color: var(--muted); margin-bottom: 0.3rem;
+    }
+    .vmd-popover textarea {
+      width: 100%; min-height: 4rem; resize: vertical;
+      font-family: inherit; font-size: 0.9rem;
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 0.3rem; background: var(--bg); color: var(--text);
+    }
+    .vmd-popover-actions {
+      display: flex; gap: 0.4rem; margin-top: 0.4rem; justify-content: flex-end;
+    }
+    .vmd-popover button {
+      font-size: 0.8rem; padding: 0.25rem 0.6rem;
+      border: 1px solid var(--border); border-radius: 4px;
+      background: var(--bg); color: var(--text); cursor: pointer;
+    }
+    .vmd-popover button.vmd-primary {
+      background: var(--accent); color: white; border-color: var(--accent);
+    }
+
+    /* ===== Submit bar ===== */
+    .vmd-submit-bar {
+      position: sticky; bottom: 0; background: var(--panel);
+      border-top: 1px solid var(--border); padding: 0.6rem 1rem;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .vmd-submit-bar .vmd-pending-count {
+      font-size: 0.8rem; color: var(--muted);
+    }
+    .vmd-submit-bar button {
+      background: var(--accent); color: white; border: none; cursor: pointer;
+      padding: 0.4rem 1rem; border-radius: 4px; font-size: 0.85rem;
+    }
+    .vmd-submit-bar button:disabled { opacity: 0.4; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <div class="vmd-header">
+    <h1>visual-md canvas</h1>
+    <span class="vmd-status" id="vmd-status">connected</span>
+  </div>
+  <div class="vmd-main">
+    <!-- CONTENT -->
+  </div>
+  <div class="vmd-submit-bar">
+    <span class="vmd-pending-count" id="vmd-pending-count">no changes</span>
+    <button id="vmd-submit-btn" disabled>Submit Round (0)</button>
+  </div>
+</body>
+</html>
