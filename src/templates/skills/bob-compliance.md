@@ -339,7 +339,7 @@ PAT-N-k → (spec文件, 模式名, Context类, 参与角色, 可观察痕迹, s
 
 ## 不变量
 
-- **目录即配置**:`docs/compliance/sources/` 空 ⇒ Stage 0 软退出
+- **目录即配置**:`docs/compliance/sources/` 空 **且** scope 内无 spec 含 §9.5 ⇒ Stage 0 软退出
 - **永不内置标准**:run-bob 二进制里**不**打包任何标准 PDF / md
 - **upgrade 边界**:用户的 `sources/`、生成的 md、`.compliance.lock`、报告文件 —— run-bob upgrade **永不触碰**
 - **PMD/SonarQube 兼容**:空 sources/ ⇒ 与现有静态扫描工具零冲突
