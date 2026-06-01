@@ -385,7 +385,7 @@ class OrderController {
 
 | ID | 模式 | 为什么(锚本用例) | 角色映射 | 可观察痕迹(机检锚点) | 档位 |
 |---|---|---|---|---|---|
-| PAT-1-1 | Strategy | 运费按 region 多分支(§5 端口 `ShippingFeeCalc`) | Context=`PlaceOrderUseCase`;Strategy 接口=`ShippingFeeStrategy`;≥2 实现 | 存在接口 `*ShippingFeeStrategy` 落 `usecase/port` + ≥2 实现落 `adapter/`;Context 依赖接口非具体类 | 【强制】 |
+| PAT-1-1 | Strategy | 运费按 region 多分支(端口 `ShippingFeeStrategy`) | Context=`PlaceOrderUseCase`;Strategy 接口=`ShippingFeeStrategy`;≥2 实现 | 存在接口 `*ShippingFeeStrategy` 落 `usecase/port` + ≥2 实现落 `adapter/`;Context 依赖接口非具体类 | 【强制】 |
 
 **字段约定:**
 - **ID** = `PAT-<本 spec 序号 N>-<序 k>`,贯穿 spec ↔ `/bob-compliance` 报告(同 `[ALI-1.1.2]` 习语)。
@@ -415,7 +415,7 @@ class OrderController {
 3. superpowers:executing-plans + TDD:红 → 绿 → 重构
 4. superpowers:finishing-a-development-branch:验全绿 → 合并 / PR
 4.5. (可选,如 `docs/compliance/sources/` 非空)Superpowers TDD 完成 + UT 完备后,先跑 `/bob-compliance` 做合规校验,产物落 `docs/bob/05-compliance-<story>.md`
-4.6. (可选,如本 spec 含 §9.5 涉及设计模式)上一步的 `/bob-compliance` 会**附带跑模式符合度**,把 §9.5 的 PAT-N-k 回贴 diff,缺失按档位报不通过
+4.6. (可选,如本 spec 含 §9.5 涉及设计模式)运行 `/bob-compliance` 时会**附带跑模式符合度**(独立于 §4.5 的 sources 条件,即使无 compliance sources 也会跑),把 §9.5 的 PAT-N-k 回贴 diff,缺失按档位报不通过
 5. (可选)Superpowers TDD 完成 + UT 完备后,跑 `/bob-nfr <本 spec 路径>` 过 13 张 NFR 卡片
 ```
 
