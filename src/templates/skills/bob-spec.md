@@ -378,6 +378,20 @@ class OrderController {
 - ✅ 跑 ArchUnit:`mvn test -Dtest=CleanArchitectureTest`(或 Gradle 等同) 期望全绿
 - ✅ **遇到任何新 import**(spec 没列出的)→ **停下**,跑 5 问决策树,违反 R0 必须先抽端口
 
+## 9.5 涉及设计模式(可选 · 仅本 spec 在 Step S5 开启模式建议时存在)
+
+> 本段由 `/bob-spec` Step S5 写入。采纳的模式是 Superpowers 实现的**硬约束**,
+> `/bob-compliance` 会按「可观察痕迹」回贴校验。未开启 Step S5 时整段省略。
+
+| ID | 模式 | 为什么(锚本用例) | 角色映射 | 可观察痕迹(机检锚点) | 档位 |
+|---|---|---|---|---|---|
+| PAT-1-1 | Strategy | 运费按 region 多分支(§5 端口 `ShippingFeeCalc`) | Context=`PlaceOrderUseCase`;Strategy 接口=`ShippingFeeStrategy`;≥2 实现 | 存在接口 `*ShippingFeeStrategy` 落 `usecase/port` + ≥2 实现落 `adapter/`;Context 依赖接口非具体类 | 【强制】 |
+
+**字段约定:**
+- **ID** = `PAT-<本 spec 序号 N>-<序 k>`,贯穿 spec ↔ `/bob-compliance` 报告(同 `[ALI-1.1.2]` 习语)。
+- **可观察痕迹**是**强制字段**,必须可 grep / 结构判定(接口名约定 + 落点包 + 实现数 + 依赖方向);写不出可观察痕迹的模式不要采纳(否则机检空对空)。
+- **档位**复用 `/bob-compliance` 的【强制】/【推荐】词表,采纳默认【强制】。
+
 ## 10. 交给 Superpowers 的开放问题(技术实施层面)
 
 本 spec **不回答**以下问题,留给 `superpowers:brainstorming` 在进入 `writing-plans` 之前回答,并写回 `CLAUDE.md ## 技术栈约定`:
@@ -401,6 +415,7 @@ class OrderController {
 3. superpowers:executing-plans + TDD:红 → 绿 → 重构
 4. superpowers:finishing-a-development-branch:验全绿 → 合并 / PR
 4.5. (可选,如 `docs/compliance/sources/` 非空)Superpowers TDD 完成 + UT 完备后,先跑 `/bob-compliance` 做合规校验,产物落 `docs/bob/05-compliance-<story>.md`
+4.6. (可选,如本 spec 含 §9.5 涉及设计模式)上一步的 `/bob-compliance` 会**附带跑模式符合度**,把 §9.5 的 PAT-N-k 回贴 diff,缺失按档位报不通过
 5. (可选)Superpowers TDD 完成 + UT 完备后,跑 `/bob-nfr <本 spec 路径>` 过 13 张 NFR 卡片
 ```
 
@@ -474,6 +489,8 @@ Response 404: { error, message }
 (可选,如 `docs/compliance/sources/` 非空)Superpowers TDD 完成 + UT 完备后,先跑 `/bob-compliance` 做合规校验,产物落 `docs/bob/05-compliance-<story>.md`
 
 (可选)Superpowers TDD 完成 + UT 完备后,跑 `/bob-nfr <本 spec 路径>` 过 13 张 NFR 卡片(查询 spec 通常关注 Performance / Capacity 两张)。
+
+设计模式声明见模板 A §9.5,查询/重构型如需立模式同样走 Step S5。
 ````
 
 ---
@@ -554,6 +571,7 @@ Response 404: { error, message }
 - **B1 模式重构每完成一步,必须 git commit;严禁批量合并**
 - (可选,如 `docs/compliance/sources/` 非空)Superpowers TDD 完成 + UT 完备后,先跑 `/bob-compliance` 做合规校验,产物落 `docs/bob/05-compliance-<story>.md`
 - (可选)Superpowers TDD 完成 + UT 完备后,跑 `/bob-nfr <本 spec 路径>` 过 13 张 NFR 卡片(refactor spec 通常 0-2 张相关)
+- 设计模式声明见模板 A §9.5,查询/重构型如需立模式同样走 Step S5。
 ````
 
 ---

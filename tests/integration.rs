@@ -2165,6 +2165,32 @@ fn upgrade_replaces_stale_bob_model_scripts() {
 }
 
 #[test]
+fn bob_spec_has_pattern_section() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-spec").join("SKILL.md");
+    let content = std::fs::read_to_string(&p).expect("read bob-spec");
+
+    for token in &[
+        "## 9.5 涉及设计模式",
+        "PAT-1-1",
+        "可观察痕迹",
+        "机检锚点",
+        "角色映射",
+    ] {
+        assert!(content.contains(token), "bob-spec must mention {} (§9.5)", token);
+    }
+
+    // 不破坏既有契约:/bob-compliance 仍 ≥3 次提及
+    assert!(
+        content.matches("/bob-compliance").count() >= 3,
+        "bob-spec must still mention /bob-compliance >=3 times"
+    );
+}
+
+#[test]
 fn bob_spec_has_pattern_probe() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
