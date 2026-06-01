@@ -2244,8 +2244,8 @@ fn bob_compliance_checks_pattern_conformance() {
 
     for token in &[
         "## 模式符合度",       // Stage 4 报告段
-        "可观察痕迹",          // Stage 3.2 checklist
-        "Context",            // story→spec 定位锚点
+        "收敛相关 spec",       // Stage 3.1 story→spec 收敛(Task 4 独有)
+        "三项全过记",          // Stage 3.2 PASS/FAIL 判定逻辑(Task 4 独有)
         "PASS",               // 逐 PAT 判定
     ] {
         assert!(content.contains(token), "bob-compliance must mention {} (conformance)", token);
