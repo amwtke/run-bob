@@ -235,6 +235,8 @@ PAT-N-k → (spec文件, 模式名, Context类, 参与角色, 可观察痕迹, s
 3. **Fallback**:`git diff master..HEAD` + 未提交的工作目录变更
 4. **`--all-branch` flag**:`git diff master..HEAD` 全分支 diff,忽略 story 划分
 
+**收敛相关 spec(模式符合度专用):** 确定 diff 范围后,取 §9.5 里 `Context 类 / 落点包` 路径**与 diff 变更文件有交集**的 spec —— 只校验「diff 动了其 Context / 参与类」的模式,避免拿全仓 spec 误判。
+
 向用户三段式确认范围:
 
 > **Q2: 检查范围:<具体 ref 范围>,涉及 N 个文件 / M 行新增。**
@@ -254,6 +256,9 @@ PAT-N-k → (spec文件, 模式名, Context类, 参与角色, 可观察痕迹, s
 
 **优先级**:先跑【强制】,再【推荐】,最后【参考】。中途如发现【强制】违反过多(> 10 条),可三段式询问是否暂停【推荐】 / 【参考】,先修【强制】。
 
+**模式规则(PAT-*)校验:** 按 spec §9.5 声明的「可观察痕迹」逐项核对 diff + 相关已存在文件。
+例(Strategy):① 接口 `*ShippingFeeStrategy` 存在且落 `usecase/port` ② 实现数 ≥2 ③ Context 依赖接口而非 `new` 具体类 —— 三项全过记 `PASS`,任一不满足记 `FAIL`。
+
 ### 3.3 分类
 
 每条命中的规则归入三类:
@@ -263,6 +268,8 @@ PAT-N-k → (spec文件, 模式名, Context类, 参与角色, 可观察痕迹, s
 | **违反** | 明确触碰规则;diff 里有反例代码 |
 | **待量化** | 规则模糊或需求未给出基线(例:阿里规约要求"接口幂等",但 spec 未明确该接口是否要求幂等)→ 建议回 spec 补充 |
 | **豁免** | spec 的"交给 Superpowers 的开放问题"段已显式注明豁免理由 |
+
+模式规则(PAT-*)套用同一三类:**违反** = 声明了模式但 diff 找不到对应结构(接口缺失 / 只 1 实现 / Context 直接耦合具体类),按档位(采纳默认【强制】);**待量化** = §9.5 没给可观察痕迹或太模糊,建议回 `/bob-spec` 补痕迹;**豁免** = spec §10 开放问题显式注明降级理由。
 
 ---
 
@@ -306,6 +313,16 @@ PAT-N-k → (spec文件, 模式名, Context类, 参与角色, 可观察痕迹, s
 
 ## 豁免 (V 条)
 ...
+
+## 模式符合度
+
+> 仅当 scope 内 spec 含 §9.5 时出现;无模式规则时写「无模式约束」。
+
+| ID | 模式 | 判定 | 位置 | 期望结构 vs 实际 | 修复建议 |
+|---|---|---|---|---|---|
+| PAT-1-1 | Strategy | **FAIL** | `usecase/PlaceOrderUseCase.java:88` | 期望:依赖 `ShippingFeeStrategy` 接口 + ≥2 实现;实际:`switch(region)` 内联 | 抽 `ShippingFeeStrategy` 接口落 `usecase/port`,各 region 一个实现落 `adapter/` |
+
+全部 PASS 或无模式规则时,本段写一行:`无模式约束 / 全部符合`。
 
 ## 建议新增 story 清单
 

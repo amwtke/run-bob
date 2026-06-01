@@ -2232,3 +2232,22 @@ fn bob_compliance_loads_spec_patterns() {
         assert!(content.contains(token), "bob-compliance must mention {} (load patterns)", token);
     }
 }
+
+#[test]
+fn bob_compliance_checks_pattern_conformance() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-compliance").join("SKILL.md");
+    let content = std::fs::read_to_string(&p).expect("read bob-compliance");
+
+    for token in &[
+        "## 模式符合度",       // Stage 4 报告段
+        "可观察痕迹",          // Stage 3.2 checklist
+        "Context",            // story→spec 定位锚点
+        "PASS",               // 逐 PAT 判定
+    ] {
+        assert!(content.contains(token), "bob-compliance must mention {} (conformance)", token);
+    }
+}
