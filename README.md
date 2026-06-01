@@ -30,7 +30,7 @@
 
 ## Status
 
-✅ **v0.3.0** — 7 phases live. Spec list under [`docs/superpowers/specs/`](docs/superpowers/specs/).
+✅ **v0.8.0** — bob-* pipeline + optional 涉及设计模式 constraint (bob-spec §9.5 → bob-compliance 模式符合度). Spec list under [`docs/superpowers/specs/`](docs/superpowers/specs/).
 
 ---
 
