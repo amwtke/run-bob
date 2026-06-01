@@ -78,7 +78,8 @@ Stage 4. 写报告 + 建议新增 story 清单
 
 | 状态 | 判定条件 | 后续行为 |
 |---|---|---|
-| **空仓** | `docs/compliance/sources/` 不存在或为空 | 软退出:"无合规要求,跳过"。**写一份空报告留痕**(避免下次重复探测) |
+| **空仓** | `sources/` 空 **且** scope 内无 spec 含 `## 9.5 涉及设计模式` | 软退出:"无合规要求,跳过"。**写一份空报告留痕** |
+| **空仓但有模式** | `sources/` 空,但 scope 内 ≥1 个 spec 含 `## 9.5 涉及设计模式` | 跳过 sources 规则,**仍进 Stage 3 只跑模式符合度** |
 | **首次** | `sources/` 有文件,但无 `.compliance.lock` | → Stage 1 全量生成 |
 | **漂移** | 至少一个源文件的 size 或 sha256 与 `.compliance.lock` 记录不匹配,或 sources/ 中有 lock 未记录的新文件 | → Stage 1 增量生成漂移部分 |
 | **冷藏** | sources 的全部文件 sha256 与 lock 完全一致 | 跳过 Stage 1,直接 → Stage 2 |
@@ -197,6 +198,16 @@ sources:
 rule_id → (file, section, severity, title)
 ```
 
+### 第二类规则源:spec 声明的设计模式
+
+除 `docs/compliance/*.md` 外,**额外 grep `docs/specs/spec-*.md` 的 `## 9.5 涉及设计模式` 段**,把每行解析成一条模式规则并入同一索引:
+
+```
+PAT-N-k → (spec文件, 模式名, Context类, 参与角色, 可观察痕迹, severity)
+```
+
+`PAT-*` 与 `ALI-*` 走**同一套**校验 / 分类 / 报告管线。无任何 spec 含 §9.5 时,这一类为空,后续模式符合度静默跳过(零噪音)。
+
 **Severity 优先级:【强制】> 【推荐】> 【参考】**。三档**都参与**校验,但分类报告时:
 
 - 【强制】违反 → 视为必须修复
@@ -207,7 +218,7 @@ rule_id → (file, section, severity, title)
 
 > **Q1: 装载到 N 条规则,来自 M 份标准。**
 >
-> **推测**:【强制】X 条 / 【推荐】Y 条 / 【参考】Z 条
+> **推测**:【强制】X 条 / 【推荐】Y 条 / 【参考】Z 条;**+ J 条模式规则(PAT-*),来自 K 份 spec**
 > **理由**:从已生成的 `docs/compliance/*.md` 索引得出
 > **推荐选择**:`进入 Stage 3 跑校验`
 >

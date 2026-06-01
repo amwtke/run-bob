@@ -2213,3 +2213,22 @@ fn bob_spec_has_pattern_probe() {
         assert!(content.contains(token), "bob-spec must mention {} (Step S5)", token);
     }
 }
+
+#[test]
+fn bob_compliance_loads_spec_patterns() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-compliance").join("SKILL.md");
+    let content = std::fs::read_to_string(&p).expect("read bob-compliance");
+
+    for token in &[
+        "空仓但有模式",      // Stage 0 carve-out
+        "docs/specs/spec-",  // Stage 2 第二类规则源
+        "## 9.5 涉及设计模式",
+        "PAT-",
+    ] {
+        assert!(content.contains(token), "bob-compliance must mention {} (load patterns)", token);
+    }
+}
