@@ -2163,3 +2163,27 @@ fn upgrade_replaces_stale_bob_model_scripts() {
         after_upgrade.len()
     );
 }
+
+#[test]
+fn bob_spec_has_pattern_probe() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+
+    let p = target.join(".claude").join("skills").join("bob-spec").join("SKILL.md");
+    let content = std::fs::read_to_string(&p).expect("read bob-spec");
+
+    for token in &[
+        "Step S5",
+        "要不要为本用例显式立 GoF 设计模式",
+        "跳过(本 spec 不约束设计模式)",
+        "信号 → 模式",
+        "不立的代价",
+        "Strategy",
+        "State",
+        "Template Method",
+        "Decorator",
+    ] {
+        assert!(content.contains(token), "bob-spec must mention {} (Step S5)", token);
+    }
+}
