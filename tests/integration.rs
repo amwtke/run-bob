@@ -2206,9 +2206,9 @@ fn bob_spec_has_pattern_probe() {
         "信号 → 模式",
         "不立的代价",
         "Strategy",
-        "State",
+        "状态多、迁移复杂",
         "Template Method",
-        "Decorator",
+        "横切包裹",
     ] {
         assert!(content.contains(token), "bob-spec must mention {} (Step S5)", token);
     }
