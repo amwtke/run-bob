@@ -1,10 +1,11 @@
 //! `run-bob status` — check whether the harness is properly installed.
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use colored::*;
 use std::path::{Path, PathBuf};
 
 use crate::assets::{Category, HARNESS_ASSETS, HARNESS_DIRS};
+use crate::{inspect_managed_path, ExpectedPathKind, ManagedPathState};
 
 pub fn run(target_dir: &str) -> Result<()> {
     let target = PathBuf::from(target_dir)
@@ -53,40 +54,59 @@ pub fn run(target_dir: &str) -> Result<()> {
         println!(
             "{} {}",
             "✗".red().bold(),
-            "some assets are missing. Run `run-bob init` to install.".red()
+            "some assets are missing or invalid. Run `run-bob upgrade` for an existing harness or `run-bob init` for a new target."
+                .red()
         );
     }
     println!();
 
-    Ok(())
+    if all_ok {
+        Ok(())
+    } else {
+        bail!(
+            "harness is incomplete; use `run-bob upgrade` for an existing harness or `run-bob init` for a new target"
+        )
+    }
 }
 
 fn check_file(target: &Path, segments: &[&str]) -> bool {
-    let mut p = target.to_path_buf();
-    for s in segments {
-        p = p.join(s);
-    }
-    let display = segments.join("/");
-    if p.is_file() {
-        println!("  {} {}", "✓".green(), display);
-        true
-    } else {
-        println!("  {} {}", "✗".red(), display.red());
-        false
-    }
+    check_path(target, segments, ExpectedPathKind::File, false)
 }
 
 fn check_dir(target: &Path, segments: &[&str]) -> bool {
-    let mut p = target.to_path_buf();
-    for s in segments {
-        p = p.join(s);
-    }
-    let display = format!("{}/", segments.join("/"));
-    if p.is_dir() {
-        println!("  {} {}", "✓".green(), display);
-        true
+    check_path(target, segments, ExpectedPathKind::Directory, true)
+}
+
+fn check_path(
+    target: &Path,
+    segments: &[&str],
+    expected: ExpectedPathKind,
+    display_as_directory: bool,
+) -> bool {
+    let relative = segments.join("/");
+    let display = if display_as_directory {
+        format!("{relative}/")
     } else {
-        println!("  {} {}", "✗".red(), display.red());
-        false
+        relative
+    };
+
+    match inspect_managed_path(target, segments, expected) {
+        Ok(ManagedPathState::Present) => {
+            println!("  {} {}", "✓".green(), display);
+            true
+        }
+        Ok(ManagedPathState::Missing) => {
+            println!("  {} {} {}", "✗".red(), display.red(), "(missing)".red());
+            false
+        }
+        Err(error) => {
+            println!(
+                "  {} {} ({})",
+                "✗".red(),
+                display.red(),
+                error.to_string().red()
+            );
+            false
+        }
     }
 }

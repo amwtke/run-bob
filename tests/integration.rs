@@ -834,6 +834,179 @@ fn status_reports_complete_after_full_init() {
     }
 }
 
+#[test]
+fn status_succeeds_for_complete_dual_host_harness() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    let init = Command::new(run_bob_bin())
+        .args(["init", "--with-java", "--dir"])
+        .arg(target)
+        .output()
+        .expect("full dual-host init");
+    assert_command_succeeded(&init, "full dual-host init");
+
+    let output = Command::new(run_bob_bin())
+        .args(["status", "--dir"])
+        .arg(target)
+        .output()
+        .expect("status");
+
+    assert_command_succeeded(&output, "status after full dual-host init");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("harness is complete"),
+        "complete status omitted its summary: {}",
+        command_output_text(&output)
+    );
+}
+
+#[test]
+fn status_fails_when_claude_skill_is_missing() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    let init = Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .output()
+        .expect("dual-host init");
+    assert_command_succeeded(&init, "dual-host init");
+
+    let missing = ".claude/skills/bob-spec/SKILL.md";
+    std::fs::remove_file(target.join(missing)).expect("remove Claude skill");
+    let output = Command::new(run_bob_bin())
+        .args(["status", "--dir"])
+        .arg(target)
+        .output()
+        .expect("status");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        !output.status.success(),
+        "status accepted a missing Claude skill: {}",
+        command_output_text(&output)
+    );
+    let claude_heading = stdout.find("Claude Code skills").expect("Claude heading");
+    let missing_path = stdout.find(missing).expect("exact missing Claude path");
+    let codex_heading = stdout.find("Codex skills").expect("Codex heading");
+    assert!(
+        claude_heading < missing_path && missing_path < codex_heading,
+        "missing Claude path was not reported in the Claude section:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("run-bob upgrade") && stdout.contains("run-bob init"),
+        "incomplete status omitted actionable commands:\n{stdout}"
+    );
+}
+
+#[test]
+fn status_fails_when_codex_skill_is_missing() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    let init = Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .output()
+        .expect("dual-host init");
+    assert_command_succeeded(&init, "dual-host init");
+
+    let missing = ".agents/skills/bob-spec/SKILL.md";
+    std::fs::remove_file(target.join(missing)).expect("remove Codex skill");
+    let output = Command::new(run_bob_bin())
+        .args(["status", "--dir"])
+        .arg(target)
+        .output()
+        .expect("status");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        !output.status.success(),
+        "status accepted a missing Codex skill: {}",
+        command_output_text(&output)
+    );
+    let codex_heading = stdout.find("Codex skills").expect("Codex heading");
+    let missing_path = stdout.find(missing).expect("exact missing Codex path");
+    assert!(
+        codex_heading < missing_path,
+        "missing Codex path was not reported in the Codex section:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("run-bob upgrade") && stdout.contains("run-bob init"),
+        "incomplete status omitted actionable commands:\n{stdout}"
+    );
+}
+
+#[test]
+fn status_reports_wrong_kind_and_symlink_conflicts_at_exact_paths() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    let init = Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .output()
+        .expect("dual-host init");
+    assert_command_succeeded(&init, "dual-host init");
+
+    let file_conflict = ".claude/skills/bob-identify/SKILL.md";
+    std::fs::remove_file(target.join(file_conflict)).expect("remove managed file");
+    std::fs::create_dir(target.join(file_conflict)).expect("replace managed file with directory");
+
+    let directory_conflict = "docs/specs";
+    std::fs::remove_dir(target.join(directory_conflict)).expect("remove managed directory");
+    std::fs::write(target.join(directory_conflict), b"not a directory\n")
+        .expect("replace managed directory with file");
+
+    #[cfg(unix)]
+    let (symlink_conflict, dangling_target) = {
+        use std::os::unix::fs::symlink;
+
+        let relative = ".agents/skills/bob-onion/SKILL.md";
+        let path = target.join(relative);
+        std::fs::remove_file(&path).expect("remove managed file for dangling symlink");
+        let dangling_target = tmp.path().join("missing-status-target");
+        symlink(&dangling_target, &path).expect("create dangling managed symlink");
+        (relative, dangling_target)
+    };
+
+    let output = Command::new(run_bob_bin())
+        .args(["status", "--dir"])
+        .arg(target)
+        .output()
+        .expect("status");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        !output.status.success(),
+        "status accepted managed-path conflicts: {}",
+        command_output_text(&output)
+    );
+    assert!(
+        stdout
+            .lines()
+            .any(|line| line.contains(file_conflict) && line.contains("expected a file")),
+        "status omitted the exact file-kind conflict:\n{stdout}"
+    );
+    assert!(
+        stdout.lines().any(|line| {
+            line.contains(directory_conflict) && line.contains("expected a directory")
+        }),
+        "status omitted the exact directory-kind conflict:\n{stdout}"
+    );
+
+    #[cfg(unix)]
+    {
+        assert!(
+            stdout.lines().any(|line| {
+                line.contains(symlink_conflict) && line.contains("symbolic link")
+            }),
+            "status omitted the exact symlink conflict:\n{stdout}"
+        );
+        assert_symlink_unchanged(&target.join(symlink_conflict), &dangling_target);
+        assert!(
+            !dangling_target.exists(),
+            "status followed or created the dangling link target"
+        );
+    }
+}
+
 /// Drift guard: every file `init` writes must be checked by `status`.
 /// If a new template is added to the asset registry but somehow only one
 /// side observes it, this test fails.
@@ -913,6 +1086,10 @@ fn status_flags_missing_after_minimal_init() {
         .output()
         .expect("status");
     let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        !output.status.success(),
+        "status accepted a minimal, incomplete harness"
+    );
     assert!(stdout.contains("some assets are missing"), "got:\n{}", stdout);
 }
 
