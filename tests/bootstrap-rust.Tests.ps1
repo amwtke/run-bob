@@ -386,4 +386,16 @@ rust-version = "1.75"
                 -RunCargoSpecified -RunCargo @('') } | Should -Throw '*Usage:*'
         Should -Invoke Get-RunBobCommandPath -Times 0 -Exactly
     }
+
+    It 'rejects a bare positional argument at script binding before main' {
+        $entryScript = Join-Path $PSScriptRoot '..\scripts\bootstrap-rust.ps1'
+        Mock Get-RunBobCommandPath { throw 'command discovery must not run' }
+        Mock Invoke-RunBobBootstrap { throw 'bootstrap main must not run' }
+
+        # Dot-sourcing still exercises the script entry parameter binder while
+        # containing a regression safely: accepted input cannot run the guarded main.
+        { . $entryScript build } | Should -Throw '*positional parameter*'
+        Should -Invoke Get-RunBobCommandPath -Times 0 -Exactly
+        Should -Invoke Invoke-RunBobBootstrap -Times 0 -Exactly
+    }
 }

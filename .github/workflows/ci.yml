@@ -54,7 +54,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust 1.75
-        uses: dtolnay/rust-toolchain@1.75
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.75
 
       - name: Run tests with Rust 1.75
         run: cargo test --locked

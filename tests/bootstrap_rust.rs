@@ -5,8 +5,10 @@ fn bootstrap_rust_powershell_has_safe_equivalent_contract() {
         .join("bootstrap-rust.ps1");
     let script = std::fs::read_to_string(&script_path)
         .unwrap_or_else(|error| panic!("read {}: {error}", script_path.display()));
+    let script = script.replace("\r\n", "\n");
 
     for required in [
+        "[CmdletBinding(PositionalBinding = $false)]",
         "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe",
         "https://static.rust-lang.org/rustup/dist/aarch64-pc-windows-msvc/rustup-init.exe",
         "--profile",
@@ -62,6 +64,50 @@ fn bootstrap_rust_powershell_has_safe_equivalent_contract() {
         script.contains("@('run', 'stable', 'cargo') + $RunCargo"),
         "PowerShell bootstrap must append exact RunCargo elements after rustup's fixed prefix"
     );
+    assert!(
+        script.contains(
+            "'-y', '--profile', 'minimal', '--default-toolchain', 'stable', '--no-modify-path'",
+        ),
+        "the official installer arguments must be one exact contiguous safe sequence"
+    );
+
+    let postcheck_call = concat!(
+        "Assert-RunBobSelectedToolchain -Mode $mode -RequiredVersion $requiredVersion `\n",
+        "        -RustcPath $rustcPath -CargoPath $cargoPath -RustupPath $rustupPath",
+    );
+    let postcheck_position = script
+        .find(postcheck_call)
+        .expect("the selected toolchain must be post-checked with all selected paths");
+    assert_eq!(
+        script.matches(postcheck_call).count(),
+        1,
+        "the exact selected-toolchain post-check invocation must occur once"
+    );
+    let selection_position = script[..postcheck_position]
+        .rfind("$mode = '")
+        .expect("a toolchain mode must be selected before its post-check");
+    let cargo_gate_position = script[postcheck_position..]
+        .find("if ($RunCargoSpecified)")
+        .map(|offset| postcheck_position + offset)
+        .expect("cargo execution must remain behind the RunCargo gate");
+    assert!(
+        selection_position < postcheck_position && postcheck_position < cargo_gate_position,
+        "post-check must occur after selection and before any requested cargo execution"
+    );
+
+    for required_postcheck in [
+        "$rustcVersion = Get-RunBobToolVersion -ToolPath $RustcPath -ToolName rustc",
+        "$cargoVersion = Get-RunBobToolVersion -ToolPath $CargoPath -ToolName cargo",
+        "$rustcVersion = Get-RunBobToolVersion -ToolPath $RustupPath -ToolName rustc -RustupPath $RustupPath",
+        "$cargoVersion = Get-RunBobToolVersion -ToolPath $RustupPath -ToolName cargo -RustupPath $RustupPath",
+        "Test-RunBobVersionAtLeast -Actual $rustcVersion -Required $RequiredVersion",
+        "Test-RunBobVersionAtLeast -Actual $cargoVersion -Required $RequiredVersion",
+    ] {
+        assert!(
+            script.contains(required_postcheck),
+            "PowerShell bootstrap is missing post-check behavior {required_postcheck:?}"
+        );
+    }
     assert_eq!(
         script
             .matches(
@@ -79,6 +125,31 @@ fn bootstrap_rust_powershell_has_safe_equivalent_contract() {
             .count(),
         1,
         "the Arm64 production endpoint must be one fixed constant"
+    );
+}
+
+#[test]
+fn ci_uses_stable_rust_action_with_explicit_msrv_toolchain() {
+    let workflow_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(".github")
+        .join("workflows")
+        .join("ci.yml");
+    let workflow = std::fs::read_to_string(&workflow_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", workflow_path.display()));
+    let workflow = workflow.replace("\r\n", "\n");
+
+    assert!(
+        workflow.contains(concat!(
+            "      - name: Install Rust 1.75\n",
+            "        uses: dtolnay/rust-toolchain@stable\n",
+            "        with:\n",
+            "          toolchain: 1.75\n",
+        )),
+        "MSRV CI must configure Rust 1.75 through the stable rust-toolchain action"
+    );
+    assert!(
+        !workflow.contains("uses: dtolnay/rust-toolchain@1.75"),
+        "MSRV must not use a dynamic action ref for the Rust version"
     );
 }
 
