@@ -1147,10 +1147,26 @@ fn generated_readme_explains_both_skill_hosts() {
         "$bob-model",
         "8 Bob",
         "visual-md",
+        "R0-R13",
+        "Codex 工作流会显式读取 `CLAUDE.md`;不能假定 Codex 自动加载它",
+        "`run-bob init --with-java` 才会安装以下可选 Java skeleton 与 ArchUnit 守卫",
     ] {
         assert!(
             content.contains(token),
             "generated README-RUN-BOB.md must contain {token}; got:\n{content}"
+        );
+    }
+
+    let repository_readme = include_str!("../README.md");
+    for contract in [
+        "`docs/compliance/README.md` is a managed, upgrade-safe asset",
+        "user-created compliance documents",
+        "`run-bob init --force --with-java`",
+        "Existing Java targets are detected",
+    ] {
+        assert!(
+            repository_readme.contains(contract),
+            "repository README.md must contain {contract}"
         );
     }
 }

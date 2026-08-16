@@ -143,7 +143,8 @@ What `upgrade` does:
 - **Compares** the on-disk content of every upgrade-safe asset (skills, `README-RUN-BOB.md`, `UseCase.java`, `TransactionalUseCaseDecorator.java`, `docs/compliance/README.md`) against the binary's embedded version (byte-for-byte).
 - **Backs up** any managed file that differs to `.run-bob-backup/<UTC-timestamp>/<original-path>`, then **overwrites** with the embedded version. Existing Claude Code skill customizations therefore remain recoverable at their full `.claude/skills/...` paths. The backup directory is auto-added to `.gitignore`.
 - **Installs** any upgrade-safe asset that's missing (e.g. you upgraded across a release that introduced a new skill — `upgrade` will drop it in).
-- **Never touches** user-owned files: `CLAUDE.md` (your project rules + tech-stack decisions), `ARCHITECTURE.md` (the 4-ring SSoT), `CleanArchitectureTest.java` (your `FORBIDDEN_IN_INNER` list), and anything under `docs/compliance/sources/`, `docs/compliance/*.md` (generated), `docs/compliance/.compliance.lock`, `docs/bob/`, `docs/specs/`. Use `run-bob init --force` only if you explicitly want to reset the user-owned anchors.
+- **Keeps compliance ownership precise:** `docs/compliance/README.md` is a managed, upgrade-safe asset, so a stale copy follows the same backup-before-overwrite contract. Everything under `docs/compliance/sources/`, `docs/compliance/.compliance.lock`, and user-created compliance documents other than that managed README remain untouched.
+- **Never upgrades user-owned anchors:** `CLAUDE.md` (your project rules + tech-stack decisions), `ARCHITECTURE.md` (the 4-ring SSoT), and `CleanArchitectureTest.java` (your `FORBIDDEN_IN_INNER` list). `run-bob init --force` resets the first two; only `run-bob init --force --with-java` resets `CleanArchitectureTest.java`. Generated documents under `docs/bob/` and `docs/specs/` also remain untouched.
 
 ### Step 3 — Verify
 
@@ -168,7 +169,7 @@ run-bob init [--dir <path>] [--force] [--minimal] [--with-java] [--no-gitignore]
 | Flag | Effect | When to use it |
 |---|---|---|
 | `-d`, `--dir <path>` | Target directory (default `.`) | Bootstrapping a sibling subdirectory (e.g. `--dir ./api`) without `cd` |
-| `-f`, `--force` | Overwrite existing files **including user-owned anchors** (`CLAUDE.md`, `ARCHITECTURE.md`, `CleanArchitectureTest.java`) | You explicitly want to reset the harness — destroys local edits to those files |
+| `-f`, `--force` | Overwrite selected existing files, including user-owned `CLAUDE.md` and `ARCHITECTURE.md`; `CleanArchitectureTest.java` is included only when combined as `run-bob init --force --with-java` | You explicitly want to reset the selected harness assets — destroys local edits to those files |
 | `-m`, `--minimal` | **Only** install the same 8 Bob skills plus `visual-md` under `.claude/skills/` and `.agents/skills/`. Skip anchor docs, ArchUnit guard, shared Java skeletons, `docs/bob/`, `docs/specs/`, `docs/compliance/` | Adding Bob skills to an existing project that already has its own architecture conventions / Java layout |
 | `--with-java` | Also install the Java/Maven skeleton: ArchUnit test (`src/test/java/architecture/CleanArchitectureTest.java`) + shared interfaces (`src/main/java/com/example/shared/usecase/UseCase.java`, `…/framework/transaction/TransactionalUseCaseDecorator.java`). **Off by default** — by default `init` no longer touches `src/` at all. | The target project is a Java/Spring project ready to enforce the 4-ring architecture at test time |
 | `--no-gitignore` | Skip writing the `# run-bob` block (containing `.run-bob-backup/`) into the target directory's `.gitignore` | You manage `.gitignore` by hand or have your own ignore strategy |
@@ -221,7 +222,7 @@ Pass `--with-java` to additionally lay down the Maven/ArchUnit skeleton:
     └── test/java/architecture/CleanArchitectureTest.java
 ```
 
-`status` and `upgrade` auto-detect whether the target is a Java project (presence of `src/main/java/`) and silently skip the Java skeleton on non-Java targets — so projects that opted out at `init` time stay opted out.
+Default `init` does not create Java files in a non-Java target unless `--with-java` is passed. Existing Java targets are detected by the presence of `src/main/java/`: `status` checks the applicable Java assets, while `upgrade` may install or refresh the upgrade-safe shared Java files. The ArchUnit guard remains user-owned and is never changed by `upgrade`; use `init --with-java` to add it when missing, or the explicit `run-bob init --force --with-java` form to reset it.
 
 ### `run-bob upgrade` — refresh harness in a project
 
@@ -320,7 +321,7 @@ In practice, 80% of "Clean Architecture" projects in the wild are stuck at **β 
 2. **Framework boundary push-out** — UseCase classes are pure POJO (zero Spring, zero SLF4J)
 3. **State machine lift** — business rules live on the Entity, not in Service
 
-The single `@Transactional` in the entire project lives in **one decorator class** (`shared.framework.transaction.TransactionalUseCaseDecorator`). An ArchUnit test enforces the 4-ring rules mechanically in CI.
+When the optional Java skeleton is installed, its single `@Transactional` lives in **one decorator class** (`shared.framework.transaction.TransactionalUseCaseDecorator`), and its ArchUnit test can enforce the 4-ring rules mechanically in CI.
 
 ---
 
@@ -328,7 +329,7 @@ The single `@Transactional` in the entire project lives in **one decorator class
 
 [`ddd-run`](https://github.com/amwtke/ddd-run) is the DDD-flavored sibling. It targets DDD tactical level (Aggregate / Bounded Context / Ubiquitous Language); `run-bob` targets pure Bob 4-ring (single Bounded Context, sync, no Domain Event by default).
 
-Both share the same engineering form: Rust CLI + embedded skill templates + anchor documents + ArchUnit. Pick `ddd-run` if you need strategic design (multiple BCs, async events); pick `run-bob` if you need pure 4-ring discipline for a single-context system or for incremental new features inside an α/β codebase.
+Both share the same engineering form: Rust CLI + embedded skill templates + anchor documents + optional ArchUnit enforcement. Pick `ddd-run` if you need strategic design (multiple BCs, async events); pick `run-bob` if you need pure 4-ring discipline for a single-context system or for incremental new features inside an α/β codebase.
 
 ---
 
