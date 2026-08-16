@@ -84,6 +84,13 @@ fn parse_skill_document(content: &str) -> (BTreeMap<String, String>, String) {
     let mut current_block_lines = Vec::new();
 
     for line in frontmatter_lines {
+        if line.trim().is_empty() {
+            if current_block_key.is_some() {
+                current_block_lines.push("");
+            }
+            continue;
+        }
+
         if let Some(indented) = line.strip_prefix("  ") {
             if current_block_key.is_some() {
                 current_block_lines.push(indented);
@@ -91,7 +98,7 @@ fn parse_skill_document(content: &str) -> (BTreeMap<String, String>, String) {
             continue;
         }
 
-        if line.starts_with(char::is_whitespace) || line.trim().is_empty() {
+        if line.starts_with(char::is_whitespace) {
             continue;
         }
 
@@ -127,6 +134,19 @@ fn is_valid_skill_name(name: &str) -> bool {
         && name
             .bytes()
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
+#[test]
+fn skill_frontmatter_parser_preserves_literal_block_blank_lines() {
+    let document = "---\nname: example\ndescription: |\n  first paragraph\n\n  second paragraph\n---\n# Body\n";
+
+    let (metadata, body) = parse_skill_document(document);
+
+    assert_eq!(
+        metadata.get("description").map(String::as_str),
+        Some("first paragraph\n\nsecond paragraph")
+    );
+    assert_eq!(body, "# Body");
 }
 
 /// Path to the cargo-built binary under test.
