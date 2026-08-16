@@ -40,9 +40,11 @@ Describe 'bootstrap-rust.ps1' {
     BeforeEach {
         $script:originalCargoHome = $env:CARGO_HOME
         $script:originalUserProfile = $env:USERPROFILE
-        $env:CARGO_HOME = Join-Path $TestDrive 'isolated empty cargo home'
-        $env:USERPROFILE = Join-Path $TestDrive 'isolated empty profile'
-        $script:manifestPath = Join-Path $TestDrive 'Cargo.toml'
+        $caseRoot = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $caseRoot -Force | Out-Null
+        $env:CARGO_HOME = Join-Path $caseRoot 'isolated empty cargo home'
+        $env:USERPROFILE = Join-Path $caseRoot 'isolated empty profile'
+        $script:manifestPath = Join-Path $caseRoot 'Cargo.toml'
         @'
 [package]
 name = "run-bob"
