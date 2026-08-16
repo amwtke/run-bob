@@ -36,16 +36,31 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool, no_gitignore: bool)
     for asset in applicable_assets {
         let path = asset_path(&target, asset);
         if !path.is_file() {
-            println!("  {} {} ({})", "+".green(), asset.display(), "missing — will install".yellow());
+            println!(
+                "  {} {} ({})",
+                "+".green(),
+                asset.display(),
+                "missing — will install".yellow()
+            );
             missing.push(asset);
         } else {
             let current = fs::read_to_string(&path)
                 .with_context(|| format!("Failed to read {} for diff", path.display()))?;
             if current == asset.content {
-                println!("  {} {} ({})", "✓".green(), asset.display(), "up to date".dimmed());
+                println!(
+                    "  {} {} ({})",
+                    "✓".green(),
+                    asset.display(),
+                    "up to date".dimmed()
+                );
                 up_to_date.push(asset);
             } else {
-                println!("  {} {} ({})", "↑".yellow(), asset.display(), "outdated".yellow());
+                println!(
+                    "  {} {} ({})",
+                    "↑".yellow(),
+                    asset.display(),
+                    "outdated".yellow()
+                );
                 outdated.push((asset, current));
             }
         }
@@ -137,7 +152,12 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool, no_gitignore: bool)
         fs::write(&path, asset.content)
             .with_context(|| format!("Failed to write {}", path.display()))?;
         crate::set_executable_if_shell(&path)?;
-        println!("  {} {} ({})", "✓".green(), asset.display(), "updated".cyan());
+        println!(
+            "  {} {} ({})",
+            "✓".green(),
+            asset.display(),
+            "updated".cyan()
+        );
     }
 
     // Install MISSING files (no backup — they didn't exist).
@@ -150,7 +170,12 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool, no_gitignore: bool)
         fs::write(&path, asset.content)
             .with_context(|| format!("Failed to write {}", path.display()))?;
         crate::set_executable_if_shell(&path)?;
-        println!("  {} {} ({})", "✓".green(), asset.display(), "installed".green());
+        println!(
+            "  {} {} ({})",
+            "✓".green(),
+            asset.display(),
+            "installed".green()
+        );
     }
 
     println!();
@@ -197,11 +222,7 @@ fn preflight_backup_destinations(
 
 fn print_header(target: &Path, dry_run: bool, no_backup: bool, no_gitignore: bool) {
     println!();
-    println!(
-        "{} {}",
-        "🛠 ".bold(),
-        "run-bob upgrade".bold().cyan()
-    );
+    println!("{} {}", "🛠 ".bold(), "run-bob upgrade".bold().cyan());
     println!("  {} {}", "→ target:".dimmed(), target.display());
     let mode = match (dry_run, no_backup) {
         (true, _) => "--dry-run (no files will be written)",
@@ -210,7 +231,11 @@ fn print_header(target: &Path, dry_run: bool, no_backup: bool, no_gitignore: boo
     };
     println!("  {} {}", "→ mode:".dimmed(), mode);
     if no_gitignore {
-        println!("  {} {}", "→ mode:".dimmed(), "--no-gitignore (skip .gitignore)".yellow());
+        println!(
+            "  {} {}",
+            "→ mode:".dimmed(),
+            "--no-gitignore (skip .gitignore)".yellow()
+        );
     }
     println!();
 }

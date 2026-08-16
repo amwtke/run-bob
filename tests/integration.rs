@@ -277,9 +277,7 @@ fn repository_install_skills_are_identical_and_dual_host() {
         .rfind("\n)\n```")
         .expect("POSIX subshell closing delimiter");
     assert!(
-        posix_build < posix_test
-            && posix_test < posix_install
-            && posix_install < posix_scope_end,
+        posix_build < posix_test && posix_test < posix_install && posix_install < posix_scope_end,
         "set -eu must gate POSIX build, test, then install inside one subshell"
     );
     for contract in [
@@ -496,7 +494,10 @@ fn repository_install_skills_are_identical_and_dual_host() {
         "./scripts/bootstrap-rust.sh",
         r".\scripts\bootstrap-rust.ps1",
     ] {
-        assert!(body.contains(helper), "body must name source helper {helper}");
+        assert!(
+            body.contains(helper),
+            "body must name source helper {helper}"
+        );
     }
     for command in [
         "./scripts/bootstrap-rust.sh --run-cargo build --release --locked",
@@ -719,7 +720,10 @@ fn asset_registry_has_identical_claude_and_codex_skill_entries() {
             .filter(|asset| asset.rel_path.starts_with(&[host, "skills"]))
             .map(|asset| {
                 let tail = asset.rel_path[2..].join("/");
-                let shell_file = asset.rel_path.last().is_some_and(|name| name.ends_with(".sh"));
+                let shell_file = asset
+                    .rel_path
+                    .last()
+                    .is_some_and(|name| name.ends_with(".sh"));
                 (
                     tail,
                     (
@@ -746,7 +750,10 @@ fn asset_registry_has_identical_claude_and_codex_skill_entries() {
         codex.keys().map(String::as_str).collect::<BTreeSet<_>>(),
         expected_tails
     );
-    assert_eq!(claude, codex, "Claude and Codex registry entries must match");
+    assert_eq!(
+        claude, codex,
+        "Claude and Codex registry entries must match"
+    );
 }
 
 #[test]
@@ -785,10 +792,7 @@ fn generated_skill_metadata_is_codex_compatible() {
 
     let mut violations = Vec::new();
     for skill in GENERATED_SKILLS {
-        let path = target
-            .join(".agents/skills")
-            .join(skill)
-            .join("SKILL.md");
+        let path = target.join(".agents/skills").join(skill).join("SKILL.md");
         let document = std::fs::read_to_string(&path).expect("read generated Codex skill");
         let (metadata, body) = parse_skill_document(&document);
 
@@ -878,20 +882,13 @@ fn generated_skills_document_both_host_invocations() {
     assert_command_succeeded(&output, "minimal init");
 
     for skill in GENERATED_SKILLS {
-        let claude_path = target
-            .join(".claude/skills")
-            .join(skill)
-            .join("SKILL.md");
-        let codex_path = target
-            .join(".agents/skills")
-            .join(skill)
-            .join("SKILL.md");
+        let claude_path = target.join(".claude/skills").join(skill).join("SKILL.md");
+        let codex_path = target.join(".agents/skills").join(skill).join("SKILL.md");
         let claude = std::fs::read(&claude_path).expect("read generated Claude skill");
         let codex = std::fs::read(&codex_path).expect("read generated Codex skill");
 
         assert_eq!(
-            claude,
-            codex,
+            claude, codex,
             "{skill} must stay byte-identical across skill hosts"
         );
         let document = String::from_utf8(claude).expect("generated skill is UTF-8");
@@ -933,7 +930,10 @@ fn minimal_init_installs_all_nine_skills_for_both_hosts_only() {
             })
             .collect::<BTreeSet<_>>();
         assert_eq!(
-            actual_skills.iter().map(String::as_str).collect::<BTreeSet<_>>(),
+            actual_skills
+                .iter()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>(),
             expected_skills,
             "minimal init generated the wrong skill set under {root}"
         );
@@ -1040,7 +1040,12 @@ fn init_help_lists_flags() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     for flag in &["--force", "--minimal", "--dir", "--with-java"] {
-        assert!(stdout.contains(flag), "expected {} flag in help: {}", flag, stdout);
+        assert!(
+            stdout.contains(flag),
+            "expected {} flag in help: {}",
+            flag,
+            stdout
+        );
     }
 }
 
@@ -1085,7 +1090,10 @@ fn init_creates_claude_md_with_r0() {
     let content = std::fs::read_to_string(&p).unwrap();
 
     // Must declare itself a run-bob harness
-    assert!(content.contains("run-bob"), "CLAUDE.md must reference run-bob");
+    assert!(
+        content.contains("run-bob"),
+        "CLAUDE.md must reference run-bob"
+    );
     // R0 meta-rule must be present
     assert!(content.contains("R0"), "CLAUDE.md must have R0 meta-rule");
     assert!(
@@ -1093,9 +1101,15 @@ fn init_creates_claude_md_with_r0() {
         "R0 must reference the decision tree"
     );
     // R12 must be present (B2 mode)
-    assert!(content.contains("R12"), "CLAUDE.md must have R12 (B2 clean island)");
+    assert!(
+        content.contains("R12"),
+        "CLAUDE.md must have R12 (B2 clean island)"
+    );
     // 4-ring package names use "entity" (not "domain")
-    assert!(content.contains("entity"), "CLAUDE.md must use 'entity' not 'domain' as Ring 1");
+    assert!(
+        content.contains("entity"),
+        "CLAUDE.md must use 'entity' not 'domain' as Ring 1"
+    );
     // Must have technology-stack-pending warning
     assert!(
         content.contains("## 技术栈约定"),
@@ -1107,7 +1121,11 @@ fn init_creates_claude_md_with_r0() {
 fn init_creates_readme_run_bob_with_3_modes() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
-    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+    Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
 
     let p = target.join("README-RUN-BOB.md");
     assert!(p.is_file(), "README-RUN-BOB.md missing");
@@ -1117,11 +1135,15 @@ fn init_creates_readme_run_bob_with_3_modes() {
         "/bob-onion",
         "/bob-spec",
         "ARCHITECTURE.md",
-        "G(",     // G mode
-        "B1",     // B1 mode
-        "B2",     // B2 mode
+        "G(", // G mode
+        "B1", // B1 mode
+        "B2", // B2 mode
     ] {
-        assert!(content.contains(token), "README-RUN-BOB.md must contain {}", token);
+        assert!(
+            content.contains(token),
+            "README-RUN-BOB.md must contain {}",
+            token
+        );
     }
 }
 
@@ -1268,13 +1290,23 @@ fn init_installs_archunit_test_at_correct_path() {
         .expect("init");
 
     let archunit = target
-        .join("src").join("test").join("java")
-        .join("architecture").join("CleanArchitectureTest.java");
-    assert!(archunit.is_file(), "expected ArchUnit template at {}", archunit.display());
+        .join("src")
+        .join("test")
+        .join("java")
+        .join("architecture")
+        .join("CleanArchitectureTest.java");
+    assert!(
+        archunit.is_file(),
+        "expected ArchUnit template at {}",
+        archunit.display()
+    );
 
     let content = std::fs::read_to_string(&archunit).unwrap();
     assert!(content.contains("@ArchTest"), "must contain @ArchTest");
-    assert!(content.contains("layered_dependencies"), "must include layered_dependencies");
+    assert!(
+        content.contains("layered_dependencies"),
+        "must include layered_dependencies"
+    );
     assert!(
         content.contains("entity_pure_of_frameworks"),
         "must include entity_pure_of_frameworks rule"
@@ -1313,9 +1345,14 @@ fn init_installs_shared_usecase_interface() {
         .expect("init");
 
     let p = target
-        .join("src").join("main").join("java")
-        .join("com").join("example").join("shared")
-        .join("usecase").join("UseCase.java");
+        .join("src")
+        .join("main")
+        .join("java")
+        .join("com")
+        .join("example")
+        .join("shared")
+        .join("usecase")
+        .join("UseCase.java");
     assert!(p.is_file(), "expected UseCase.java at {}", p.display());
 
     let content = std::fs::read_to_string(&p).unwrap();
@@ -1327,10 +1364,19 @@ fn init_installs_shared_usecase_interface() {
         content.contains("public interface UseCase<C, R>"),
         "must declare generic UseCase<C, R> interface"
     );
-    assert!(content.contains("R execute(C cmd)"), "must declare execute method");
+    assert!(
+        content.contains("R execute(C cmd)"),
+        "must declare execute method"
+    );
     // Must NOT contain Spring or any framework import
-    assert!(!content.contains("org.springframework"), "UseCase.java must not import Spring");
-    assert!(!content.contains("@Transactional"), "UseCase.java must not have @Transactional");
+    assert!(
+        !content.contains("org.springframework"),
+        "UseCase.java must not import Spring"
+    );
+    assert!(
+        !content.contains("@Transactional"),
+        "UseCase.java must not have @Transactional"
+    );
 }
 
 #[test]
@@ -1345,9 +1391,15 @@ fn init_installs_transactional_decorator() {
         .expect("init");
 
     let p = target
-        .join("src").join("main").join("java")
-        .join("com").join("example").join("shared")
-        .join("framework").join("transaction").join("TransactionalUseCaseDecorator.java");
+        .join("src")
+        .join("main")
+        .join("java")
+        .join("com")
+        .join("example")
+        .join("shared")
+        .join("framework")
+        .join("transaction")
+        .join("TransactionalUseCaseDecorator.java");
     assert!(p.is_file(), "expected decorator at {}", p.display());
 
     let content = std::fs::read_to_string(&p).unwrap();
@@ -1355,7 +1407,10 @@ fn init_installs_transactional_decorator() {
         content.contains("package com.example.shared.framework.transaction;"),
         "must declare correct package"
     );
-    assert!(content.contains("@Transactional"), "decorator must have @Transactional");
+    assert!(
+        content.contains("@Transactional"),
+        "decorator must have @Transactional"
+    );
     assert!(
         content.contains("implements UseCase<C, R>"),
         "decorator must implement UseCase<C, R>"
@@ -1370,14 +1425,25 @@ fn init_installs_transactional_decorator() {
 fn init_creates_bob_identify_skill() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
-    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+    Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-identify").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-identify")
+        .join("SKILL.md");
     assert!(p.is_file(), "bob-identify SKILL.md missing");
     let content = std::fs::read_to_string(&p).unwrap();
 
     // YAML frontmatter
-    assert!(content.starts_with("---"), "must start with YAML frontmatter");
+    assert!(
+        content.starts_with("---"),
+        "must start with YAML frontmatter"
+    );
     assert!(content.contains("name: bob-identify"), "frontmatter name");
     assert!(content.contains("description:"), "frontmatter description");
 
@@ -1396,7 +1462,11 @@ fn init_creates_bob_identify_skill() {
         "推荐",
         "清洁孤岛",
     ] {
-        assert!(content.contains(token), "bob-identify must mention {}", token);
+        assert!(
+            content.contains(token),
+            "bob-identify must mention {}",
+            token
+        );
     }
 }
 
@@ -1404,9 +1474,17 @@ fn init_creates_bob_identify_skill() {
 fn init_creates_bob_onion_skill() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
-    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+    Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-onion").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-onion")
+        .join("SKILL.md");
     assert!(p.is_file(), "bob-onion SKILL.md missing");
     let content = std::fs::read_to_string(&p).unwrap();
 
@@ -1434,9 +1512,17 @@ fn init_creates_bob_onion_skill() {
 fn init_creates_bob_spec_skill() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
-    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+    Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-spec").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-spec")
+        .join("SKILL.md");
     assert!(p.is_file(), "bob-spec SKILL.md missing");
     let content = std::fs::read_to_string(&p).unwrap();
 
@@ -1464,10 +1550,20 @@ fn init_creates_bob_spec_skill() {
 fn init_creates_working_directories() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
-    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+    Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
 
-    assert!(target.join("docs").join("bob").is_dir(), "docs/bob/ missing");
-    assert!(target.join("docs").join("specs").is_dir(), "docs/specs/ missing");
+    assert!(
+        target.join("docs").join("bob").is_dir(),
+        "docs/bob/ missing"
+    );
+    assert!(
+        target.join("docs").join("specs").is_dir(),
+        "docs/specs/ missing"
+    );
 }
 
 #[test]
@@ -1485,12 +1581,16 @@ fn init_default_skips_java_skeleton() {
 
     // No ArchUnit test
     assert!(
-        !target.join("src/test/java/architecture/CleanArchitectureTest.java").exists(),
+        !target
+            .join("src/test/java/architecture/CleanArchitectureTest.java")
+            .exists(),
         "default init must NOT install ArchUnit test"
     );
     // No shared Java skeleton
     assert!(
-        !target.join("src/main/java/com/example/shared/usecase/UseCase.java").exists(),
+        !target
+            .join("src/main/java/com/example/shared/usecase/UseCase.java")
+            .exists(),
         "default init must NOT install UseCase.java"
     );
     assert!(
@@ -1498,12 +1598,20 @@ fn init_default_skips_java_skeleton() {
         "default init must NOT install TransactionalUseCaseDecorator.java"
     );
     // No src/ at all, because nothing under src/ was written
-    assert!(!target.join("src").exists(), "default init must NOT create src/ at all");
+    assert!(
+        !target.join("src").exists(),
+        "default init must NOT create src/ at all"
+    );
 
     // But docs/skills are still installed
-    assert!(target.join("CLAUDE.md").is_file(), "default init must install CLAUDE.md");
     assert!(
-        target.join(".claude/skills/bob-identify/SKILL.md").is_file(),
+        target.join("CLAUDE.md").is_file(),
+        "default init must install CLAUDE.md"
+    );
+    assert!(
+        target
+            .join(".claude/skills/bob-identify/SKILL.md")
+            .is_file(),
         "default init must install skills"
     );
 }
@@ -1520,11 +1628,15 @@ fn init_with_java_installs_skeleton() {
         .expect("init --with-java");
 
     assert!(
-        target.join("src/test/java/architecture/CleanArchitectureTest.java").is_file(),
+        target
+            .join("src/test/java/architecture/CleanArchitectureTest.java")
+            .is_file(),
         "--with-java must install ArchUnit test"
     );
     assert!(
-        target.join("src/main/java/com/example/shared/usecase/UseCase.java").is_file(),
+        target
+            .join("src/main/java/com/example/shared/usecase/UseCase.java")
+            .is_file(),
         "--with-java must install UseCase.java"
     );
     assert!(
@@ -1558,7 +1670,11 @@ fn status_complete_on_non_java_target_after_default_init() {
         stdout
     );
     // Java tokens must NOT appear in output (not checked at all)
-    for absent in &["CleanArchitectureTest.java", "UseCase.java", "TransactionalUseCaseDecorator.java"] {
+    for absent in &[
+        "CleanArchitectureTest.java",
+        "UseCase.java",
+        "TransactionalUseCaseDecorator.java",
+    ] {
         assert!(
             !stdout.contains(absent),
             "status must not mention {} on non-Java target; got:\n{}",
@@ -1580,43 +1696,77 @@ fn init_minimal_skips_archunit_and_shared_and_anchors() {
         .expect("init --minimal");
 
     // Skills must still be installed
-    for skill in &["bob-identify", "bob-onion", "bob-spec", "bob-survey", "bob-stories", "bob-nfr"] {
-        let p = target.join(".claude").join("skills").join(skill).join("SKILL.md");
+    for skill in &[
+        "bob-identify",
+        "bob-onion",
+        "bob-spec",
+        "bob-survey",
+        "bob-stories",
+        "bob-nfr",
+    ] {
+        let p = target
+            .join(".claude")
+            .join("skills")
+            .join(skill)
+            .join("SKILL.md");
         assert!(p.is_file(), "minimal must still install skill {}", skill);
     }
 
     // Anchor docs must NOT be installed
     for f in &["CLAUDE.md", "ARCHITECTURE.md", "README-RUN-BOB.md"] {
-        assert!(
-            !target.join(f).exists(),
-            "minimal must not install {}",
-            f
-        );
+        assert!(!target.join(f).exists(), "minimal must not install {}", f);
     }
 
     // ArchUnit must NOT be installed
     assert!(
-        !target.join("src").join("test").join("java").join("architecture")
-            .join("CleanArchitectureTest.java").exists(),
+        !target
+            .join("src")
+            .join("test")
+            .join("java")
+            .join("architecture")
+            .join("CleanArchitectureTest.java")
+            .exists(),
         "minimal must not install ArchUnit"
     );
 
     // Shared骨架 must NOT be installed
     assert!(
-        !target.join("src").join("main").join("java").join("com").join("example")
-            .join("shared").join("usecase").join("UseCase.java").exists(),
+        !target
+            .join("src")
+            .join("main")
+            .join("java")
+            .join("com")
+            .join("example")
+            .join("shared")
+            .join("usecase")
+            .join("UseCase.java")
+            .exists(),
         "minimal must not install UseCase.java"
     );
     assert!(
-        !target.join("src").join("main").join("java").join("com").join("example")
-            .join("shared").join("framework").join("transaction")
-            .join("TransactionalUseCaseDecorator.java").exists(),
+        !target
+            .join("src")
+            .join("main")
+            .join("java")
+            .join("com")
+            .join("example")
+            .join("shared")
+            .join("framework")
+            .join("transaction")
+            .join("TransactionalUseCaseDecorator.java")
+            .exists(),
         "minimal must not install TransactionalUseCaseDecorator.java"
     );
 
     // Working directories must NOT be created in --minimal
-    assert!(!target.join("docs").join("bob").exists(), "minimal must not create docs/bob/");
-    assert!(!target.join("docs").join("specs").exists(), "minimal must not create docs/specs/");
+    assert!(
+        !target.join("docs").join("bob").exists(),
+        "minimal must not create docs/bob/"
+    );
+    assert!(
+        !target.join("docs").join("specs").exists(),
+        "minimal must not create docs/specs/"
+    );
 }
 
 #[test]
@@ -1650,7 +1800,12 @@ fn status_reports_complete_after_full_init() {
         "docs/bob",
         "docs/specs",
     ] {
-        assert!(stdout.contains(token), "status must list {}; got:\n{}", token, stdout);
+        assert!(
+            stdout.contains(token),
+            "status must list {}; got:\n{}",
+            token,
+            stdout
+        );
     }
 }
 
@@ -1814,9 +1969,9 @@ fn status_reports_wrong_kind_and_symlink_conflicts_at_exact_paths() {
     #[cfg(unix)]
     {
         assert!(
-            stdout.lines().any(|line| {
-                line.contains(symlink_conflict) && line.contains("symbolic link")
-            }),
+            stdout
+                .lines()
+                .any(|line| { line.contains(symlink_conflict) && line.contains("symbolic link") }),
             "status omitted the exact symlink conflict:\n{stdout}"
         );
         assert_symlink_unchanged(&target.join(symlink_conflict), &dangling_target);
@@ -1898,7 +2053,11 @@ fn status_checks_every_file_init_writes() {
 fn status_flags_missing_after_minimal_init() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
-    Command::new(run_bob_bin()).args(["init", "--minimal", "--dir"]).arg(target).status().expect("init");
+    Command::new(run_bob_bin())
+        .args(["init", "--minimal", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
 
     let output = Command::new(run_bob_bin())
         .args(["status", "--dir"])
@@ -1910,7 +2069,11 @@ fn status_flags_missing_after_minimal_init() {
         !output.status.success(),
         "status accepted a minimal, incomplete harness"
     );
-    assert!(stdout.contains("some assets are missing"), "got:\n{}", stdout);
+    assert!(
+        stdout.contains("some assets are missing"),
+        "got:\n{}",
+        stdout
+    );
 }
 
 /// SSoT drift guard: every entry in HARNESS_ASSETS must have a deliberate
@@ -1945,13 +2108,9 @@ fn upgrade_safe_field_matches_category_policy() {
                 display
             ),
             Category::HarnessDoc => {
-                let upgrade_safe_docs: &[&[&str]] = &[
-                    &["README-RUN-BOB.md"],
-                    &["docs", "compliance", "README.md"],
-                ];
-                let is_upgrade_safe_doc = upgrade_safe_docs
-                    .iter()
-                    .any(|s| asset.rel_path == *s);
+                let upgrade_safe_docs: &[&[&str]] =
+                    &[&["README-RUN-BOB.md"], &["docs", "compliance", "README.md"]];
+                let is_upgrade_safe_doc = upgrade_safe_docs.contains(&asset.rel_path);
                 if is_upgrade_safe_doc {
                     assert!(
                         asset.upgrade_safe,
@@ -2061,7 +2220,8 @@ fn upgrade_skips_user_owned() {
     for p in &user_owned {
         let actual = std::fs::read_to_string(p).expect("read user-owned");
         assert_eq!(
-            actual, sentinel,
+            actual,
+            sentinel,
             "upgrade must not touch user-owned file {}",
             p.display()
         );
@@ -2095,7 +2255,11 @@ fn upgrade_dry_run_writes_nothing() {
         .arg(target)
         .output()
         .expect("upgrade --dry-run");
-    assert!(output.status.success(), "upgrade --dry-run failed: {:?}", output);
+    assert!(
+        output.status.success(),
+        "upgrade --dry-run failed: {:?}",
+        output
+    );
 
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(
@@ -2188,11 +2352,18 @@ fn upgrade_no_backup_skips_backup() {
         .arg(target)
         .output()
         .expect("upgrade --no-backup");
-    assert!(output.status.success(), "upgrade --no-backup failed: {:?}", output);
+    assert!(
+        output.status.success(),
+        "upgrade --no-backup failed: {:?}",
+        output
+    );
 
     // File was overwritten.
     let after = std::fs::read_to_string(&skill).expect("read after");
-    assert_eq!(after, embedded, "skill must be overwritten with --no-backup");
+    assert_eq!(
+        after, embedded,
+        "skill must be overwritten with --no-backup"
+    );
 
     // But no backup directory was created.
     assert!(
@@ -2814,12 +2985,23 @@ fn init_creates_bob_survey_skill() {
         .status()
         .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-survey").join("SKILL.md");
-    assert!(p.is_file(), "bob-survey SKILL.md missing at {}", p.display());
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-survey")
+        .join("SKILL.md");
+    assert!(
+        p.is_file(),
+        "bob-survey SKILL.md missing at {}",
+        p.display()
+    );
     let content = std::fs::read_to_string(&p).unwrap();
 
     // Frontmatter contract
-    assert!(content.starts_with("---"), "must start with YAML frontmatter");
+    assert!(
+        content.starts_with("---"),
+        "must start with YAML frontmatter"
+    );
     assert!(content.contains("name: bob-survey"), "frontmatter name");
     assert!(content.contains("description:"), "frontmatter description");
 
@@ -2906,7 +3088,11 @@ fn bob_identify_mentions_survey_soft_prompt() {
         .status()
         .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-identify").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-identify")
+        .join("SKILL.md");
     let content = std::fs::read_to_string(&p).unwrap();
 
     // The soft prompt must mention survey and the 7-day threshold.
@@ -2914,7 +3100,7 @@ fn bob_identify_mentions_survey_soft_prompt() {
         "/bob-survey",
         "docs/bob/00-survey",
         "7 天",
-        "soft",  // marker we'll include in the new section header
+        "soft", // marker we'll include in the new section header
     ] {
         assert!(
             content.contains(token),
@@ -2934,8 +3120,16 @@ fn init_creates_bob_stories_skill() {
         .status()
         .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-stories").join("SKILL.md");
-    assert!(p.is_file(), "bob-stories SKILL.md missing at {}", p.display());
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-stories")
+        .join("SKILL.md");
+    assert!(
+        p.is_file(),
+        "bob-stories SKILL.md missing at {}",
+        p.display()
+    );
     let content = std::fs::read_to_string(&p).unwrap();
 
     // Frontmatter
@@ -2976,7 +3170,11 @@ fn init_creates_bob_stories_skill() {
         // Survey input
         "00-survey-",
     ] {
-        assert!(content.contains(token), "bob-stories must mention {}", token);
+        assert!(
+            content.contains(token),
+            "bob-stories must mention {}",
+            token
+        );
     }
 }
 
@@ -2990,14 +3188,14 @@ fn bob_identify_mentions_stories_soft_prompt() {
         .status()
         .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-identify").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-identify")
+        .join("SKILL.md");
     let content = std::fs::read_to_string(&p).unwrap();
 
-    for token in &[
-        "/bob-stories",
-        "02-stories-",
-        "--story",
-    ] {
+    for token in &["/bob-stories", "02-stories-", "--story"] {
         assert!(
             content.contains(token),
             "bob-identify must mention {} for stories integration",
@@ -3016,7 +3214,11 @@ fn bob_stories_mentions_test_coverage_stage() {
         .status()
         .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-stories").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-stories")
+        .join("SKILL.md");
     let content = std::fs::read_to_string(&p).unwrap();
 
     for token in &[
@@ -3045,15 +3247,14 @@ fn bob_identify_refactor_mentions_test_coverage_check() {
         .status()
         .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-identify").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-identify")
+        .join("SKILL.md");
     let content = std::fs::read_to_string(&p).unwrap();
 
-    for token in &[
-        "Step B1.0",
-        "测试覆盖现状",
-        "分支",
-        "测试覆盖警告",
-    ] {
+    for token in &["Step B1.0", "测试覆盖现状", "分支", "测试覆盖警告"] {
         assert!(
             content.contains(token),
             "bob-identify --refactor must mention {} for B1 safety gate",
@@ -3072,15 +3273,14 @@ fn bob_spec_template_c_mentions_step_0_with_stories_interlock() {
         .status()
         .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-spec").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-spec")
+        .join("SKILL.md");
     let content = std::fs::read_to_string(&p).unwrap();
 
-    for token in &[
-        "Step 0",
-        "全分支级",
-        "docs/bob/02-stories",
-        "characterize",
-    ] {
+    for token in &["Step 0", "全分支级", "docs/bob/02-stories", "characterize"] {
         assert!(
             content.contains(token),
             "bob-spec Template C must mention {} for Step 0 stories interlock",
@@ -3099,7 +3299,11 @@ fn init_creates_bob_nfr_skill() {
         .status()
         .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-nfr").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-nfr")
+        .join("SKILL.md");
     assert!(p.is_file(), "bob-nfr SKILL.md missing at {}", p.display());
     let content = std::fs::read_to_string(&p).unwrap();
 
@@ -3163,7 +3367,11 @@ fn bob_spec_mentions_nfr_reminder() {
         .status()
         .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-spec").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-spec")
+        .join("SKILL.md");
     let content = std::fs::read_to_string(&p).unwrap();
 
     // bob-spec should mention /bob-nfr at least 3 times (one per template's 下一步)
@@ -3261,7 +3469,10 @@ fn init_run_twice_keeps_gitignore_byte_identical() {
         .expect("second init");
 
     let second = std::fs::read(target.join(".gitignore")).expect("read second .gitignore");
-    assert_eq!(first, second, "second init must leave .gitignore byte-identical");
+    assert_eq!(
+        first, second,
+        "second init must leave .gitignore byte-identical"
+    );
 }
 
 #[test]
@@ -3381,10 +3592,16 @@ fn init_appends_to_existing_gitignore_preserving_content() {
 
     let content = std::fs::read_to_string(target.join(".gitignore")).expect("read");
     // User content preserved.
-    assert!(content.contains("target/\n"), "user line target/ must survive");
+    assert!(
+        content.contains("target/\n"),
+        "user line target/ must survive"
+    );
     assert!(content.contains("*.log\n"), "user line *.log must survive");
     // Run-bob block added.
-    assert!(content.contains("# run-bob\n.run-bob-backup/"), "run-bob block must be present");
+    assert!(
+        content.contains("# run-bob\n.run-bob-backup/"),
+        "run-bob block must be present"
+    );
     // Block is separated from user content by a blank line.
     assert!(
         content.contains("*.log\n\n# run-bob"),
@@ -3404,7 +3621,11 @@ fn init_creates_compliance_readme_with_pmd_note() {
         .expect("init");
 
     let p = target.join("docs").join("compliance").join("README.md");
-    assert!(p.is_file(), "compliance/README.md missing at {}", p.display());
+    assert!(
+        p.is_file(),
+        "compliance/README.md missing at {}",
+        p.display()
+    );
     let content = std::fs::read_to_string(&p).expect("read README");
 
     // Load-bearing tokens — the 3-section contract
@@ -3449,11 +3670,18 @@ fn init_creates_bob_compliance_skill() {
         .join("skills")
         .join("bob-compliance")
         .join("SKILL.md");
-    assert!(p.is_file(), "bob-compliance SKILL.md missing at {}", p.display());
+    assert!(
+        p.is_file(),
+        "bob-compliance SKILL.md missing at {}",
+        p.display()
+    );
     let content = std::fs::read_to_string(&p).expect("read skill");
 
     // Frontmatter
-    assert!(content.starts_with("---"), "must start with YAML frontmatter");
+    assert!(
+        content.starts_with("---"),
+        "must start with YAML frontmatter"
+    );
     assert!(content.contains("name: bob-compliance"), "frontmatter name");
     assert!(content.contains("description:"), "frontmatter description");
 
@@ -3487,7 +3715,7 @@ fn init_creates_bob_compliance_skill() {
         "参考",
         "frontmatter",
         "alibaba-songshan",
-        "ALI-1.1.2",  // sample rule ID from the schema example
+        "ALI-1.1.2", // sample rule ID from the schema example
         "generated_to",
         // Stage 2 — load
         "Stage 2",
@@ -3511,7 +3739,11 @@ fn init_creates_bob_compliance_skill() {
         // Cross-skill handoff
         "/bob-nfr",
     ] {
-        assert!(content.contains(token), "bob-compliance must mention {}", token);
+        assert!(
+            content.contains(token),
+            "bob-compliance must mention {}",
+            token
+        );
     }
 }
 
@@ -3557,7 +3789,11 @@ fn bob_spec_mentions_compliance_in_all_three_templates() {
         .status()
         .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-spec").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-spec")
+        .join("SKILL.md");
     let content = std::fs::read_to_string(&p).expect("read bob-spec");
 
     // bob-spec must mention /bob-compliance at least 3 times (one per template's 下一步)
@@ -3590,11 +3826,19 @@ fn init_creates_compliance_dir_and_sources() {
         "docs/compliance/ must be created"
     );
     assert!(
-        target.join("docs").join("compliance").join("sources").is_dir(),
+        target
+            .join("docs")
+            .join("compliance")
+            .join("sources")
+            .is_dir(),
         "docs/compliance/sources/ must be created"
     );
     assert!(
-        target.join("docs").join("compliance").join("README.md").is_file(),
+        target
+            .join("docs")
+            .join("compliance")
+            .join("README.md")
+            .is_file(),
         "docs/compliance/README.md must be installed"
     );
 
@@ -3611,7 +3855,11 @@ fn init_creates_compliance_dir_and_sources() {
 
     // No generated files / lock yet (those are runtime products of /bob-compliance)
     assert!(
-        !target.join("docs").join("compliance").join(".compliance.lock").exists(),
+        !target
+            .join("docs")
+            .join("compliance")
+            .join(".compliance.lock")
+            .exists(),
         ".compliance.lock must NOT exist after init"
     );
 }
@@ -3632,10 +3880,7 @@ fn init_minimal_skips_compliance_dir_but_installs_skill() {
         .join("skills")
         .join("bob-compliance")
         .join("SKILL.md");
-    assert!(
-        skill.is_file(),
-        "minimal must install bob-compliance skill"
-    );
+    assert!(skill.is_file(), "minimal must install bob-compliance skill");
 
     // But the compliance/ dir and README must NOT be created
     assert!(
@@ -3670,9 +3915,13 @@ fn upgrade_preserves_user_compliance_sources() {
         .join("docs")
         .join("compliance")
         .join("my-team-rules.md");
-    let generated_content = "# Generated structured md (would normally be produced by /bob-compliance)\n";
+    let generated_content =
+        "# Generated structured md (would normally be produced by /bob-compliance)\n";
     std::fs::write(&generated, generated_content).expect("write generated");
-    let lock = target.join("docs").join("compliance").join(".compliance.lock");
+    let lock = target
+        .join("docs")
+        .join("compliance")
+        .join(".compliance.lock");
     let lock_content = "generated_at: 2026-05-14T00:00:00Z\nsources: []\n";
     std::fs::write(&lock, lock_content).expect("write lock");
 
@@ -3721,7 +3970,10 @@ fn init_creates_bob_model_skill() {
     let content = std::fs::read_to_string(&p).expect("read skill");
 
     // Frontmatter
-    assert!(content.starts_with("---"), "must start with YAML frontmatter");
+    assert!(
+        content.starts_with("---"),
+        "must start with YAML frontmatter"
+    );
     assert!(content.contains("name: bob-model"), "frontmatter name");
     assert!(content.contains("description:"), "frontmatter description");
 
@@ -3790,9 +4042,7 @@ fn interactive_skills_resolve_scripts_from_active_skill_dir() {
 
     for (skill, document) in [("bob-model", model), ("visual-md", visual)] {
         assert!(
-            document.contains(
-                "`<skill-dir>` 是当前宿主实际加载的 `SKILL.md` 所在目录的绝对路径"
-            ),
+            document.contains("`<skill-dir>` 是当前宿主实际加载的 `SKILL.md` 所在目录的绝对路径"),
             "{skill} must define <skill-dir> from the active SKILL.md"
         );
         assert!(
@@ -3827,7 +4077,10 @@ fn interactive_skills_resolve_scripts_from_active_skill_dir() {
         ".claude/skills/visual-md/scripts",
         ".agents/skills/visual-md/scripts",
     ] {
-        assert!(!visual.contains(forbidden), "visual-md contains {forbidden}");
+        assert!(
+            !visual.contains(forbidden),
+            "visual-md contains {forbidden}"
+        );
     }
     for expected in [
         "node \"<skill-dir>/scripts/slugify.cjs\"",
@@ -3876,7 +4129,10 @@ fn survey_accepts_either_managed_skill_root_without_double_counting() {
         "任一根完整即视为成熟",
         "双宿主安装只计一次，不重复计数",
     ] {
-        assert!(survey.contains(expected), "bob-survey is missing {expected}");
+        assert!(
+            survey.contains(expected),
+            "bob-survey is missing {expected}"
+        );
     }
 
     for skill in [
@@ -4061,7 +4317,11 @@ fn bob_model_skill_mentions_dual_output() {
         .status()
         .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-model").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-model")
+        .join("SKILL.md");
     let content = std::fs::read_to_string(&p).expect("read skill");
 
     // The skill must instruct Claude to produce BOTH md and html
@@ -4083,7 +4343,11 @@ fn bob_model_skill_explains_cdn_strategy() {
         .status()
         .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-model").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-model")
+        .join("SKILL.md");
     let content = std::fs::read_to_string(&p).expect("read skill");
 
     // The skill must explain the CDN strategy + offline degradation
@@ -4111,7 +4375,11 @@ fn bob_survey_declares_model_mandatory_across_difficulties() {
         .status()
         .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-survey").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-survey")
+        .join("SKILL.md");
     let content = std::fs::read_to_string(&p).expect("read bob-survey");
 
     // Survey-optional / model-mandatory invariant must be stated.
@@ -4161,7 +4429,11 @@ fn bob_survey_mentions_model_soft_prompt() {
         .status()
         .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-survey").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-survey")
+        .join("SKILL.md");
     let content = std::fs::read_to_string(&p).expect("read bob-survey");
 
     // bob-survey's 下一步 must mention /bob-model and the source-doc requirement
@@ -4226,14 +4498,24 @@ fn init_installs_bob_model_scripts() {
         .expect("init failed");
 
     let scripts_dir = target.join(".claude/skills/bob-model/scripts");
-    for fname in ["server.cjs", "helper.js", "start-server.sh", "stop-server.sh", "frame-template.html"] {
+    for fname in [
+        "server.cjs",
+        "helper.js",
+        "start-server.sh",
+        "stop-server.sh",
+        "frame-template.html",
+    ] {
         let path = scripts_dir.join(fname);
-        assert!(path.is_file(), "{} should be installed; not found", path.display());
+        assert!(
+            path.is_file(),
+            "{} should be installed; not found",
+            path.display()
+        );
     }
 
     // Verify server.cjs has new namespace
-    let server_content = std::fs::read_to_string(scripts_dir.join("server.cjs"))
-        .expect("server.cjs readable");
+    let server_content =
+        std::fs::read_to_string(scripts_dir.join("server.cjs")).expect("server.cjs readable");
     assert!(
         server_content.contains("BOB_REVIEW_PORT"),
         "server.cjs should contain BOB_REVIEW_PORT (got namespace-renamed); head: {}",
@@ -4245,8 +4527,8 @@ fn init_installs_bob_model_scripts() {
     );
 
     // Verify helper.js has new namespace
-    let helper_content = std::fs::read_to_string(scripts_dir.join("helper.js"))
-        .expect("helper.js readable");
+    let helper_content =
+        std::fs::read_to_string(scripts_dir.join("helper.js")).expect("helper.js readable");
     assert!(
         helper_content.contains("window.bobReview"),
         "helper.js should expose window.bobReview"
@@ -4264,9 +4546,9 @@ fn start_server_script_has_node_detection() {
     run_bob::commands::init::run(target.to_str().unwrap(), false, false, true, false)
         .expect("init failed");
 
-    let content = std::fs::read_to_string(
-        target.join(".claude/skills/bob-model/scripts/start-server.sh")
-    ).expect("start-server.sh readable");
+    let content =
+        std::fs::read_to_string(target.join(".claude/skills/bob-model/scripts/start-server.sh"))
+            .expect("start-server.sh readable");
 
     assert!(
         content.contains("command -v node"),
@@ -4314,9 +4596,17 @@ fn upgrade_replaces_stale_bob_model_scripts() {
 fn bob_spec_has_pattern_section() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
-    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+    Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-spec").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-spec")
+        .join("SKILL.md");
     let content = std::fs::read_to_string(&p).expect("read bob-spec");
 
     for token in &[
@@ -4326,7 +4616,11 @@ fn bob_spec_has_pattern_section() {
         "机检锚点",
         "角色映射",
     ] {
-        assert!(content.contains(token), "bob-spec must mention {} (§9.5)", token);
+        assert!(
+            content.contains(token),
+            "bob-spec must mention {} (§9.5)",
+            token
+        );
     }
 
     // 不破坏既有契约:/bob-compliance 仍 ≥3 次提及
@@ -4340,9 +4634,17 @@ fn bob_spec_has_pattern_section() {
 fn bob_spec_has_pattern_probe() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
-    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+    Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-spec").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-spec")
+        .join("SKILL.md");
     let content = std::fs::read_to_string(&p).expect("read bob-spec");
 
     for token in &[
@@ -4356,7 +4658,11 @@ fn bob_spec_has_pattern_probe() {
         "Template Method",
         "横切包裹",
     ] {
-        assert!(content.contains(token), "bob-spec must mention {} (Step S5)", token);
+        assert!(
+            content.contains(token),
+            "bob-spec must mention {} (Step S5)",
+            token
+        );
     }
 }
 
@@ -4364,18 +4670,30 @@ fn bob_spec_has_pattern_probe() {
 fn bob_compliance_loads_spec_patterns() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
-    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+    Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-compliance").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-compliance")
+        .join("SKILL.md");
     let content = std::fs::read_to_string(&p).expect("read bob-compliance");
 
     for token in &[
-        "空仓但有模式",      // Stage 0 carve-out
-        "docs/specs/spec-",  // Stage 2 第二类规则源
+        "空仓但有模式",     // Stage 0 carve-out
+        "docs/specs/spec-", // Stage 2 第二类规则源
         "## 9.5 涉及设计模式",
         "PAT-",
     ] {
-        assert!(content.contains(token), "bob-compliance must mention {} (load patterns)", token);
+        assert!(
+            content.contains(token),
+            "bob-compliance must mention {} (load patterns)",
+            token
+        );
     }
 }
 
@@ -4383,17 +4701,29 @@ fn bob_compliance_loads_spec_patterns() {
 fn bob_compliance_checks_pattern_conformance() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
-    Command::new(run_bob_bin()).args(["init", "--dir"]).arg(target).status().expect("init");
+    Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
 
-    let p = target.join(".claude").join("skills").join("bob-compliance").join("SKILL.md");
+    let p = target
+        .join(".claude")
+        .join("skills")
+        .join("bob-compliance")
+        .join("SKILL.md");
     let content = std::fs::read_to_string(&p).expect("read bob-compliance");
 
     for token in &[
-        "## 模式符合度",       // Stage 4 报告段
-        "收敛相关 spec",       // Stage 3.1 story→spec 收敛(Task 4 独有)
-        "三项全过记",          // Stage 3.2 PASS/FAIL 判定逻辑(Task 4 独有)
-        "PASS",               // 逐 PAT 判定
+        "## 模式符合度", // Stage 4 报告段
+        "收敛相关 spec", // Stage 3.1 story→spec 收敛(Task 4 独有)
+        "三项全过记",    // Stage 3.2 PASS/FAIL 判定逻辑(Task 4 独有)
+        "PASS",          // 逐 PAT 判定
     ] {
-        assert!(content.contains(token), "bob-compliance must mention {} (conformance)", token);
+        assert!(
+            content.contains(token),
+            "bob-compliance must mention {} (conformance)",
+            token
+        );
     }
 }

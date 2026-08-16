@@ -25,16 +25,20 @@ pub fn apply(target: &Path, skip: bool) -> Result<GitignoreReport> {
     }
     let path = target.join(".gitignore");
     let current: Option<String> = if path.is_file() {
-        Some(fs::read_to_string(&path)
-            .with_context(|| format!("Failed to read {}", path.display()))?)
+        Some(
+            fs::read_to_string(&path)
+                .with_context(|| format!("Failed to read {}", path.display()))?,
+        )
     } else {
         None
     };
-    let (new_content, report) =
-        compute_update(current.as_deref(), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
+    let (new_content, report) = compute_update(
+        current.as_deref(),
+        GITIGNORE_BLOCK_HEADER,
+        GITIGNORE_ENTRIES,
+    );
     if let Some(content) = new_content {
-        fs::write(&path, content)
-            .with_context(|| format!("Failed to write {}", path.display()))?;
+        fs::write(&path, content).with_context(|| format!("Failed to write {}", path.display()))?;
     }
     Ok(report)
 }
@@ -60,7 +64,12 @@ fn compute_update(
     match current {
         None => {
             let body = build_block(header, entries);
-            (Some(body), GitignoreReport::Created { entries: entries.len() })
+            (
+                Some(body),
+                GitignoreReport::Created {
+                    entries: entries.len(),
+                },
+            )
         }
         Some(existing) => {
             let lines: Vec<&str> = existing.split('\n').collect();
@@ -76,7 +85,12 @@ fn compute_update(
                         }
                     }
                     out.push_str(&build_block(header, entries));
-                    (Some(out), GitignoreReport::Updated { added: entries.len() })
+                    (
+                        Some(out),
+                        GitignoreReport::Updated {
+                            added: entries.len(),
+                        },
+                    )
                 }
                 Some(start) => {
                     // Find block end: first blank line, or foreign comment header,
@@ -112,15 +126,16 @@ fn compute_update(
                     }
 
                     // Case C: insert missing entries at `end`.
-                    let mut new_lines: Vec<String> =
-                        lines.iter().map(|s| s.to_string()).collect();
+                    let mut new_lines: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
                     for (offset, entry) in missing.iter().enumerate() {
                         new_lines.insert(end + offset, entry.to_string());
                     }
                     let out = new_lines.join("\n");
                     (
                         Some(out),
-                        GitignoreReport::Updated { added: missing.len() },
+                        GitignoreReport::Updated {
+                            added: missing.len(),
+                        },
                     )
                 }
             }
@@ -132,26 +147,38 @@ fn compute_update(
 pub fn print_report(report: &GitignoreReport) {
     match report {
         GitignoreReport::Skipped => {
-            println!("  {} {}", "→".bright_black(), "skipped: --no-gitignore".bright_black());
+            println!(
+                "  {} {}",
+                "→".bright_black(),
+                "skipped: --no-gitignore".bright_black()
+            );
         }
         GitignoreReport::Created { entries } => {
             println!(
-                "  {} {} ({})",
+                "  {} .gitignore ({})",
                 "+".green(),
-                ".gitignore",
-                format!("created, {} entr{}", entries, if *entries == 1 { "y" } else { "ies" }).green()
+                format!(
+                    "created, {} entr{}",
+                    entries,
+                    if *entries == 1 { "y" } else { "ies" }
+                )
+                .green()
             );
         }
         GitignoreReport::Updated { added } => {
             println!(
-                "  {} {} ({})",
+                "  {} .gitignore ({})",
                 "↑".yellow(),
-                ".gitignore",
-                format!("added {} entr{}", added, if *added == 1 { "y" } else { "ies" }).yellow()
+                format!(
+                    "added {} entr{}",
+                    added,
+                    if *added == 1 { "y" } else { "ies" }
+                )
+                .yellow()
             );
         }
         GitignoreReport::UpToDate => {
-            println!("  {} {} ({})", "✓".green(), ".gitignore", "up to date".dimmed());
+            println!("  {} .gitignore ({})", "✓".green(), "up to date".dimmed());
         }
     }
 }
@@ -162,11 +189,7 @@ mod tests {
 
     #[test]
     fn case_a_creates_when_missing() {
-        let (new_content, action) = compute_update(
-            None,
-            GITIGNORE_BLOCK_HEADER,
-            GITIGNORE_ENTRIES,
-        );
+        let (new_content, action) = compute_update(None, GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
         assert_eq!(
             new_content.as_deref(),
             Some("# run-bob\n.run-bob-backup/\n.bob/\n")
@@ -302,7 +325,10 @@ other/
         // We should append our own block; the user's `#run-bob` is foreign.
         let nc = new_content.expect("must write");
         assert!(nc.contains("#run-bob\n"), "must preserve user line");
-        assert!(nc.contains("# run-bob\n"), "must add canonical block header");
+        assert!(
+            nc.contains("# run-bob\n"),
+            "must add canonical block header"
+        );
         assert_eq!(action, GitignoreReport::Updated { added: 2 });
     }
 
@@ -331,7 +357,10 @@ other/
         let existing = "# run-bob\n.run-bob-backup/\n.bob/\nmy-local-cache/\n";
         let (new_content, action) =
             compute_update(Some(existing), GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES);
-        assert_eq!(new_content, None, "no write — all run-bob entries already present");
+        assert_eq!(
+            new_content, None,
+            "no write — all run-bob entries already present"
+        );
         assert_eq!(action, GitignoreReport::UpToDate);
     }
 }

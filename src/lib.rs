@@ -43,9 +43,8 @@ pub(crate) fn inspect_managed_path(
                 return Ok(ManagedPathState::Missing);
             }
             Err(error) => {
-                return Err(error).with_context(|| {
-                    format!("Failed to inspect managed path {relative}")
-                });
+                return Err(error)
+                    .with_context(|| format!("Failed to inspect managed path {relative}"));
             }
         };
 
@@ -67,10 +66,9 @@ pub(crate) fn inspect_managed_path(
         }
 
         match expected {
-            ExpectedPathKind::File if !metadata.is_file() => bail!(
-                "Managed path conflict at {}: expected a file",
-                relative
-            ),
+            ExpectedPathKind::File if !metadata.is_file() => {
+                bail!("Managed path conflict at {}: expected a file", relative)
+            }
             ExpectedPathKind::Directory if !metadata.is_dir() => bail!(
                 "Managed path conflict at {}: expected a directory",
                 relative

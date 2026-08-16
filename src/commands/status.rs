@@ -13,11 +13,7 @@ pub fn run(target_dir: &str) -> Result<()> {
         .with_context(|| format!("Failed to resolve target directory: {}", target_dir))?;
 
     println!();
-    println!(
-        "{} {}",
-        "📋".bold(),
-        "run-bob harness status".bold().cyan()
-    );
+    println!("{} {}", "📋".bold(), "run-bob harness status".bold().cyan());
     println!("  {} {}", "→ target:".dimmed(), target.display());
     println!();
 

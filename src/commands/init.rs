@@ -23,20 +23,38 @@ pub fn run(
     println!(
         "{} {}",
         "🛠 ".bold(),
-        "run-bob: installing Bob 4-ring Clean Architecture + Superpowers harness".bold().cyan()
+        "run-bob: installing Bob 4-ring Clean Architecture + Superpowers harness"
+            .bold()
+            .cyan()
     );
     println!("  {} {}", "→ target:".dimmed(), target.display());
     if force {
-        println!("  {} {}", "→ mode:".dimmed(), "--force (will overwrite)".yellow());
+        println!(
+            "  {} {}",
+            "→ mode:".dimmed(),
+            "--force (will overwrite)".yellow()
+        );
     }
     if minimal {
-        println!("  {} {}", "→ mode:".dimmed(), "--minimal (skills only)".yellow());
+        println!(
+            "  {} {}",
+            "→ mode:".dimmed(),
+            "--minimal (skills only)".yellow()
+        );
     }
     if with_java {
-        println!("  {} {}", "→ mode:".dimmed(), "--with-java (install Maven/ArchUnit skeleton)".yellow());
+        println!(
+            "  {} {}",
+            "→ mode:".dimmed(),
+            "--with-java (install Maven/ArchUnit skeleton)".yellow()
+        );
     }
     if no_gitignore {
-        println!("  {} {}", "→ mode:".dimmed(), "--no-gitignore (skip .gitignore)".yellow());
+        println!(
+            "  {} {}",
+            "→ mode:".dimmed(),
+            "--no-gitignore (skip .gitignore)".yellow()
+        );
     }
     println!();
 
@@ -109,15 +127,17 @@ fn install_asset(target: &Path, asset: &Asset, force: bool) -> Result<()> {
 /// Write a file, respecting the --force flag.
 fn write_file(path: &Path, content: &str, force: bool, display: &str) -> Result<()> {
     if path.exists() && !force {
-        crate::skip(&format!("{} already exists (use --force to overwrite)", display));
+        crate::skip(&format!(
+            "{} already exists (use --force to overwrite)",
+            display
+        ));
         return Ok(());
     }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("Failed to create parent dir for {}", path.display()))?;
     }
-    fs::write(path, content)
-        .with_context(|| format!("Failed to write {}", path.display()))?;
+    fs::write(path, content).with_context(|| format!("Failed to write {}", path.display()))?;
     crate::set_executable_if_shell(path)?;
     crate::success(display);
     Ok(())
@@ -172,7 +192,10 @@ fn print_next_steps(minimal: bool) {
     println!("       - ARCHITECTURE.md         (4-ring SSoT, starts empty)");
     println!("       - README-RUN-BOB.md       (how to use this harness)");
     println!();
-    println!("  2. {} open Claude Code or Codex in this directory.", "Launch".cyan());
+    println!(
+        "  2. {} open Claude Code or Codex in this directory.",
+        "Launch".cyan()
+    );
     println!();
     println!(
         "  3. {} start the workflow (survey is optional; model and downstream are mandatory):",
