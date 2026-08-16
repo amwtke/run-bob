@@ -24,6 +24,8 @@ fn bootstrap_rust_powershell_has_safe_equivalent_contract() {
         "[version]",
         "Get-RunBobCommandPath",
         "Get-RunBobCargoHomeTools",
+        "Test-RunBobCargoHomeRustupProxies",
+        "Get-FileHash",
         "$env:CARGO_HOME",
         "$env:USERPROFILE",
         "bin\\rustc.exe",
@@ -63,6 +65,10 @@ fn bootstrap_rust_powershell_has_safe_equivalent_contract() {
     assert!(
         !lowered.contains("$env:path"),
         "PowerShell bootstrap must not read or mutate the process PATH through environment state"
+    );
+    assert!(
+        script.ends_with("    exit 0\n}\n"),
+        "PowerShell entry point must explicitly reset the process exit status after success"
     );
 
     assert!(
@@ -367,6 +373,54 @@ printf '\n' >> "$RUN_BOB_TEST_LOG""#
             "rustup",
             &rustup_mock_body(rustc_version, cargo_version, which_rustc),
         );
+    }
+
+    fn cargo_home_empty_rustup_proxies(&self, rustc_version: &str, cargo_version: &str) {
+        let bin = self.cargo_home.join("bin");
+        fs::create_dir_all(&bin).expect("create cargo-home bin");
+        let rustup = bin.join("rustup");
+        let installed = self.root.join("empty-rustup-installed");
+        let rustup_compiler = self.root.join("toolchains/stable/bin/rustc");
+        let body = format!(
+            r#"printf 'rustup' >> "$RUN_BOB_TEST_LOG"
+for arg in "$@"; do printf ' <%s>' "$arg" >> "$RUN_BOB_TEST_LOG"; done
+printf '\n' >> "$RUN_BOB_TEST_LOG"
+if [ "$#" -eq 5 ] && [ "$1" = "toolchain" ] && [ "$2" = "install" ] && [ "$3" = "stable" ] && [ "$4" = "--profile" ] && [ "$5" = "minimal" ]; then
+  : > '{installed}'
+  exit 0
+fi
+if [ "$#" -eq 2 ] && [ "$1" = "which" ] && [ "$2" = "rustc" ]; then
+  [ -f '{installed}' ] || exit 1
+  printf '%s\n' '{rustup_compiler}'
+  exit 0
+fi
+[ -f '{installed}' ] || exit 1
+if [ "$#" -eq 4 ] && [ "$1" = "run" ] && [ "$2" = "stable" ] && [ "$3" = "rustc" ] && [ "$4" = "--version" ]; then
+  printf '%s\n' 'rustc {rustc_version} (mock)'
+  exit 0
+fi
+if [ "$#" -eq 4 ] && [ "$1" = "run" ] && [ "$2" = "stable" ] && [ "$3" = "cargo" ] && [ "$4" = "--version" ]; then
+  printf '%s\n' 'cargo {cargo_version} (mock)'
+  exit 0
+fi
+if [ "$#" -ge 3 ] && [ "$1" = "run" ] && [ "$2" = "stable" ] && [ "$3" = "cargo" ]; then
+  exit 0
+fi
+exit 94"#,
+            installed = installed.display(),
+            rustup_compiler = rustup_compiler.display(),
+        );
+        let script = format!(
+            "#!/bin/sh\nset -eu\ncase ${{0##*/}} in\n  rustc|cargo) exit 1 ;;\nesac\n{body}\n"
+        );
+        fs::write(&rustup, script).expect("write rustup proxy mock");
+        let mut permissions = fs::metadata(&rustup)
+            .expect("rustup proxy metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&rustup, permissions).expect("make rustup proxy executable");
+        fs::hard_link(&rustup, bin.join("rustc")).expect("link rustc proxy to rustup");
+        fs::hard_link(&rustup, bin.join("cargo")).expect("link cargo proxy to rustup");
     }
 
     fn download_curl(&self, installer_body: &str) {
@@ -830,6 +884,51 @@ fn bootstrap_rust_posix_uses_cargo_home_rustup_without_official_download() {
             "rustup <run> <stable> <cargo> <--version>\n"
         )
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn bootstrap_rust_posix_repairs_empty_cargo_home_rustup_toolchain() {
+    let sandbox = Sandbox::new();
+    sandbox.cargo_home_empty_rustup_proxies("1.80.0", "1.80.0");
+    sandbox.fail_curl();
+
+    let output = sandbox.run(&["--run-cargo", "check", "--locked"]);
+
+    assert!(output.status.success(), "{}", stdout_stderr(&output));
+    assert_eq!(
+        sandbox.log(),
+        concat!(
+            "rustup <toolchain> <install> <stable> <--profile> <minimal>\n",
+            "rustup <run> <stable> <rustc> <--version>\n",
+            "rustup <run> <stable> <cargo> <--version>\n",
+            "rustup <run> <stable> <cargo> <check> <--locked>\n"
+        )
+    );
+    assert!(!sandbox.log().contains("curl"));
+}
+
+#[cfg(unix)]
+#[test]
+fn bootstrap_rust_posix_rejects_broken_non_rustup_cargo_home_pair() {
+    let sandbox = Sandbox::new();
+    sandbox.cargo_home_mock("rustc", "exit 1");
+    sandbox.cargo_home_mock("cargo", "exit 1");
+    let stable_sysroot = sandbox.root.join("toolchains/stable");
+    fs::create_dir_all(stable_sysroot.join("bin")).expect("create stable mock sysroot");
+    sandbox.cargo_home_rustup("1.80.0", Some("1.80.0"), &stable_sysroot.join("bin/rustc"));
+    sandbox.fail_curl();
+
+    let output = sandbox.run(&[]);
+    let diagnostics = stdout_stderr(&output);
+
+    assert!(!output.status.success(), "{diagnostics}");
+    assert!(
+        diagnostics.contains("could not read a complete rustc semantic version"),
+        "{diagnostics}"
+    );
+    assert!(!sandbox.log().contains("toolchain"));
+    assert!(!sandbox.log().contains("curl"));
 }
 
 #[cfg(unix)]

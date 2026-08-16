@@ -244,6 +244,44 @@ function Test-RunBobActiveCompilerRustupOwned {
     return [string]::Equals($activeFullPath, $rustupSysroot, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+function Test-RunBobCargoHomeRustupProxies {
+    param(
+        [Parameter(Mandatory)][string] $RustcPath,
+        [Parameter(Mandatory)][string] $CargoPath,
+        [Parameter(Mandatory)][string] $RustupPath,
+        [Parameter(Mandatory)] $CargoHomeTools
+    )
+
+    if (-not $CargoHomeTools.RustcPath -or -not $CargoHomeTools.CargoPath -or
+        -not $CargoHomeTools.RustupPath) {
+        return $false
+    }
+    $comparison = [System.StringComparison]::OrdinalIgnoreCase
+    $selectedPaths = @($RustcPath, $CargoPath, $RustupPath)
+    $cargoHomePaths = @(
+        $CargoHomeTools.RustcPath,
+        $CargoHomeTools.CargoPath,
+        $CargoHomeTools.RustupPath
+    )
+    for ($index = 0; $index -lt $selectedPaths.Count; $index++) {
+        $selected = [System.IO.Path]::GetFullPath($selectedPaths[$index])
+        $cargoHomeTool = [System.IO.Path]::GetFullPath($cargoHomePaths[$index])
+        if (-not [string]::Equals($selected, $cargoHomeTool, $comparison)) {
+            return $false
+        }
+    }
+
+    try {
+        $rustcHash = (Get-FileHash -LiteralPath $RustcPath -Algorithm SHA256).Hash
+        $cargoHash = (Get-FileHash -LiteralPath $CargoPath -Algorithm SHA256).Hash
+        $rustupHash = (Get-FileHash -LiteralPath $RustupPath -Algorithm SHA256).Hash
+    }
+    catch {
+        return $false
+    }
+    return $rustcHash -eq $rustupHash -and $cargoHash -eq $rustupHash
+}
+
 function Install-RunBobRustupStable {
     param([Parameter(Mandatory)][string] $RustupPath)
 
@@ -389,9 +427,36 @@ function Invoke-RunBobBootstrap {
     $mode = $null
 
     if ($rustcPath -and $cargoPath) {
-        $rustcVersion = Get-RunBobToolVersion -ToolPath $rustcPath -ToolName rustc
-        $cargoVersion = Get-RunBobToolVersion -ToolPath $cargoPath -ToolName cargo
-        if ((Test-RunBobVersionAtLeast -Actual $rustcVersion -Required $requiredVersion) -and
+        $rustcVersion = $null
+        $cargoVersion = $null
+        $rustcVersionError = $null
+        $cargoVersionError = $null
+        try {
+            $rustcVersion = Get-RunBobToolVersion -ToolPath $rustcPath -ToolName rustc
+        }
+        catch {
+            $rustcVersionError = $_.Exception.Message
+        }
+        try {
+            $cargoVersion = Get-RunBobToolVersion -ToolPath $cargoPath -ToolName cargo
+        }
+        catch {
+            $cargoVersionError = $_.Exception.Message
+        }
+
+        if ($null -eq $rustcVersion -and $null -eq $cargoVersion -and $rustupPath -and
+            (Test-RunBobCargoHomeRustupProxies -RustcPath $rustcPath -CargoPath $cargoPath `
+                -RustupPath $rustupPath -CargoHomeTools $cargoHomeTools)) {
+            Install-RunBobRustupStable -RustupPath $rustupPath
+            $mode = 'rustup'
+        }
+        elseif ($null -eq $rustcVersion) {
+            throw $rustcVersionError
+        }
+        elseif ($null -eq $cargoVersion) {
+            throw $cargoVersionError
+        }
+        elseif ((Test-RunBobVersionAtLeast -Actual $rustcVersion -Required $requiredVersion) -and
             (Test-RunBobVersionAtLeast -Actual $cargoVersion -Required $requiredVersion)) {
             $mode = 'direct'
         }
@@ -456,4 +521,5 @@ if ($MyInvocation.InvocationName -ne '.') {
         [Console]::Error.WriteLine("error: $($_.Exception.Message)")
         exit 1
     }
+    exit 0
 }

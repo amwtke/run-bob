@@ -158,6 +158,17 @@ active_compiler_is_rustup_owned() {
     [ "$active_sysroot" = "$rustup_sysroot" ]
 }
 
+cargo_home_pair_is_rustup_proxies() {
+    [ -n "$cargo_home" ] && [ -n "$rustup_path" ] || return 1
+    [ -f "$cargo_home/bin/rustc" ] && [ -f "$cargo_home/bin/cargo" ] &&
+        [ -f "$cargo_home/bin/rustup" ] || return 1
+    [ "$rustc_path" -ef "$cargo_home/bin/rustc" ] &&
+        [ "$cargo_path" -ef "$cargo_home/bin/cargo" ] &&
+        [ "$rustup_path" -ef "$cargo_home/bin/rustup" ] &&
+        [ "$rustc_path" -ef "$rustup_path" ] &&
+        [ "$cargo_path" -ef "$rustup_path" ]
+}
+
 select_rustup_stable() {
     "$rustup_path" toolchain install stable --profile minimal ||
         fail "rustup could not install the stable toolchain with the minimal profile"
@@ -319,9 +330,24 @@ fi
 selected_mode=
 
 if [ -n "$rustc_path" ] && [ -n "$cargo_path" ]; then
-    rustc_version=$(tool_version "$rustc_path" rustc) || fail "could not read a complete rustc semantic version"
-    cargo_version=$(tool_version "$cargo_path" cargo) || fail "could not read a complete cargo semantic version"
-    if version_at_least "$rustc_version" "$required_version" &&
+    rustc_version=
+    cargo_version=
+    rustc_version_valid=false
+    cargo_version_valid=false
+    if rustc_version=$(tool_version "$rustc_path" rustc); then
+        rustc_version_valid=true
+    fi
+    if cargo_version=$(tool_version "$cargo_path" cargo); then
+        cargo_version_valid=true
+    fi
+    if [ "$rustc_version_valid" = false ] && [ "$cargo_version_valid" = false ] &&
+        cargo_home_pair_is_rustup_proxies; then
+        select_rustup_stable
+    elif [ "$rustc_version_valid" = false ]; then
+        fail "could not read a complete rustc semantic version"
+    elif [ "$cargo_version_valid" = false ]; then
+        fail "could not read a complete cargo semantic version"
+    elif version_at_least "$rustc_version" "$required_version" &&
         version_at_least "$cargo_version" "$required_version"; then
         selected_mode=direct
     else

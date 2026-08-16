@@ -524,6 +524,62 @@ rust-version = "1.75"
             Should -Invoke Invoke-WebRequest -Times 0 -Exactly
         }
 
+        It 'repairs an empty Cargo-home rustup toolchain through its matching proxies' {
+            $tools = New-TestCargoHomeTools -CargoHome $env:CARGO_HOME -Rustc -Cargo -Rustup
+            Mock Get-RunBobCommandPath { $null }
+            Mock Invoke-RunBobExternalProcess {
+                [void] $script:processCalls.Add([pscustomobject]@{
+                    FilePath = $FilePath
+                    ArgumentList = @($ArgumentList)
+                })
+                $joined = $ArgumentList -join ' '
+                if ($joined -eq '--version') {
+                    return New-TestProcessResult -ExitCode 1 -StdErr 'no default toolchain configured'
+                }
+                if ($joined -eq '--print sysroot' -or $joined -eq 'which rustc') {
+                    return New-TestProcessResult -ExitCode 1 -StdErr 'no active toolchain'
+                }
+                if ($joined -eq 'run stable rustc --version') {
+                    return New-TestProcessResult -StdOut 'rustc 1.80.0 (mock)'
+                }
+                if ($joined -eq 'run stable cargo --version') {
+                    return New-TestProcessResult -StdOut 'cargo 1.80.0 (mock)'
+                }
+                return New-TestProcessResult
+            }
+
+            Invoke-RunBobBootstrap -ManifestPath $script:manifestPath `
+                -RunCargoSpecified -RunCargo @('check', '--locked')
+
+            @($script:processCalls | Where-Object {
+                $_.FilePath -eq $tools.Rustup -and
+                ($_.ArgumentList -join ' ') -eq 'toolchain install stable --profile minimal'
+            }).Count | Should -Be 1
+            @($script:processCalls | Where-Object {
+                $_.FilePath -eq $tools.Rustup -and
+                ($_.ArgumentList -join ' ') -eq 'run stable cargo check --locked'
+            }).Count | Should -Be 1
+            Should -Invoke Invoke-WebRequest -Times 0 -Exactly
+        }
+
+        It 'rejects a broken Cargo-home pair that does not match its rustup executable' {
+            $tools = New-TestCargoHomeTools -CargoHome $env:CARGO_HOME -Rustc -Cargo -Rustup
+            Set-Content -LiteralPath $tools.Rustc -Value 'unrelated rustc executable'
+            Set-Content -LiteralPath $tools.Cargo -Value 'unrelated cargo executable'
+            Set-Content -LiteralPath $tools.Rustup -Value 'rustup executable'
+            Mock Get-RunBobCommandPath { $null }
+            Mock Invoke-RunBobExternalProcess {
+                return New-TestProcessResult -ExitCode 1 -StdErr 'broken tool'
+            }
+
+            { Invoke-RunBobBootstrap -ManifestPath $script:manifestPath } |
+                Should -Throw '*rustc unavailable*broken tool*'
+            Should -Invoke Invoke-RunBobExternalProcess -ParameterFilter {
+                $ArgumentList -contains 'toolchain'
+            } -Times 0 -Exactly
+            Should -Invoke Invoke-WebRequest -Times 0 -Exactly
+        }
+
         It 'reuses files from a first official install on the second invocation' {
             Mock Get-RunBobCommandPath { $null }
             Mock Get-RunBobArchitecture { 'X64' }
@@ -752,5 +808,37 @@ rust-version = "1.75"
                 $_.ArgumentList -contains 'toolchain'
             }).Count | Should -Be 0
         }
+    }
+}
+
+Describe 'bootstrap-rust.ps1 process exit boundary' -Skip:(-not $IsWindows) {
+    It 'returns zero after success even when the caller starts with a nonzero LASTEXITCODE' {
+        $entryScript = (Resolve-Path (Join-Path $PSScriptRoot '..\scripts\bootstrap-rust.ps1')).ProviderPath
+        $shell = (Get-Process -Id $PID).Path
+        $isolatedCargoHome = Join-Path $TestDrive 'isolated process cargo home'
+        $isolatedBin = Join-Path $isolatedCargoHome 'bin'
+        New-Item -ItemType Directory -Path $isolatedBin -Force | Out-Null
+        foreach ($toolName in @('rustc', 'cargo')) {
+            $tool = Get-Command -Name $toolName -CommandType Application -ErrorAction Stop |
+                Select-Object -First 1
+            Copy-Item -LiteralPath $tool.Source -Destination (Join-Path $isolatedBin "$toolName.exe")
+        }
+        $quotedCargoHome = $isolatedCargoHome.Replace("'", "''")
+        $quotedBin = $isolatedBin.Replace("'", "''")
+        $quotedEntryScript = $entryScript.Replace("'", "''")
+        $wrapperPath = Join-Path $TestDrive 'exit-boundary.ps1'
+        @"
+`$env:CARGO_HOME = '$quotedCargoHome'
+`$env:Path = '$quotedBin;' + `$env:SystemRoot + '\System32;' + `$env:SystemRoot
+& cmd.exe /c exit 23
+& '$quotedEntryScript'
+exit `$LASTEXITCODE
+"@ | Set-Content -LiteralPath $wrapperPath
+
+        $process = Start-Process -FilePath $shell -ArgumentList @(
+            '-NoLogo', '-NoProfile', '-NonInteractive', '-File', $wrapperPath
+        ) -Wait -PassThru -NoNewWindow
+
+        $process.ExitCode | Should -Be 0
     }
 }
