@@ -1,14 +1,9 @@
 ---
 name: visual-md
 description: |
-  Trigger: `/visual-md <md-path>` (modify mode — read source md, generate new md)
-  or `/visual-md "<prompt>"` (generate mode — draft new md from prompt).
-  Iteratively edits markdown via an interactive html canvas with widgets at every
-  editable block (doc / heading / block / sub-block scopes). Multi-round WebSocket
-  loop until user types `/export`, `导出`, `done`, or `ok 收口`.
-  Original md is NEVER modified; always emits a new file.
-
-  Also fires on: "用 visual-md 改这份 md"、"vmd 这个文档"、"启动 visual-md"。
+  Use when the user asks “用 visual-md 改这份 md”“vmd 这个文档” or wants an interactive Markdown canvas. Claude Code invokes `/visual-md 参数`;
+  Codex invokes `$visual-md 参数` with identical semantics, using a Markdown path for modify mode or a quoted prompt for generate mode.
+  This standalone auxiliary skill iteratively edits Markdown through an HTML canvas with block-level widgets and a multi-round WebSocket feedback loop. It ends on `/export`, `导出`, `done`, or `ok 收口`, never modifies the original Markdown, and always emits a new file as its primary output.
 ---
 
 # visual-md Skill
@@ -20,6 +15,21 @@ description: |
 /visual-md "<prompt>"                # generate mode
 /visual-md <arg> --out <new-path>    # explicit output path
 ```
+
+Codex:
+
+```
+$visual-md [文档路径]                # modify mode
+$visual-md "[prompt]"                # generate mode
+$visual-md [参数] --out [new-path]   # explicit output path
+```
+
+## 双宿主调用约定
+
+- Claude Code 使用 `/visual-md`；Codex 使用 `$visual-md`，参数语义完全相同。
+- 本文保留 slash 形式以保护 Claude Code 兼容性。
+- 向用户给出下一步命令时，使用当前宿主的调用形式。
+- 不从一个宿主的 skill 根回退到另一个宿主。
 
 ## Mode detection
 
@@ -164,4 +174,3 @@ Every round MUST print absolute paths in a list/table:
 - After export: md(new, absolute) + source(absolute, MODIFY only)
 
 NO bury-in-prose, NO relative paths, every round both `url` + `html`.
-

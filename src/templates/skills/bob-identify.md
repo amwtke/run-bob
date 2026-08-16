@@ -1,21 +1,9 @@
 ---
 name: bob-identify
 description: |
-  触发条件:用户输入 /bob-identify <业务描述>(模式 G:绿地新项目),
-  或 /bob-identify --refactor [path](模式 B1:对已有 α/β 代码做全量身份测试),
-  或 /bob-identify <新功能描述>(模式 B2:已有 src/main/java + 描述新功能 = auto-detect 棕地增量)。
-
-  对给定的业务描述 / 已有代码 / 新功能,跑一遍 5 问决策树
-  (Q1 业务意义会变? Q2 有副作用? Q3 翻译者还是编排者?
-   Q4 出现在 inner 包? Q5 棕地 legacy 复用?),
-  把每一个候选概念 / 类 / import / 注解分类为 CORE / ADAPTER /
-  FRAMEWORK / TOOL / 违规,产出一份结构化分析文档作为
-  /bob-onion 的输入。
-
-  适用于 Bob 4 环 Clean Architecture 的第一阶段:从模糊业务描述
-  / 已有代码 / 新功能描述里提取核心 vs 配件骨架。
-  当用户说"做身份测试"、"区分核心和配件"、"这段代码哪些是核心
-  哪些是框架"、"这个功能里什么是 Entity"时也应触发此技能。
+  当用户说“做身份测试”“区分核心和配件”或要从业务与代码提取架构骨架时使用。Claude Code 调用 `/bob-identify 参数`，
+  Codex 调用 `$bob-identify 参数`，参数语义相同；支持业务描述、`--refactor [path]` 与新功能描述三种入口。
+  这是 Bob 4 环 Clean Architecture 的第一阶段：用 5 问决策树把候选概念、类、import 与注解分类为 CORE、ADAPTER、FRAMEWORK、TOOL 或违规，产出结构化身份分析文档，供 `/bob-onion` 继续设计。
 ---
 
 # Bob Identity Test Skill
@@ -29,6 +17,21 @@ description: |
 ```
 
 或自然语言触发:"做身份测试"、"区分核心和配件"、"这段代码哪些是核心哪些是框架"、"这个功能里什么是 Entity"。
+
+Codex:
+
+```
+$bob-identify [业务描述]           # 模式 G:绿地新项目
+$bob-identify --refactor [path]    # 模式 B1:对已有 α/β 代码做全量身份测试
+$bob-identify [新功能描述]         # 模式 B2:auto-detect(已有 src/main/java + 描述新功能)
+```
+
+## 双宿主调用约定
+
+- Claude Code 使用 `/bob-identify`；Codex 使用 `$bob-identify`，参数语义完全相同。
+- 本文保留 slash 形式以保护 Claude Code 兼容性。
+- 向用户给出下一步命令时，使用当前宿主的调用形式。
+- 不从一个宿主的 skill 根回退到另一个宿主。
 
 ## 先检查 /bob-survey (soft 前置)
 

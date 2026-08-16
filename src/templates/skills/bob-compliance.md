@@ -1,21 +1,9 @@
 ---
 name: bob-compliance
 description: |
-  触发条件:用户输入 /bob-compliance(主入口:对当前 story diff 做合规校验),
-  或 /bob-compliance --story <story-path>(指定 story 范围),
-  或 /bob-compliance --refresh(强制重新生成 sources/ 下的结构化 md),
-  或 /bob-compliance --all-branch(忽略 story 划分,校验整个分支 diff)。
-
-  在 docs/compliance/sources/ 下放规约原始文件(PDF / docx / md / txt)之后,
-  本技能(1)动态生成结构化规则 markdown(带规则 ID + 强制档位),(2)在
-  Superpowers TDD 完成 + UT 跑绿之后,对当前 story 的 diff 跑合规校验,
-  产物落 docs/bob/05-compliance-<story>.md。
-
-  适用于 Bob 4 环 Clean Architecture 工作流的 phase 3:per-story 实施完后
-  的代码合规 review。结构对称 phase 2 的 /bob-nfr。
-
-  当用户说"跑合规"、"代码 review 一下"、"过一遍阿里规约"、"检查命名 / 异常 / 安全"
-  时也应触发此技能。
+  当用户说“跑合规”“代码 review 一下”或要检查命名、异常与安全规则时使用。Claude Code 调用 `/bob-compliance 参数`，
+  Codex 调用 `$bob-compliance 参数`，参数语义相同；支持当前 diff、`--story [story 路径]`、`--refresh` 与 `--all-branch`。
+  这是 Bob 4 环工作流的 phase 3，在 Superpowers TDD 和单元测试完成后，把 docs/compliance/sources/ 中的规约整理为带 ID 与强制档位的结构化规则，并校验当前 story 或分支 diff。主要产出 docs/bob/05-compliance-[story].md 合规报告与建议修复 story；不写业务代码、不出新 spec。
 ---
 
 # Bob Compliance Skill
@@ -30,6 +18,22 @@ description: |
 ```
 
 或自然语言触发:"跑合规"、"代码 review 一下"、"过一遍阿里规约"、"检查命名 / 异常 / 安全"。
+
+Codex:
+
+```
+$bob-compliance                       # 主入口:校验当前 story 的 diff
+$bob-compliance --story [story 路径] # 指定 story 范围
+$bob-compliance --refresh             # 强制重新生成 sources/ 下的结构化 md
+$bob-compliance --all-branch          # 忽略 story 划分,校验整个分支 diff
+```
+
+## 双宿主调用约定
+
+- Claude Code 使用 `/bob-compliance`；Codex 使用 `$bob-compliance`，参数语义完全相同。
+- 本文保留 slash 形式以保护 Claude Code 兼容性。
+- 向用户给出下一步命令时，使用当前宿主的调用形式。
+- 不从一个宿主的 skill 根回退到另一个宿主。
 
 ## 前置条件
 

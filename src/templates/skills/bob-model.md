@@ -1,27 +1,11 @@
 ---
 name: bob-model
 description: |
-  触发条件:用户输入 /bob-model <doc-path>(主入口:把一份需求文档建模成结构化领域快照),
-  或 /bob-model --story <story-path>(退路:已有 stories 时反向补建模),
-  或 /bob-model --refresh(强制重写已有模型,即使源文档未变化)。
-
-  在 /bob-survey 之后、/bob-stories 之前运行。**/bob-model 是 bob-* 链路的强制阶段**:
-  与 /bob-survey(可跳过)不同,不论需求难度 Easy / Medium / Hard,只要决定接需求,
-  就必须跑 /bob-model;"极小需求"可走 Stage 0 短路分支,但仍产出占位 md。
-  不存在"AC 看起来清晰所以跳过 model"或"端口数少于 N 就不跑 model"之类的阈值短路。
-
-  读 PM 风格的散文需求文档(.md / .pdf / .docx / .txt)。**核心工作 = 识别聚合根(Aggregate Roots)**:
-  Stage 1.2 先在**终端纯文本**多轮反馈确认聚合根边界,**用户 confirm 后才进入 html**。
-  然后基于已确认聚合根展开:1) 按聚合根分组的术语 + Entity 一体(HTML 默认合并),
-  2) 业务规则清单(BR-NNN,跨 story 共享),3) UseCase 初步清单,4) 开放问题。
-  关系标注 inline 在各聚合根块内(1:1 / 1:N / 包含 vs 引用);**每个聚合根块强制内嵌一张 Mermaid `classDiagram` 类图**(实体 + 值对象 + 字段一图看完);顶部 overview classDiagram 仅作鸟瞰(聚合根 ≥ 3 时可选)。
-  产出交互式 docs/bob/03-model-<slug>-<date>.html(Stage 2-3.5 review canvas,带 widget + WebSocket 反馈)
-  + Stage 4 推进时从最终 html 状态 dump 出 docs/bob/03-model-<slug>-<date>.md(SSoT)。
-
-  适用于 Bob 4 环 Clean Architecture 工作流的领域建模 phase。结构上对称
-  phase 2 (/bob-nfr) 和 phase 3 (/bob-compliance),都用 5 stage + 三段式。
-
-  当用户说"建个模"、"做下领域建模"、"统一下术语"、"抽取业务规则"时也应触发此技能。
+  当用户说“建个模”“做领域建模”“统一术语”或“抽取业务规则”时使用。Claude Code 调用 `/bob-model 参数`，
+  Codex 调用 `$bob-model 参数`，参数语义相同；支持需求文档路径、`--story [story 路径]` 与 `--refresh`。
+  这是 Bob 4 环工作流在 survey 之后、stories 之前的领域建模阶段，也是整个 bob-* 链路的强制阶段；survey 可以跳过，但任何 Easy、Medium 或 Hard 需求只要决定实施就必须先完成 model。极小需求可走 Stage 0 短路，却仍须产出占位模型，不允许因 AC 清晰或端口少而跳过。
+  技能读取 md、pdf、docx 或 txt 需求，核心是识别聚合根。Stage 1.2 先在终端纯文本中多轮确认边界，用户确认后才进入 HTML；随后按聚合根整理术语与 Entity、BR-NNN 业务规则、UseCase 初步清单和开放问题，并在每个聚合根块内嵌 Mermaid classDiagram。
+  主要输出是 docs/bob/03-model-[slug]-[date].html review canvas，以及 Stage 4 导出的 docs/bob/03-model-[slug]-[date].md 领域模型 SSoT，供下游共享；结构与 phase 2 `/bob-nfr`、phase 3 `/bob-compliance` 对称。
 ---
 
 # Bob Model Skill
@@ -35,6 +19,21 @@ description: |
 ```
 
 或自然语言触发:"建个模"、"做下领域建模"、"统一下术语"、"抽取业务规则"。
+
+Codex:
+
+```
+$bob-model [文档路径]          # 主入口:对源需求文档建模
+$bob-model --story [story 路径] # 退路:已有 stories 时反向建模
+$bob-model --refresh           # 强制重写,即使源文档未变化
+```
+
+## 双宿主调用约定
+
+- Claude Code 使用 `/bob-model`；Codex 使用 `$bob-model`，参数语义完全相同。
+- 本文保留 slash 形式以保护 Claude Code 兼容性。
+- 向用户给出下一步命令时，使用当前宿主的调用形式。
+- 不从一个宿主的 skill 根回退到另一个宿主。
 
 ## 前置条件
 

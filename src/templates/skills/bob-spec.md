@@ -1,20 +1,9 @@
 ---
 name: bob-spec
 description: |
-  触发条件:用户输入 /bob-spec <用例名>(默认命令型),
-  或 /bob-spec --query <查询名>(查询型读模型),
-  或 /bob-spec --refactor <类名>(B1 重构型 spec)。
-
-  读取项目根目录的 ARCHITECTURE.md,为指定用例生成一份 Superpowers
-  可直接消化的 spec 文档:严格使用 ARCHITECTURE.md §3 §4 §5 中的术语
-  (Entity / 端口 / UseCase),包含用例描述、前置/后置条件、业务规则、
-  Given-When-Then 测试场景、纯 POJO usecase + framework Config 接口约定、
-  Guardrails(给 Superpowers 实现时遵守)、和"交给 Superpowers 的开放问题"
-  (技术栈决策)。
-
-  这个 skill 是 Bob 4 环建模阶段与 Superpowers 实现阶段的桥梁。
-  当用户说"生成 spec"、"出 TDD 测试场景"、"准备给 Superpowers 的输入"、
-  "把这个用例写清楚"时也应触发此技能。
+  当用户说“生成 spec”“出 TDD 测试场景”或“准备给 Superpowers 的输入”时使用。Claude Code 调用 `/bob-spec 参数`，
+  Codex 调用 `$bob-spec 参数`，参数语义相同；支持用例名、`--query [查询名]` 与 `--refactor [类名]`。
+  这是 Bob 4 环建模阶段与 Superpowers 实现阶段的桥梁：读取 ARCHITECTURE.md 的 Entity、端口和 UseCase 术语，产出包含业务规则、Given-When-Then、纯 POJO usecase、framework Config、Guardrails 与开放问题的 spec 文档，供后续 TDD 实施。
 ---
 
 # Bob 4-Ring → Superpowers Spec Bridge Skill
@@ -28,6 +17,21 @@ description: |
 ```
 
 或自然语言触发:"生成 spec"、"出 TDD 测试场景"、"准备给 Superpowers 的输入"、"把这个用例写清楚"。
+
+Codex:
+
+```
+$bob-spec [用例名]                  # 默认:命令型
+$bob-spec --query [查询名]          # 查询型(读模型)
+$bob-spec --refactor [类名]         # B1 重构型
+```
+
+## 双宿主调用约定
+
+- Claude Code 使用 `/bob-spec`；Codex 使用 `$bob-spec`，参数语义完全相同。
+- 本文保留 slash 形式以保护 Claude Code 兼容性。
+- 向用户给出下一步命令时，使用当前宿主的调用形式。
+- 不从一个宿主的 skill 根回退到另一个宿主。
 
 ## 前置条件
 

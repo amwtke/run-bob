@@ -1,19 +1,9 @@
 ---
 name: bob-nfr
 description: |
-  触发条件:用户输入 /bob-nfr <spec-path>(主入口:对一个用例 spec 跑 NFR review),
-  或 /bob-nfr --story <story-path>(退路:spec 未写时,从 story 拉上下文),
-  或 /bob-nfr --refresh(已有 04-nfr-*.md 时强制重跑)。
-
-  在某个用例 spec 写完 + Superpowers TDD 实施完 + UT 完备**之后**,
-  可选地跑一遍由浅入深的 NFR review。采用 NFR-Cards 的 13 张卡片
-  作为提问骨架,LLM 按 per-story 上下文从中筛选相关卡片(5-8 张),
-  逐张三段式追问到量化答案;不接受"系统要快"这种空话,但允许
-  "待定 · 需压测后给"。产出 docs/bob/04-nfr-<spec-slug>-<date>.md。
-
-  适用于 Bob 4 环 Clean Architecture 工作流的 phase 2:per-story
-  实施完后的技术质量 review。当用户说"跑 NFR"、"质量 review 一下"、
-  "过一遍 13 张卡"、"看看有没有遗漏的 NFR"时也应触发此技能。
+  当用户说“跑 NFR”“质量 review 一下”或“看看有没有遗漏的非功能需求”时使用。Claude Code 调用 `/bob-nfr 参数`，
+  Codex 调用 `$bob-nfr 参数`，参数语义相同；支持 spec 文档路径、`--story [story 路径]` 与 `--refresh`。
+  这是 Bob 4 环工作流可选的 phase 2，在单个用例完成 spec、Superpowers TDD 与单元测试后，以 NFR-Cards 13 张卡为骨架筛选并量化相关质量要求。主要产出 docs/bob/04-nfr-[spec-slug]-[date].md，记录决策与建议新增 story；不写代码、不出新 spec。
 ---
 
 # Bob NFR Review Skill
@@ -27,6 +17,21 @@ description: |
 ```
 
 或自然语言触发:"跑 NFR"、"质量 review 一下"、"过一遍 13 张卡"、"看看有没有遗漏的 NFR"。
+
+Codex:
+
+```
+$bob-nfr [spec 文档路径]          # 主入口:跑这个 spec 的 NFR review
+$bob-nfr --story [story 路径]     # 退路:spec 未写时,从 story 拉上下文
+$bob-nfr --refresh                # 已有 04-nfr-*.md 时强制重跑
+```
+
+## 双宿主调用约定
+
+- Claude Code 使用 `/bob-nfr`；Codex 使用 `$bob-nfr`，参数语义完全相同。
+- 本文保留 slash 形式以保护 Claude Code 兼容性。
+- 向用户给出下一步命令时，使用当前宿主的调用形式。
+- 不从一个宿主的 skill 根回退到另一个宿主。
 
 ## 前置条件
 

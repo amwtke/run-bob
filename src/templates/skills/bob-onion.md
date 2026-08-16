@@ -1,18 +1,9 @@
 ---
 name: bob-onion
 description: |
-  触发条件:用户输入 /bob-onion(默认读最新 docs/bob/01-identity-*.md),
-  或 /bob-onion --identity <path> 指定 identity 文档,
-  或 /bob-onion --refresh 跳过 identity 直接基于现有 ARCHITECTURE.md 增补。
-
-  基于 /bob-identify 的输出,产出正式的 Bob 4 环架构设计:划出 4 环包结构、
-  列端口清单、提取 Entity 状态机、决定装饰器边界、回写 ArchUnit 黑名单,
-  并自动更新项目根目录的 ARCHITECTURE.md(4 环架构 SSoT)。
-  棕地模式额外产出 α→γ 重构计划(B1)或清洁孤岛布局 + Legacy ACL(B2)。
-  不写实现代码,只做架构设计。产出会被 /bob-spec 引用以生成 Superpowers spec。
-
-  当用户说"画 4 环架构"、"设计端口"、"出重构计划"、"画洋葱图"、
-  "决定状态机怎么放"时也应触发此技能。
+  当用户说“画 4 环架构”“设计端口”“出重构计划”或“决定状态机怎么放”时使用。Claude Code 调用 `/bob-onion 参数`，
+  Codex 调用 `$bob-onion 参数`，参数语义相同；支持默认读取最新 identity、`--identity [文档路径]` 与 `--refresh`。
+  这是 `/bob-identify` 之后的正式架构设计阶段：划分 4 环包结构、列端口、提取 Entity 状态机、决定装饰器边界、回写 ArchUnit 黑名单并更新 ARCHITECTURE.md。棕地模式还产出重构计划或清洁孤岛布局；不写实现代码，主要输出供 `/bob-spec` 使用。
 ---
 
 # Bob 4-Ring Architecture Design Skill
@@ -26,6 +17,21 @@ description: |
 ```
 
 或自然语言触发:"画 4 环架构"、"设计端口"、"出重构计划"、"画洋葱图"、"决定状态机怎么放"。
+
+Codex:
+
+```
+$bob-onion                          # 默认:读最新 docs/bob/01-identity-*.md
+$bob-onion --identity [文档路径]   # 指定 identity 文档
+$bob-onion --refresh               # 跳过 identity,基于现有 ARCHITECTURE.md 增补
+```
+
+## 双宿主调用约定
+
+- Claude Code 使用 `/bob-onion`；Codex 使用 `$bob-onion`，参数语义完全相同。
+- 本文保留 slash 形式以保护 Claude Code 兼容性。
+- 向用户给出下一步命令时，使用当前宿主的调用形式。
+- 不从一个宿主的 skill 根回退到另一个宿主。
 
 ## 前置条件
 

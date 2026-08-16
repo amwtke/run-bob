@@ -1,29 +1,9 @@
 ---
 name: bob-survey
 description: |
-  触发条件:用户输入 /bob-survey <需求一句话或几段>,
-  或 /bob-survey --archcheck <path>(消化已有 archcheck 报告作参考),
-  或 /bob-survey --no-record(跑完不写 ARCHITECTURE.md §12),
-  或 /bob-survey --refresh(已有 00-survey-*.md 时强制重跑)。
-
-  在跑 /bob-model 之前做一道 TL 接需求动作:对当前仓库做架构体检
-  (6 个 Bob 独有维度 × 0-20 = 100 分),对新需求做难度判定
-  (跨环数 / 状态机增量 / legacy 复用 / 前置重构量 四因子),结合两者给 3 档
-  落地建议(🟢 直接接 / 🟡 准备一下再接 / 🔴 先重构再接)。
-  产出 docs/bob/00-survey-<slug>-<date>.md 与 ARCHITECTURE.md §12
-  体检记录追加一行。不写代码、不出 spec。
-
-  **survey 是可选阶段** —— 它只回答"现在能不能接、要不要先重构",
-  用户跳过也不阻塞后续 skill。**但是 /bob-model 及下游(stories / spec / TDD)
-  是强制阶段,不论需求难度 Easy / Medium / Hard 都必须跑**:跨 story 共享的
-  术语 / 业务规则 / Entity 不变量必须在 SSoT(docs/bob/03-model-*.md)里登记,
-  否则下游会逐 story 重复追问,术语漂移与返工不可避免。所有"下一步"推荐
-  统一指向 /bob-model,不存在"超过 N 个新端口才升 model"之类的阈值短路。
-
-  适用于 Bob 4 环 Clean Architecture 工作流的 phase 0:接需求时
-  先评估底子能不能接。当用户说"接需求前先体检"、"现在能不能接
-  这个需求"、"这个需求要不要先重构"、"看一下我现在的底子"时
-  也应触发此技能。
+  当用户说“接需求前先体检”“现在能不能接”或“要不要先重构”时使用。Claude Code 调用 `/bob-survey 参数`，
+  Codex 调用 `$bob-survey 参数`，参数语义相同；支持需求描述、`--archcheck [文档路径]`、`--no-record` 与 `--refresh`。
+  这是 Bob 4 环工作流可选的 phase 0：对仓库做 6 维架构体检并评估新需求难度，给出直接接、准备后接或先重构三档建议，产出 docs/bob/00-survey-[slug]-[date].md 并可更新 ARCHITECTURE.md §12；不写代码、不出 spec。survey 可跳过，但 `/bob-model` 及下游阶段强制执行，下一步始终指向模型 SSoT。
 ---
 
 # Bob Survey Skill
@@ -38,6 +18,22 @@ description: |
 ```
 
 或自然语言触发:"接需求前先体检"、"现在能不能接这个需求"、"这个需求要不要先重构"、"看一下我现在的底子"。
+
+Codex:
+
+```
+$bob-survey [需求一句话或几段]     # 主入口
+$bob-survey --archcheck [文档路径] # 消化已有 archcheck 报告作参考维度
+$bob-survey --no-record            # 跑完不写 ARCHITECTURE.md §12
+$bob-survey --refresh              # 已有 00-survey-*.md 时强制重跑
+```
+
+## 双宿主调用约定
+
+- Claude Code 使用 `/bob-survey`；Codex 使用 `$bob-survey`，参数语义完全相同。
+- 本文保留 slash 形式以保护 Claude Code 兼容性。
+- 向用户给出下一步命令时，使用当前宿主的调用形式。
+- 不从一个宿主的 skill 根回退到另一个宿主。
 
 ## 前置条件
 

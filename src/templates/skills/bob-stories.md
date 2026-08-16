@@ -1,20 +1,9 @@
 ---
 name: bob-stories
 description: |
-  触发条件:用户输入 /bob-stories <需求>(主入口:从需求拆 UseCase),
-  或 /bob-stories --refactor [path](纯重构模式:拆 α→γ 改造单元),
-  或 /bob-stories --from-survey <path>(显式指定 survey 报告),
-  或 /bob-stories --refresh(已有 02-stories-*.md 时强制重跑)。
-
-  在 /bob-survey 之后、/bob-identify 之前接入。把 Medium/Hard 难度
-  的需求 1:1 拆成 UseCase 故事(1 story = 1 UseCase),feature 与
-  refactor 双模式支持,自动识别"前置重构量 ≥ Medium"时输出双表。
-  产出 docs/bob/02-stories-<slug>-<date>.md 汇总索引 + 每个故事
-  一份明细在 docs/bob/02-stories/<n>-<slug>.md。
-
-  适用于 Bob 4 环 Clean Architecture 工作流的 phase 1:把大需求
-  按 AI 友好的粒度切片。当用户说"拆 story"、"把这个需求拆开"、
-  "按 UseCase 切一切"、"先拆几个故事"时也应触发此技能。
+  当用户说“拆 story”“把需求拆开”或“按 UseCase 切片”时使用。Claude Code 调用 `/bob-stories 参数`，
+  Codex 调用 `$bob-stories 参数`，参数语义相同；支持需求、`--refactor [path]`、`--from-survey [文档路径]` 与 `--refresh`。
+  这是 Bob 4 环工作流的 phase 1，在 model 之后、identify 之前把 Medium/Hard 需求按 1 story = 1 UseCase 拆分，并支持 feature 与 refactor 双模式。主要产出 docs/bob/02-stories-[slug]-[date].md 汇总索引及 docs/bob/02-stories/ 下的逐故事明细；模型门禁为强制，survey 为建议前置。
 ---
 
 # Bob Stories Skill
@@ -29,6 +18,22 @@ description: |
 ```
 
 或自然语言触发:"拆 story"、"把这个需求拆开"、"按 UseCase 切一切"、"先拆几个故事"。
+
+Codex:
+
+```
+$bob-stories [需求]                  # 主入口:从需求拆 UseCase
+$bob-stories --refactor [path]       # 纯重构模式:拆 α→γ 改造单元
+$bob-stories --from-survey [文档路径] # 显式指定 survey 报告
+$bob-stories --refresh               # 已有 02-stories-*.md 时强制重跑
+```
+
+## 双宿主调用约定
+
+- Claude Code 使用 `/bob-stories`；Codex 使用 `$bob-stories`，参数语义完全相同。
+- 本文保留 slash 形式以保护 Claude Code 兼容性。
+- 向用户给出下一步命令时，使用当前宿主的调用形式。
+- 不从一个宿主的 skill 根回退到另一个宿主。
 
 ## 前置条件
 

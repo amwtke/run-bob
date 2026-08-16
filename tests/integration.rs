@@ -61,6 +61,74 @@ fn files_below(root: &Path) -> BTreeMap<String, (Vec<u8>, Option<u32>)> {
     files
 }
 
+fn parse_skill_document(content: &str) -> (BTreeMap<String, String>, String) {
+    let mut lines = content.lines();
+    assert_eq!(lines.next(), Some("---"), "SKILL.md must start with ---");
+
+    let mut frontmatter_lines = Vec::new();
+    let mut found_closing_delimiter = false;
+    for line in lines.by_ref() {
+        if line == "---" {
+            found_closing_delimiter = true;
+            break;
+        }
+        frontmatter_lines.push(line);
+    }
+    assert!(
+        found_closing_delimiter,
+        "SKILL.md frontmatter must have a closing --- delimiter"
+    );
+
+    let mut metadata = BTreeMap::new();
+    let mut current_block_key: Option<String> = None;
+    let mut current_block_lines = Vec::new();
+
+    for line in frontmatter_lines {
+        if let Some(indented) = line.strip_prefix("  ") {
+            if current_block_key.is_some() {
+                current_block_lines.push(indented);
+            }
+            continue;
+        }
+
+        if line.starts_with(char::is_whitespace) || line.trim().is_empty() {
+            continue;
+        }
+
+        if let Some(key) = current_block_key.take() {
+            metadata.insert(key, current_block_lines.join("\n"));
+            current_block_lines.clear();
+        }
+
+        let (key, value) = line
+            .split_once(':')
+            .expect("top-level frontmatter lines must use key: value syntax");
+        let value = value.trim();
+        if value == "|" {
+            current_block_key = Some(key.to_owned());
+        } else {
+            metadata.insert(key.to_owned(), value.to_owned());
+        }
+    }
+
+    if let Some(key) = current_block_key {
+        metadata.insert(key, current_block_lines.join("\n"));
+    }
+
+    (metadata, lines.collect::<Vec<_>>().join("\n"))
+}
+
+fn is_valid_skill_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.chars().count() <= 64
+        && !name.starts_with('-')
+        && !name.ends_with('-')
+        && !name.contains("--")
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
 /// Path to the cargo-built binary under test.
 fn run_bob_bin() -> std::path::PathBuf {
     // CARGO_BIN_EXE_<name> is set by Cargo for integration tests.
@@ -231,6 +299,141 @@ fn init_installs_byte_identical_dual_skill_trees() {
         claude, codex,
         "installed skill trees must be byte- and mode-identical"
     );
+}
+
+#[test]
+fn generated_skill_metadata_is_codex_compatible() {
+    use std::collections::BTreeSet;
+
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    let output = Command::new(run_bob_bin())
+        .args(["init", "--minimal", "--dir"])
+        .arg(target)
+        .output()
+        .expect("init");
+    assert_command_succeeded(&output, "minimal init");
+
+    let mut violations = Vec::new();
+    for skill in GENERATED_SKILLS {
+        let path = target
+            .join(".agents/skills")
+            .join(skill)
+            .join("SKILL.md");
+        let document = std::fs::read_to_string(&path).expect("read generated Codex skill");
+        let (metadata, body) = parse_skill_document(&document);
+
+        let keys = metadata.keys().map(String::as_str).collect::<BTreeSet<_>>();
+        if keys != BTreeSet::from(["description", "name"]) {
+            violations.push(format!(
+                "{} must have exactly name and description metadata; got {keys:?}",
+                path.display()
+            ));
+        }
+
+        match metadata.get("name") {
+            Some(name) => {
+                if name != skill {
+                    violations.push(format!(
+                        "{} name {name:?} must match its {skill:?} directory",
+                        path.display()
+                    ));
+                }
+                if !is_valid_skill_name(name) {
+                    violations.push(format!(
+                        "{} has an invalid Codex skill name: {name:?}",
+                        path.display()
+                    ));
+                }
+            }
+            None => violations.push(format!("{} is missing name", path.display())),
+        }
+
+        match metadata.get("description") {
+            Some(description) => {
+                if description.trim().is_empty() {
+                    violations.push(format!("{} description must not be empty", path.display()));
+                }
+                let description_chars = description.chars().count();
+                if description_chars > 1024 {
+                    violations.push(format!(
+                        "{} description is {description_chars} Unicode characters; Codex permits at most 1024",
+                        path.display()
+                    ));
+                }
+                if description.contains(['<', '>']) {
+                    violations.push(format!(
+                        "{} description must not use angle-bracket arguments",
+                        path.display()
+                    ));
+                }
+                for invocation in [format!("/{skill}"), format!("${skill}")] {
+                    if !description.contains(&invocation) {
+                        violations.push(format!(
+                            "{} description is missing {invocation}",
+                            path.display()
+                        ));
+                    }
+                }
+            }
+            None => violations.push(format!("{} is missing description", path.display())),
+        }
+
+        if body.trim().is_empty() {
+            violations.push(format!("{} body must not be empty", path.display()));
+        }
+        if !body.contains("向用户给出下一步命令时，使用当前宿主的调用形式") {
+            violations.push(format!(
+                "{} body must document the current-host output rule",
+                path.display()
+            ));
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "generated Codex skill contract violations:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn generated_skills_document_both_host_invocations() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    let output = Command::new(run_bob_bin())
+        .args(["init", "--minimal", "--dir"])
+        .arg(target)
+        .output()
+        .expect("init");
+    assert_command_succeeded(&output, "minimal init");
+
+    for skill in GENERATED_SKILLS {
+        let claude_path = target
+            .join(".claude/skills")
+            .join(skill)
+            .join("SKILL.md");
+        let codex_path = target
+            .join(".agents/skills")
+            .join(skill)
+            .join("SKILL.md");
+        let claude = std::fs::read(&claude_path).expect("read generated Claude skill");
+        let codex = std::fs::read(&codex_path).expect("read generated Codex skill");
+
+        assert_eq!(
+            claude,
+            codex,
+            "{skill} must stay byte-identical across skill hosts"
+        );
+        let document = String::from_utf8(claude).expect("generated skill is UTF-8");
+        for invocation in [format!("/{skill}"), format!("${skill}")] {
+            assert!(
+                document.contains(&invocation),
+                "{} is missing {invocation}",
+                claude_path.display()
+            );
+        }
+    }
 }
 
 #[test]
