@@ -40,11 +40,11 @@ Describe 'bootstrap-rust.ps1' {
     BeforeEach {
         $script:originalCargoHome = $env:CARGO_HOME
         $script:originalUserProfile = $env:USERPROFILE
-        $caseRoot = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
-        New-Item -ItemType Directory -Path $caseRoot -Force | Out-Null
-        $env:CARGO_HOME = Join-Path $caseRoot 'isolated empty cargo home'
-        $env:USERPROFILE = Join-Path $caseRoot 'isolated empty profile'
-        $script:manifestPath = Join-Path $caseRoot 'Cargo.toml'
+        $script:caseRoot = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $script:caseRoot -Force | Out-Null
+        $env:CARGO_HOME = Join-Path $script:caseRoot 'isolated empty cargo home'
+        $env:USERPROFILE = Join-Path $script:caseRoot 'isolated empty profile'
+        $script:manifestPath = Join-Path $script:caseRoot 'Cargo.toml'
         @'
 [package]
 name = "run-bob"
@@ -434,8 +434,8 @@ rust-version = "1.75"
 
     Context 'Cargo-home tool reuse' {
         BeforeEach {
-            $env:CARGO_HOME = Join-Path $TestDrive 'cargo home with spaces'
-            $env:USERPROFILE = Join-Path $TestDrive 'profile that must not win'
+            $env:CARGO_HOME = Join-Path $script:caseRoot 'cargo home with spaces'
+            $env:USERPROFILE = Join-Path $script:caseRoot 'profile that must not win'
         }
 
         It 'uses a complete Cargo-home pair directly when command discovery is absent' {
