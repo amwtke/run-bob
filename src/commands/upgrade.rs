@@ -8,6 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::assets::{Asset, HARNESS_ASSETS};
+use crate::{inspect_managed_path, ExpectedPathKind};
 
 pub fn run(target_dir: &str, dry_run: bool, no_backup: bool, no_gitignore: bool) -> Result<()> {
     let target = PathBuf::from(target_dir)
@@ -16,21 +17,23 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool, no_gitignore: bool)
 
     print_header(&target, dry_run, no_backup, no_gitignore);
 
+    let java_target = crate::is_java_target(&target);
+    let applicable_assets = HARNESS_ASSETS
+        .iter()
+        .filter(|asset| asset.upgrade_safe)
+        // Skip the optional Java/Maven skeleton on non-Java targets so we
+        // don't reinstate files the user opted out of at init time.
+        .filter(|asset| !asset.category.is_java_skeleton() || java_target)
+        .collect::<Vec<_>>();
+    preflight(&target, &applicable_assets, no_gitignore)?;
+
     // Classify every upgrade-safe asset.
     let mut up_to_date: Vec<&Asset> = Vec::new();
     let mut outdated: Vec<(&Asset, String)> = Vec::new(); // (asset, current on-disk content)
     let mut missing: Vec<&Asset> = Vec::new();
 
-    let java_target = crate::is_java_target(&target);
-
     println!("{}", "Checking upgrade-safe assets...".bold());
-    for asset in HARNESS_ASSETS
-        .iter()
-        .filter(|a| a.upgrade_safe)
-        // Skip the optional Java/Maven skeleton on non-Java targets so we
-        // don't reinstate files the user opted out of at init time.
-        .filter(|a| !(a.category.is_java_skeleton() && !java_target))
-    {
+    for asset in applicable_assets {
         let path = asset_path(&target, asset);
         if !path.is_file() {
             println!("  {} {} ({})", "+".green(), asset.display(), "missing — will install".yellow());
@@ -132,6 +135,7 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool, no_gitignore: bool)
         let path = asset_path(&target, asset);
         fs::write(&path, asset.content)
             .with_context(|| format!("Failed to write {}", path.display()))?;
+        crate::set_executable_if_shell(&path)?;
         println!("  {} {} ({})", "✓".green(), asset.display(), "updated".cyan());
     }
 
@@ -144,6 +148,7 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool, no_gitignore: bool)
         }
         fs::write(&path, asset.content)
             .with_context(|| format!("Failed to write {}", path.display()))?;
+        crate::set_executable_if_shell(&path)?;
         println!("  {} {} ({})", "✓".green(), asset.display(), "installed".green());
     }
 
@@ -161,6 +166,16 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool, no_gitignore: bool)
         missing.len(),
         up_to_date.len()
     );
+    Ok(())
+}
+
+fn preflight(target: &Path, applicable_assets: &[&Asset], no_gitignore: bool) -> Result<()> {
+    for asset in applicable_assets {
+        inspect_managed_path(target, asset.rel_path, ExpectedPathKind::File)?;
+    }
+    if !no_gitignore {
+        inspect_managed_path(target, &[".gitignore"], ExpectedPathKind::File)?;
+    }
     Ok(())
 }
 

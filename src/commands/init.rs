@@ -6,6 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::assets::{Asset, Category, HARNESS_ASSETS, HARNESS_DIRS};
+use crate::{inspect_managed_path, ExpectedPathKind};
 
 pub fn run(
     target_dir: &str,
@@ -39,14 +40,15 @@ pub fn run(
     }
     println!();
 
+    let applicable_assets = HARNESS_ASSETS
+        .iter()
+        .filter(|asset| !minimal || asset.included_in_minimal)
+        .filter(|asset| !asset.category.is_java_skeleton() || with_java)
+        .collect::<Vec<_>>();
+    preflight(&target, &applicable_assets, minimal, no_gitignore)?;
+
     let mut current_cat: Option<Category> = None;
-    for asset in HARNESS_ASSETS {
-        if minimal && !asset.included_in_minimal {
-            continue;
-        }
-        if asset.category.is_java_skeleton() && !with_java {
-            continue;
-        }
+    for asset in applicable_assets {
         if Some(asset.category) != current_cat {
             if current_cat.is_some() {
                 println!();
@@ -76,6 +78,26 @@ pub fn run(
     Ok(())
 }
 
+fn preflight(
+    target: &Path,
+    applicable_assets: &[&Asset],
+    minimal: bool,
+    no_gitignore: bool,
+) -> Result<()> {
+    for asset in applicable_assets {
+        inspect_managed_path(target, asset.rel_path, ExpectedPathKind::File)?;
+    }
+    if !minimal {
+        for dir in HARNESS_DIRS {
+            inspect_managed_path(target, dir.rel_path, ExpectedPathKind::Directory)?;
+        }
+    }
+    if !no_gitignore {
+        inspect_managed_path(target, &[".gitignore"], ExpectedPathKind::File)?;
+    }
+    Ok(())
+}
+
 fn install_asset(target: &Path, asset: &Asset, force: bool) -> Result<()> {
     let mut path = target.to_path_buf();
     for seg in asset.rel_path {
@@ -96,28 +118,9 @@ fn write_file(path: &Path, content: &str, force: bool, display: &str) -> Result<
     }
     fs::write(path, content)
         .with_context(|| format!("Failed to write {}", path.display()))?;
-    set_executable_if_shell(path)?;
+    crate::set_executable_if_shell(path)?;
     crate::success(display);
     Ok(())
-}
-
-#[cfg(unix)]
-fn set_executable_if_shell(path: &Path) -> Result<()> {
-    if path.extension().and_then(|e| e.to_str()) == Some("sh") {
-        use std::os::unix::fs::PermissionsExt;
-        let metadata = fs::metadata(path)
-            .with_context(|| format!("Failed to stat {}", path.display()))?;
-        let mut perms = metadata.permissions();
-        perms.set_mode(perms.mode() | 0o111);
-        fs::set_permissions(path, perms)
-            .with_context(|| format!("Failed to chmod +x {}", path.display()))?;
-    }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn set_executable_if_shell(_path: &Path) -> Result<()> {
-    Ok(())  // Windows: shell scripts run via bash; permission bit unused
 }
 
 fn ensure_dir_at(target: &Path, segments: &[&str]) -> Result<()> {

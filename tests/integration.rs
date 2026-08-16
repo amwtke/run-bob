@@ -37,21 +37,21 @@ fn files_below(root: &Path) -> BTreeMap<String, (Vec<u8>, Option<u32>)> {
                 let content = std::fs::read(&path).expect("read skill file");
 
                 #[cfg(unix)]
-                let executable_mode = {
+                let unix_mode = {
                     use std::os::unix::fs::PermissionsExt;
                     Some(
                         std::fs::metadata(&path)
                             .expect("read skill file metadata")
                             .permissions()
                             .mode()
-                            & 0o111,
+                            & 0o7777,
                     )
                 };
 
                 #[cfg(not(unix))]
-                let executable_mode = None;
+                let unix_mode = None;
 
-                files.insert(relative, (content, executable_mode));
+                files.insert(relative, (content, unix_mode));
             }
         }
     }
@@ -97,6 +97,36 @@ fn assert_dual_host_next_steps(output: &Output, mode: &str) {
             "{mode} init next steps missing {expected:?}\nstdout:\n{stdout}"
         );
     }
+}
+
+fn legacy_claude_only_fixture(target: &Path) -> BTreeMap<String, (Vec<u8>, Option<u32>)> {
+    let output = Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .output()
+        .expect("initialize legacy fixture");
+    assert_command_succeeded(&output, "legacy fixture init");
+
+    let claude_snapshot = files_below(&target.join(SKILL_ROOTS[0]));
+    std::fs::remove_dir_all(target.join(SKILL_ROOTS[1]))
+        .expect("remove only the Codex skill tree from legacy fixture");
+    assert!(
+        target.join(".agents").is_dir(),
+        "legacy fixture keeps .agents"
+    );
+    assert!(
+        !target.join(SKILL_ROOTS[1]).exists(),
+        "legacy fixture must be Claude-only"
+    );
+    claude_snapshot
+}
+
+fn command_output_text(output: &Output) -> String {
+    format!(
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    )
 }
 
 #[test]
@@ -1201,6 +1231,354 @@ fn upgrade_installs_missing_skill() {
         "expected 'installed' in summary, got:\n{}",
         stdout
     );
+}
+
+#[test]
+fn upgrade_dry_run_from_claude_only_writes_nothing() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    let claude_before = legacy_claude_only_fixture(target);
+
+    let output = Command::new(run_bob_bin())
+        .args(["upgrade", "--dry-run", "--dir"])
+        .arg(target)
+        .output()
+        .expect("upgrade legacy fixture in dry-run mode");
+    assert_command_succeeded(&output, "legacy dry-run upgrade");
+
+    assert!(
+        !target.join(SKILL_ROOTS[1]).exists(),
+        "dry-run must not create the Codex skill tree"
+    );
+    assert_eq!(
+        files_below(&target.join(SKILL_ROOTS[0])),
+        claude_before,
+        "dry-run must preserve all Claude bytes and executable bits"
+    );
+    assert!(
+        !target.join(".run-bob-backup").exists(),
+        "dry-run must not create backups"
+    );
+}
+
+#[test]
+fn upgrade_from_claude_only_adds_codex_without_touching_claude() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    let claude_before = legacy_claude_only_fixture(target);
+
+    let output = Command::new(run_bob_bin())
+        .args(["upgrade", "--dir"])
+        .arg(target)
+        .output()
+        .expect("upgrade legacy fixture");
+    assert_command_succeeded(&output, "legacy upgrade");
+
+    let claude_after = files_below(&target.join(SKILL_ROOTS[0]));
+    let codex_after = files_below(&target.join(SKILL_ROOTS[1]));
+    assert_eq!(
+        claude_after, claude_before,
+        "upgrade changed the Claude tree"
+    );
+    assert_eq!(
+        codex_after.len(),
+        22,
+        "upgrade must restore all 22 Codex files"
+    );
+    assert_eq!(
+        codex_after, claude_before,
+        "restored Codex files must match the existing Claude files byte-for-byte and mode-for-mode"
+    );
+    assert!(
+        !target.join(".run-bob-backup").exists(),
+        "an all-MISSING migration must not create a backup"
+    );
+}
+
+#[test]
+fn upgrade_backs_up_stale_files_for_both_skill_hosts() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    let claude_path = target.join(".claude/skills/bob-identify/SKILL.md");
+    let codex_path = target.join(".agents/skills/bob-identify/SKILL.md");
+
+    let output = Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .output()
+        .expect("init");
+    assert_command_succeeded(&output, "dual-host init");
+    let expected = std::fs::read(&claude_path).expect("read embedded skill");
+    let claude_sentinel = b"STALE-CLAUDE\n";
+    let codex_sentinel = b"STALE-CODEX\n";
+    std::fs::write(&claude_path, claude_sentinel).expect("stale Claude skill");
+    std::fs::write(&codex_path, codex_sentinel).expect("stale Codex skill");
+
+    let output = Command::new(run_bob_bin())
+        .args(["upgrade", "--dir"])
+        .arg(target)
+        .output()
+        .expect("upgrade stale dual-host fixture");
+    assert_command_succeeded(&output, "dual-host stale upgrade");
+
+    let timestamp_dirs = std::fs::read_dir(target.join(".run-bob-backup"))
+        .expect("read backup root")
+        .map(|entry| entry.expect("backup timestamp entry").path())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        timestamp_dirs.len(),
+        1,
+        "one shared timestamp directory expected"
+    );
+    let backup_root = &timestamp_dirs[0];
+    assert_eq!(
+        std::fs::read(backup_root.join(".claude/skills/bob-identify/SKILL.md"))
+            .expect("read Claude backup"),
+        claude_sentinel
+    );
+    assert_eq!(
+        std::fs::read(backup_root.join(".agents/skills/bob-identify/SKILL.md"))
+            .expect("read Codex backup"),
+        codex_sentinel
+    );
+    assert_eq!(
+        std::fs::read(&claude_path).expect("read restored Claude"),
+        expected
+    );
+    assert_eq!(
+        std::fs::read(&codex_path).expect("read restored Codex"),
+        expected
+    );
+}
+
+#[test]
+fn upgrade_missing_shell_scripts_are_executable_for_both_hosts() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    let output = Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .output()
+        .expect("init");
+    assert_command_succeeded(&output, "dual-host init");
+
+    let scripts = SKILL_ROOTS
+        .iter()
+        .flat_map(|root| {
+            ["bob-model", "visual-md"].map(move |skill| {
+                target
+                    .join(root)
+                    .join(skill)
+                    .join("scripts/start-server.sh")
+            })
+        })
+        .collect::<Vec<_>>();
+    for script in &scripts {
+        std::fs::remove_file(script).expect("remove generated shell script");
+    }
+
+    let output = Command::new(run_bob_bin())
+        .args(["upgrade", "--dir"])
+        .arg(target)
+        .output()
+        .expect("upgrade missing shell scripts");
+    assert_command_succeeded(&output, "upgrade missing shell scripts");
+
+    for script in scripts {
+        assert!(
+            script.is_file(),
+            "upgrade did not restore {}",
+            script.display()
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&script)
+                .expect("stat restored shell script")
+                .permissions()
+                .mode();
+            assert_ne!(
+                mode & 0o111,
+                0,
+                "restored shell script is not executable: {} ({mode:o})",
+                script.display()
+            );
+        }
+    }
+}
+
+#[test]
+fn init_and_upgrade_reject_wrong_kind_destinations_before_writing() {
+    let init_tmp = tempfile::tempdir().expect("init tempdir");
+    let init_target = init_tmp.path();
+    let conflict = init_target.join(".agents/skills/bob-identify/SKILL.md");
+    std::fs::create_dir_all(&conflict).expect("create directory at managed file path");
+
+    let output = Command::new(run_bob_bin())
+        .args(["init", "--force", "--no-gitignore", "--dir"])
+        .arg(init_target)
+        .output()
+        .expect("forced init with wrong-kind destination");
+    assert!(
+        !output.status.success(),
+        "wrong-kind forced init unexpectedly succeeded"
+    );
+    assert!(
+        command_output_text(&output).contains(".agents/skills/bob-identify/SKILL.md"),
+        "init error omitted exact conflict path: {}",
+        command_output_text(&output)
+    );
+    assert!(
+        !init_target
+            .join(".claude/skills/bob-identify/SKILL.md")
+            .exists(),
+        "init wrote an earlier managed asset before rejecting a later conflict"
+    );
+
+    let upgrade_tmp = tempfile::tempdir().expect("upgrade tempdir");
+    let upgrade_target = upgrade_tmp.path();
+    let claude_before = legacy_claude_only_fixture(upgrade_target);
+    std::fs::create_dir_all(upgrade_target.join(".agents/skills"))
+        .expect("create Codex skill root");
+    let ancestor_conflict = upgrade_target.join(".agents/skills/bob-model");
+    std::fs::write(&ancestor_conflict, b"not a directory\n")
+        .expect("create file at required parent path");
+
+    let output = Command::new(run_bob_bin())
+        .args(["upgrade", "--no-gitignore", "--dir"])
+        .arg(upgrade_target)
+        .output()
+        .expect("upgrade with wrong-kind ancestor");
+    assert!(
+        !output.status.success(),
+        "wrong-kind upgrade unexpectedly succeeded"
+    );
+    assert!(
+        command_output_text(&output).contains(".agents/skills/bob-model"),
+        "upgrade error omitted exact ancestor conflict path: {}",
+        command_output_text(&output)
+    );
+    assert!(
+        !upgrade_target
+            .join(".agents/skills/bob-identify/SKILL.md")
+            .exists(),
+        "upgrade installed an earlier missing asset before rejecting a later conflict"
+    );
+    assert_eq!(
+        files_below(&upgrade_target.join(SKILL_ROOTS[0])),
+        claude_before,
+        "failed upgrade changed the Claude tree"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn init_force_and_upgrade_refuse_symlinked_destinations_without_following() {
+    use std::os::unix::fs::symlink;
+
+    for dangling in [false, true] {
+        let tmp = tempfile::tempdir().expect("init symlink tempdir");
+        let target = tmp.path().join("project");
+        std::fs::create_dir(&target).expect("create init target");
+        let external = tmp.path().join(if dangling {
+            "missing-init-target"
+        } else {
+            "external-init-target"
+        });
+        if !dangling {
+            std::fs::write(&external, b"EXTERNAL-INIT\n").expect("write external init target");
+        }
+        let conflict = target.join(".agents/skills/bob-identify/SKILL.md");
+        std::fs::create_dir_all(conflict.parent().expect("conflict parent"))
+            .expect("create managed parent");
+        symlink(&external, &conflict).expect("create init symlink conflict");
+
+        let output = Command::new(run_bob_bin())
+            .args(["init", "--force", "--no-gitignore", "--dir"])
+            .arg(&target)
+            .output()
+            .expect("forced init with symlink conflict");
+        assert!(
+            !output.status.success(),
+            "forced init followed a symlink: {}",
+            command_output_text(&output)
+        );
+        assert!(
+            command_output_text(&output).contains(".agents/skills/bob-identify/SKILL.md"),
+            "forced init error omitted symlink path: {}",
+            command_output_text(&output)
+        );
+        if dangling {
+            assert!(
+                !external.exists(),
+                "forced init created a dangling link target"
+            );
+        } else {
+            assert_eq!(
+                std::fs::read(&external).expect("read external init target"),
+                b"EXTERNAL-INIT\n"
+            );
+        }
+        assert!(
+            !target.join(".claude/skills/bob-identify/SKILL.md").exists(),
+            "forced init wrote another host before rejecting the symlink"
+        );
+    }
+
+    for dangling in [false, true] {
+        let tmp = tempfile::tempdir().expect("upgrade symlink tempdir");
+        let target = tmp.path().join("project");
+        std::fs::create_dir(&target).expect("create upgrade target");
+        let claude_before = legacy_claude_only_fixture(&target);
+        let external = tmp.path().join(if dangling {
+            "missing-upgrade-target"
+        } else {
+            "external-upgrade-target"
+        });
+        if !dangling {
+            std::fs::write(&external, b"EXTERNAL-UPGRADE\n")
+                .expect("write external upgrade target");
+        }
+        let conflict = target.join(".claude/skills/bob-identify/SKILL.md");
+        std::fs::remove_file(&conflict).expect("remove managed file for symlink");
+        symlink(&external, &conflict).expect("create upgrade symlink conflict");
+
+        let output = Command::new(run_bob_bin())
+            .args(["upgrade", "--no-gitignore", "--dir"])
+            .arg(&target)
+            .output()
+            .expect("upgrade with symlink conflict");
+        assert!(
+            !output.status.success(),
+            "upgrade followed a symlink: {}",
+            command_output_text(&output)
+        );
+        assert!(
+            command_output_text(&output).contains(".claude/skills/bob-identify/SKILL.md"),
+            "upgrade error omitted symlink path: {}",
+            command_output_text(&output)
+        );
+        if dangling {
+            assert!(!external.exists(), "upgrade created a dangling link target");
+        } else {
+            assert_eq!(
+                std::fs::read(&external).expect("read external upgrade target"),
+                b"EXTERNAL-UPGRADE\n"
+            );
+        }
+        assert!(
+            !target.join(SKILL_ROOTS[1]).exists(),
+            "upgrade installed missing Codex assets before rejecting the symlink"
+        );
+        let mut expected_claude = claude_before.clone();
+        expected_claude.remove("bob-identify/SKILL.md");
+        let mut actual_claude = files_below(&target.join(SKILL_ROOTS[0]));
+        actual_claude.remove("bob-identify/SKILL.md");
+        assert_eq!(
+            actual_claude, expected_claude,
+            "failed upgrade changed other Claude files"
+        );
+    }
 }
 
 #[test]
