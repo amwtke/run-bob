@@ -535,6 +535,32 @@ chmod 755 "$CARGO_HOME/bin/rustup" "$CARGO_HOME/bin/rustc" "$CARGO_HOME/bin/carg
 }
 
 #[cfg(unix)]
+fn logging_rustc_mock(label: &str) -> String {
+    format!(
+        r#"if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then
+  printf '{label}-version\n' >> "$RUN_BOB_TEST_LOG"
+  printf '%s\n' 'rustc 1.80.0 (mock)'
+  exit 0
+fi
+exit 96"#
+    )
+}
+
+#[cfg(unix)]
+fn logging_cargo_mock(label: &str) -> String {
+    format!(
+        r#"if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then
+  printf '{label}-version\n' >> "$RUN_BOB_TEST_LOG"
+  printf '%s\n' 'cargo 1.80.0 (mock)'
+  exit 0
+fi
+printf '{label}-exec' >> "$RUN_BOB_TEST_LOG"
+for arg in "$@"; do printf ' <%s>' "$arg" >> "$RUN_BOB_TEST_LOG"; done
+printf '\n' >> "$RUN_BOB_TEST_LOG""#
+    )
+}
+
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_uses_supported_toolchain_and_forwards_cargo_args() {
     let sandbox = Sandbox::new();
@@ -563,6 +589,74 @@ fn bootstrap_rust_posix_uses_sufficient_cargo_home_tools_without_changing_path()
 
     assert!(output.status.success(), "{}", stdout_stderr(&output));
     assert_eq!(sandbox.log(), "cargo <check> <--locked> <--all-targets>\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn bootstrap_rust_posix_refuses_mixed_partial_path_and_cargo_home_tools() {
+    for path_member in ["cargo", "rustc"] {
+        let sandbox = Sandbox::new();
+        match path_member {
+            "cargo" => {
+                sandbox.cargo("1.80.0");
+                sandbox.cargo_home_rustc("1.80.0");
+            }
+            "rustc" => {
+                sandbox.rustc("1.80.0", None);
+                sandbox.cargo_home_cargo("1.80.0");
+            }
+            _ => unreachable!(),
+        }
+        sandbox.fail_curl();
+
+        let output = sandbox.run(&["--run-cargo", "check", "--locked"]);
+        let diagnostics = stdout_stderr(&output);
+
+        assert!(
+            !output.status.success(),
+            "PATH {path_member}: {diagnostics}"
+        );
+        assert!(
+            diagnostics.contains("partial non-rustup Rust toolchain"),
+            "PATH {path_member}: {diagnostics}"
+        );
+        assert_eq!(sandbox.log(), "", "PATH {path_member}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn bootstrap_rust_posix_uses_complete_cargo_home_pair_over_partial_path() {
+    for path_member in ["cargo", "rustc"] {
+        let sandbox = Sandbox::new();
+        sandbox.cargo_home_mock("rustc", &logging_rustc_mock("home-rustc"));
+        sandbox.cargo_home_mock("cargo", &logging_cargo_mock("home-cargo"));
+        match path_member {
+            "cargo" => sandbox.mock("cargo", &logging_cargo_mock("path-cargo")),
+            "rustc" => sandbox.mock("rustc", &logging_rustc_mock("path-rustc")),
+            _ => unreachable!(),
+        }
+        sandbox.fail_curl();
+
+        let output = sandbox.run(&["--run-cargo", "check", "--locked"]);
+
+        assert!(
+            output.status.success(),
+            "PATH {path_member}: {}",
+            stdout_stderr(&output)
+        );
+        assert_eq!(
+            sandbox.log(),
+            concat!(
+                "home-rustc-version\n",
+                "home-cargo-version\n",
+                "home-rustc-version\n",
+                "home-cargo-version\n",
+                "home-cargo-exec <check> <--locked>\n"
+            ),
+            "PATH {path_member}"
+        );
+    }
 }
 
 #[cfg(unix)]

@@ -279,18 +279,36 @@ if [ -n "$cargo_home" ]; then
     fi
 fi
 
-rustc_path=$(command -v rustc 2>/dev/null || true)
-cargo_path=$(command -v cargo 2>/dev/null || true)
+path_rustc=$(command -v rustc 2>/dev/null || true)
+path_cargo=$(command -v cargo 2>/dev/null || true)
 rustup_path=$(command -v rustup 2>/dev/null || true)
+cargo_home_rustc=
+cargo_home_cargo=
 if [ -n "$cargo_home" ]; then
-    if [ -z "$rustc_path" ] && [ -x "$cargo_home/bin/rustc" ]; then
-        rustc_path=$cargo_home/bin/rustc
+    if [ -x "$cargo_home/bin/rustc" ]; then
+        cargo_home_rustc=$cargo_home/bin/rustc
     fi
-    if [ -z "$cargo_path" ] && [ -x "$cargo_home/bin/cargo" ]; then
-        cargo_path=$cargo_home/bin/cargo
+    if [ -x "$cargo_home/bin/cargo" ]; then
+        cargo_home_cargo=$cargo_home/bin/cargo
     fi
     if [ -z "$rustup_path" ] && [ -x "$cargo_home/bin/rustup" ]; then
         rustup_path=$cargo_home/bin/rustup
+    fi
+fi
+
+rustc_path=$path_rustc
+cargo_path=$path_cargo
+partial_toolchain_detected=false
+if [ -n "$path_rustc" ] && [ -n "$path_cargo" ]; then
+    : # Keep a complete PATH toolchain together.
+elif [ -n "$cargo_home_rustc" ] && [ -n "$cargo_home_cargo" ]; then
+    # Replace any partial PATH toolchain with the complete Cargo-home pair.
+    rustc_path=$cargo_home_rustc
+    cargo_path=$cargo_home_cargo
+else
+    if [ -n "$path_rustc" ] || [ -n "$path_cargo" ] ||
+        [ -n "$cargo_home_rustc" ] || [ -n "$cargo_home_cargo" ]; then
+        partial_toolchain_detected=true
     fi
 fi
 selected_mode=
@@ -309,7 +327,7 @@ if [ -n "$rustc_path" ] && [ -n "$cargo_path" ]; then
             fail "$insufficient_toolchain; active compiler is not rustup-owned; refusing to replace it"
         select_rustup_stable
     fi
-elif [ -z "$rustc_path" ] && [ -z "$cargo_path" ]; then
+elif [ -z "$rustc_path" ] && [ -z "$cargo_path" ] && [ "$partial_toolchain_detected" = false ]; then
     if [ -n "$rustup_path" ]; then
         select_rustup_stable
     else
