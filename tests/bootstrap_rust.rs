@@ -281,6 +281,59 @@ printf '\n' >> "$RUN_BOB_TEST_LOG""#
         );
     }
 
+    fn cargo_home_mock(&self, name: &str, body: &str) {
+        let path = self.cargo_home.join("bin").join(name);
+        fs::create_dir_all(path.parent().expect("cargo-home mock parent"))
+            .expect("create cargo-home bin");
+        let script = format!("#!/bin/sh\nset -eu\n{body}\n");
+        fs::write(&path, script).expect("write cargo-home command mock");
+        let mut permissions = fs::metadata(&path)
+            .expect("cargo-home mock metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(path, permissions).expect("make cargo-home command mock executable");
+    }
+
+    fn cargo_home_rustc(&self, version: &str) {
+        self.cargo_home_mock(
+            "rustc",
+            &format!(
+                r#"if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then
+  printf '%s\n' 'rustc {version} (mock)'
+  exit 0
+fi
+exit 96"#
+            ),
+        );
+    }
+
+    fn cargo_home_cargo(&self, version: &str) {
+        self.cargo_home_mock(
+            "cargo",
+            &format!(
+                r#"if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then
+  printf '%s\n' 'cargo {version} (mock)'
+  exit 0
+fi
+printf 'cargo' >> "$RUN_BOB_TEST_LOG"
+for arg in "$@"; do printf ' <%s>' "$arg" >> "$RUN_BOB_TEST_LOG"; done
+printf '\n' >> "$RUN_BOB_TEST_LOG""#
+            ),
+        );
+    }
+
+    fn cargo_home_rustup(
+        &self,
+        rustc_version: &str,
+        cargo_version: Option<&str>,
+        which_rustc: &Path,
+    ) {
+        self.cargo_home_mock(
+            "rustup",
+            &rustup_mock_body(rustc_version, cargo_version, which_rustc),
+        );
+    }
+
     fn download_curl(&self, installer_body: &str) {
         let template = r#"printf 'curl' >> "$RUN_BOB_TEST_LOG"
 for arg in "$@"; do printf ' <%s>' "$arg" >> "$RUN_BOB_TEST_LOG"; done
@@ -441,6 +494,47 @@ chmod 755 "$CARGO_HOME/bin/rustup""#
 }
 
 #[cfg(unix)]
+fn installer_that_creates_tool_proxies(
+    rustc_version: &str,
+    cargo_version: &str,
+    which_rustc: &Path,
+) -> String {
+    let rustup_body = rustup_mock_body(rustc_version, Some(cargo_version), which_rustc);
+    format!(
+        r#"printf 'installer' >> "$RUN_BOB_TEST_LOG"
+for arg in "$@"; do printf ' <%s>' "$arg" >> "$RUN_BOB_TEST_LOG"; done
+printf '\n' >> "$RUN_BOB_TEST_LOG"
+mkdir -p "$CARGO_HOME/bin"
+cat > "$CARGO_HOME/bin/rustup" <<'RUN_BOB_RUSTUP'
+#!/bin/sh
+set -eu
+{rustup_body}
+RUN_BOB_RUSTUP
+cat > "$CARGO_HOME/bin/rustc" <<'RUN_BOB_RUSTC'
+#!/bin/sh
+set -eu
+if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then
+  printf '%s\n' 'rustc {rustc_version} (mock)'
+  exit 0
+fi
+exit 96
+RUN_BOB_RUSTC
+cat > "$CARGO_HOME/bin/cargo" <<'RUN_BOB_CARGO'
+#!/bin/sh
+set -eu
+if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then
+  printf '%s\n' 'cargo {cargo_version} (mock)'
+  exit 0
+fi
+printf 'cargo' >> "$RUN_BOB_TEST_LOG"
+for arg in "$@"; do printf ' <%s>' "$arg" >> "$RUN_BOB_TEST_LOG"; done
+printf '\n' >> "$RUN_BOB_TEST_LOG"
+RUN_BOB_CARGO
+chmod 755 "$CARGO_HOME/bin/rustup" "$CARGO_HOME/bin/rustc" "$CARGO_HOME/bin/cargo""#
+    )
+}
+
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_uses_supported_toolchain_and_forwards_cargo_args() {
     let sandbox = Sandbox::new();
@@ -452,6 +546,109 @@ fn bootstrap_rust_posix_uses_supported_toolchain_and_forwards_cargo_args() {
 
     assert!(output.status.success(), "{}", stdout_stderr(&output));
     assert_eq!(sandbox.log(), "cargo <check> <--locked> <--all-targets>\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn bootstrap_rust_posix_uses_sufficient_cargo_home_tools_without_changing_path() {
+    let sandbox = Sandbox::new();
+    let stable_sysroot = sandbox.root.join("toolchains/stable");
+    fs::create_dir_all(stable_sysroot.join("bin")).expect("create stable mock sysroot");
+    sandbox.cargo_home_rustc("1.80.0");
+    sandbox.cargo_home_cargo("1.80.0");
+    sandbox.cargo_home_rustup("1.80.0", Some("1.80.0"), &stable_sysroot.join("bin/rustc"));
+    sandbox.fail_curl();
+
+    let output = sandbox.run(&["--run-cargo", "check", "--locked", "--all-targets"]);
+
+    assert!(output.status.success(), "{}", stdout_stderr(&output));
+    assert_eq!(sandbox.log(), "cargo <check> <--locked> <--all-targets>\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn bootstrap_rust_posix_falls_back_to_home_dot_cargo_tools() {
+    let sandbox = Sandbox::new();
+    sandbox.cargo_home_rustc("1.80.0");
+    sandbox.cargo_home_cargo("1.80.0");
+    let default_cargo_home = sandbox.home.join(".cargo");
+    fs::create_dir_all(&default_cargo_home).expect("create default Cargo home");
+    fs::rename(
+        sandbox.cargo_home.join("bin"),
+        default_cargo_home.join("bin"),
+    )
+    .expect("move mocks to HOME/.cargo/bin");
+    sandbox.fail_curl();
+
+    let output = sandbox.run_script_with_homes(
+        &bootstrap_script(),
+        &["--run-cargo", "check", "--locked"],
+        Some(&sandbox.home),
+        None,
+    );
+
+    assert!(output.status.success(), "{}", stdout_stderr(&output));
+    assert_eq!(sandbox.log(), "cargo <check> <--locked>\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn bootstrap_rust_posix_second_call_reuses_officially_installed_tool_proxies() {
+    let sandbox = Sandbox::new();
+    let stable_sysroot = sandbox.root.join("toolchains/stable");
+    fs::create_dir_all(stable_sysroot.join("bin")).expect("create stable mock sysroot");
+    sandbox.download_curl(&installer_that_creates_tool_proxies(
+        "1.80.0",
+        "1.80.0",
+        &stable_sysroot.join("bin/rustc"),
+    ));
+
+    let first_output = sandbox.run(&[]);
+    assert!(
+        first_output.status.success(),
+        "{}",
+        stdout_stderr(&first_output)
+    );
+    let first_log = sandbox.log();
+    assert!(first_log.contains("curl <--proto>"), "{first_log}");
+    assert!(first_log.contains("installer <-y>"), "{first_log}");
+
+    let second_output = sandbox.run(&["--run-cargo", "metadata", "--locked"]);
+    assert!(
+        second_output.status.success(),
+        "{}",
+        stdout_stderr(&second_output)
+    );
+    let combined_log = sandbox.log();
+    let second_log = combined_log
+        .strip_prefix(&first_log)
+        .expect("second invocation appends to the command log");
+    assert_eq!(second_log, "cargo <metadata> <--locked>\n");
+    assert!(!second_log.contains("curl"));
+    assert!(!second_log.contains("installer"));
+    assert!(!second_log.contains("rustup"));
+}
+
+#[cfg(unix)]
+#[test]
+fn bootstrap_rust_posix_uses_cargo_home_rustup_without_official_download() {
+    let sandbox = Sandbox::new();
+    let stable_sysroot = sandbox.root.join("toolchains/stable");
+    fs::create_dir_all(stable_sysroot.join("bin")).expect("create stable mock sysroot");
+    sandbox.cargo_home_rustup("1.80.0", Some("1.80.0"), &stable_sysroot.join("bin/rustc"));
+    sandbox.fail_curl();
+
+    let output = sandbox.run(&[]);
+
+    assert!(output.status.success(), "{}", stdout_stderr(&output));
+    assert_eq!(
+        sandbox.log(),
+        concat!(
+            "rustup <toolchain> <install> <stable> <--profile> <minimal>\n",
+            "rustup <run> <stable> <rustc> <--version>\n",
+            "rustup <run> <stable> <cargo> <--version>\n"
+        )
+    );
 }
 
 #[cfg(unix)]
@@ -570,7 +767,7 @@ fn bootstrap_rust_posix_rejects_incomplete_post_install_toolchain() {
 
 #[cfg(unix)]
 #[test]
-fn bootstrap_rust_posix_rejects_missing_home_after_official_installer() {
+fn bootstrap_rust_posix_rejects_missing_home_before_official_installer() {
     let sandbox = Sandbox::new();
     sandbox.download_curl("exit 0");
 
@@ -582,6 +779,26 @@ fn bootstrap_rust_posix_rejects_missing_home_after_official_installer() {
         diagnostics.contains("CARGO_HOME and HOME are unavailable"),
         "{diagnostics}"
     );
+    assert_eq!(sandbox.log(), "");
+}
+
+#[cfg(unix)]
+#[test]
+fn bootstrap_rust_posix_supported_path_tools_do_not_require_home() {
+    let sandbox = Sandbox::new();
+    sandbox.rustc("1.80.0", None);
+    sandbox.cargo("1.80.0");
+    sandbox.fail_curl();
+
+    let output = sandbox.run_script_with_homes(
+        &bootstrap_script(),
+        &["--run-cargo", "check", "--locked"],
+        None,
+        None,
+    );
+
+    assert!(output.status.success(), "{}", stdout_stderr(&output));
+    assert_eq!(sandbox.log(), "cargo <check> <--locked>\n");
 }
 
 #[cfg(unix)]

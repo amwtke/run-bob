@@ -203,13 +203,6 @@ download_rustup() {
     sh "$installer_file" -y --profile minimal --default-toolchain stable --no-modify-path ||
         fail "official Rust installer failed"
 
-    if [ -n "${CARGO_HOME:-}" ]; then
-        cargo_home=$CARGO_HOME
-    elif [ -n "${HOME:-}" ]; then
-        cargo_home=$HOME/.cargo
-    else
-        fail "CARGO_HOME and HOME are unavailable"
-    fi
     if [ -x "$cargo_home/bin/rustup" ]; then
         rustup_path=$cargo_home/bin/rustup
     else
@@ -270,9 +263,36 @@ required_version=$(awk '
 required_version=$(normalize_required_version "$required_version") ||
     fail "Cargo.toml rust-version must be a complete numeric major.minor or major.minor.patch version"
 
+cargo_home=
+if [ -n "${CARGO_HOME:-}" ]; then
+    cargo_home=$CARGO_HOME
+elif [ -n "${HOME:-}" ]; then
+    cargo_home=$HOME/.cargo
+fi
+if [ -n "$cargo_home" ]; then
+    case "$cargo_home" in
+        /*) ;;
+        *) cargo_home=$(pwd)/$cargo_home ;;
+    esac
+    if [ -d "$cargo_home" ]; then
+        cargo_home=$(canonical_directory "$cargo_home") || fail "could not resolve the configured Cargo home"
+    fi
+fi
+
 rustc_path=$(command -v rustc 2>/dev/null || true)
 cargo_path=$(command -v cargo 2>/dev/null || true)
 rustup_path=$(command -v rustup 2>/dev/null || true)
+if [ -n "$cargo_home" ]; then
+    if [ -z "$rustc_path" ] && [ -x "$cargo_home/bin/rustc" ]; then
+        rustc_path=$cargo_home/bin/rustc
+    fi
+    if [ -z "$cargo_path" ] && [ -x "$cargo_home/bin/cargo" ]; then
+        cargo_path=$cargo_home/bin/cargo
+    fi
+    if [ -z "$rustup_path" ] && [ -x "$cargo_home/bin/rustup" ]; then
+        rustup_path=$cargo_home/bin/rustup
+    fi
+fi
 selected_mode=
 
 if [ -n "$rustc_path" ] && [ -n "$cargo_path" ]; then
@@ -293,6 +313,7 @@ elif [ -z "$rustc_path" ] && [ -z "$cargo_path" ]; then
     if [ -n "$rustup_path" ]; then
         select_rustup_stable
     else
+        [ -n "$cargo_home" ] || fail "CARGO_HOME and HOME are unavailable"
         download_rustup
     fi
 else
