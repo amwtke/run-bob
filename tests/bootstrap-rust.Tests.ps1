@@ -26,6 +26,7 @@ rust-version = "1.75"
 '@ | Set-Content -LiteralPath $script:manifestPath
         $script:processCalls = [System.Collections.Generic.List[object]]::new()
         $script:downloadPath = $null
+        Mock Invoke-WebRequest { throw 'network must not be used' }
     }
 
     It 'uses a supported direct toolchain and forwards exact cargo arguments' {
@@ -60,6 +61,7 @@ rust-version = "1.75"
         $cargoCalls.Count | Should -Be 1
         ($cargoCalls[0].ArgumentList -join "`u{1f}") |
             Should -Be ($arguments -join "`u{1f}")
+        Should -Invoke Invoke-WebRequest -Times 0 -Exactly
     }
 
     It 'accepts newer nightly and beta cores but rejects an equal-core prerelease' {
@@ -227,7 +229,6 @@ rust-version = "1.75"
             if ($Name -eq 'rustup') { return 'C:\mock\rustup.exe' }
             return $null
         }
-        Mock Invoke-WebRequest { throw 'network must not be used' }
         Mock Invoke-RunBobExternalProcess {
             [void] $script:processCalls.Add([pscustomobject]@{
                 FilePath = $FilePath
