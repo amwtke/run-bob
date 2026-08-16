@@ -13,10 +13,35 @@ BeforeAll {
             StdErr = $StdErr
         }
     }
+
+    function New-TestCargoHomeTools {
+        param(
+            [Parameter(Mandatory)][string] $CargoHome,
+            [switch] $Rustc,
+            [switch] $Cargo,
+            [switch] $Rustup
+        )
+
+        $bin = Join-Path $CargoHome 'bin'
+        New-Item -ItemType Directory -Path $bin -Force | Out-Null
+        if ($Rustc) { Set-Content -LiteralPath (Join-Path $bin 'rustc.exe') -Value 'proxy' }
+        if ($Cargo) { Set-Content -LiteralPath (Join-Path $bin 'cargo.exe') -Value 'proxy' }
+        if ($Rustup) { Set-Content -LiteralPath (Join-Path $bin 'rustup.exe') -Value 'proxy' }
+        return [pscustomobject]@{
+            Bin = $bin
+            Rustc = Join-Path $bin 'rustc.exe'
+            Cargo = Join-Path $bin 'cargo.exe'
+            Rustup = Join-Path $bin 'rustup.exe'
+        }
+    }
 }
 
 Describe 'bootstrap-rust.ps1' {
     BeforeEach {
+        $script:originalCargoHome = $env:CARGO_HOME
+        $script:originalUserProfile = $env:USERPROFILE
+        $env:CARGO_HOME = Join-Path $TestDrive 'isolated empty cargo home'
+        $env:USERPROFILE = Join-Path $TestDrive 'isolated empty profile'
         $script:manifestPath = Join-Path $TestDrive 'Cargo.toml'
         @'
 [package]
@@ -27,6 +52,11 @@ rust-version = "1.75"
         $script:processCalls = [System.Collections.Generic.List[object]]::new()
         $script:downloadPath = $null
         Mock Invoke-WebRequest { throw 'network must not be used' }
+    }
+
+    AfterEach {
+        $env:CARGO_HOME = $script:originalCargoHome
+        $env:USERPROFILE = $script:originalUserProfile
     }
 
     It 'uses a supported direct toolchain and forwards exact cargo arguments' {
@@ -398,5 +428,329 @@ rust-version = "1.75"
         { . $entryScript build } | Should -Throw '*positional parameter*'
         Should -Invoke Get-RunBobCommandPath -Times 0 -Exactly
         Should -Invoke Invoke-RunBobBootstrap -Times 0 -Exactly
+    }
+
+    Context 'Cargo-home tool reuse' {
+        BeforeEach {
+            $env:CARGO_HOME = Join-Path $TestDrive 'cargo home with spaces'
+            $env:USERPROFILE = Join-Path $TestDrive 'profile that must not win'
+        }
+
+        It 'uses a complete Cargo-home pair directly when command discovery is absent' {
+            $tools = New-TestCargoHomeTools -CargoHome $env:CARGO_HOME -Rustc -Cargo -Rustup
+            Mock Get-RunBobCommandPath { $null }
+            Mock Invoke-RunBobExternalProcess {
+                [void] $script:processCalls.Add([pscustomobject]@{
+                    FilePath = $FilePath
+                    ArgumentList = @($ArgumentList)
+                })
+                if ($ArgumentList.Count -eq 1 -and $ArgumentList[0] -eq '--version') {
+                    if ($FilePath -eq $tools.Rustc) {
+                        return New-TestProcessResult -StdOut 'rustc 1.75.0 (mock)'
+                    }
+                    return New-TestProcessResult -StdOut 'cargo 1.75.0 (mock)'
+                }
+                return New-TestProcessResult
+            }
+
+            $arguments = @('check', '--locked', '--message-format', 'json with spaces')
+            Invoke-RunBobBootstrap -ManifestPath $script:manifestPath `
+                -RunCargoSpecified -RunCargo $arguments
+
+            $cargoCalls = @($script:processCalls | Where-Object {
+                $_.FilePath -eq $tools.Cargo -and $_.ArgumentList.Count -eq 4
+            })
+            $cargoCalls.Count | Should -Be 1
+            ($cargoCalls[0].ArgumentList -join "`u{1f}") |
+                Should -Be ($arguments -join "`u{1f}")
+            @($script:processCalls | Where-Object {
+                $_.ArgumentList -contains 'toolchain'
+            }).Count | Should -Be 0
+            Should -Invoke Invoke-WebRequest -Times 0 -Exactly
+        }
+
+        It 'falls back explicitly to USERPROFILE dot-cargo when CARGO_HOME is empty' {
+            $env:CARGO_HOME = ''
+            $profileCargoHome = Join-Path $env:USERPROFILE '.cargo'
+            $tools = New-TestCargoHomeTools -CargoHome $profileCargoHome -Rustc -Cargo
+            Mock Get-RunBobCommandPath { $null }
+            Mock Invoke-RunBobExternalProcess {
+                [void] $script:processCalls.Add([pscustomobject]@{
+                    FilePath = $FilePath
+                    ArgumentList = @($ArgumentList)
+                })
+                if ($FilePath -eq $tools.Rustc) {
+                    return New-TestProcessResult -StdOut 'rustc 1.75.0 (mock)'
+                }
+                return New-TestProcessResult -StdOut 'cargo 1.75.0 (mock)'
+            }
+
+            Invoke-RunBobBootstrap -ManifestPath $script:manifestPath
+
+            @($script:processCalls | Where-Object {
+                $_.FilePath -eq $tools.Rustc -and
+                ($_.ArgumentList -join ' ') -eq '--version'
+            }).Count | Should -Be 2
+            @($script:processCalls | Where-Object {
+                $_.FilePath -eq $tools.Cargo -and
+                ($_.ArgumentList -join ' ') -eq '--version'
+            }).Count | Should -Be 2
+            Should -Invoke Invoke-WebRequest -Times 0 -Exactly
+        }
+
+        It 'uses Cargo-home rustup when it is the only installed Rust command' {
+            $tools = New-TestCargoHomeTools -CargoHome $env:CARGO_HOME -Rustup
+            Mock Get-RunBobCommandPath { $null }
+            Mock Invoke-RunBobExternalProcess {
+                [void] $script:processCalls.Add([pscustomobject]@{
+                    FilePath = $FilePath
+                    ArgumentList = @($ArgumentList)
+                })
+                if (($ArgumentList -join ' ') -eq 'run stable rustc --version') {
+                    return New-TestProcessResult -StdOut 'rustc 1.76.0 (mock)'
+                }
+                if (($ArgumentList -join ' ') -eq 'run stable cargo --version') {
+                    return New-TestProcessResult -StdOut 'cargo 1.76.0 (mock)'
+                }
+                return New-TestProcessResult
+            }
+
+            Invoke-RunBobBootstrap -ManifestPath $script:manifestPath
+
+            @($script:processCalls | Where-Object {
+                $_.FilePath -eq $tools.Rustup -and
+                ($_.ArgumentList -join ' ') -eq 'toolchain install stable --profile minimal'
+            }).Count | Should -Be 1
+            Should -Invoke Invoke-WebRequest -Times 0 -Exactly
+        }
+
+        It 'reuses files from a first official install on the second invocation' {
+            Mock Get-RunBobCommandPath { $null }
+            Mock Get-RunBobArchitecture { 'X64' }
+            Mock New-RunBobInstallerPath {
+                Join-Path $TestDrive ('run-bob-rustup-{0}.exe' -f [guid]::NewGuid())
+            }
+            Mock Invoke-WebRequest {
+                $script:downloadPath = $OutFile
+                Set-Content -LiteralPath $OutFile -Value 'mock installer'
+            }
+            Mock Invoke-RunBobExternalProcess {
+                [void] $script:processCalls.Add([pscustomobject]@{
+                    FilePath = $FilePath
+                    ArgumentList = @($ArgumentList)
+                })
+                if ($FilePath -match 'run-bob-rustup-[0-9a-f-]+\.exe$') {
+                    [void] (New-TestCargoHomeTools -CargoHome $env:CARGO_HOME -Rustc -Cargo -Rustup)
+                    return New-TestProcessResult
+                }
+                if ($ArgumentList -contains '--version') {
+                    if ($FilePath -like '*rustc.exe' -or $ArgumentList -contains 'rustc') {
+                        return New-TestProcessResult -StdOut 'rustc 1.76.0 (mock)'
+                    }
+                    return New-TestProcessResult -StdOut 'cargo 1.76.0 (mock)'
+                }
+                return New-TestProcessResult
+            }
+
+            Invoke-RunBobBootstrap -ManifestPath $script:manifestPath
+            Invoke-RunBobBootstrap -ManifestPath $script:manifestPath `
+                -RunCargoSpecified -RunCargo @('metadata', '--locked')
+
+            Should -Invoke Invoke-WebRequest -Times 1 -Exactly
+            @($script:processCalls | Where-Object {
+                $_.FilePath -match 'run-bob-rustup-[0-9a-f-]+\.exe$'
+            }).Count | Should -Be 1
+            @($script:processCalls | Where-Object {
+                $_.ArgumentList -contains 'toolchain'
+            }).Count | Should -Be 0
+            @($script:processCalls | Where-Object {
+                $_.FilePath -like '*cargo home with spaces*' -and
+                ($_.ArgumentList -join ' ') -eq 'metadata --locked'
+            }).Count | Should -Be 1
+        }
+
+        It 'rejects mixed single tools from command discovery and Cargo home' {
+            $tools = New-TestCargoHomeTools -CargoHome $env:CARGO_HOME -Cargo
+            Mock Get-RunBobCommandPath {
+                if ($Name -eq 'rustc') { return 'C:\command tools\rustc.exe' }
+                return $null
+            }
+            Mock Invoke-RunBobExternalProcess { return New-TestProcessResult }
+
+            { Invoke-RunBobBootstrap -ManifestPath $script:manifestPath } |
+                Should -Throw '*partial non-rustup Rust toolchain*'
+            $tools.Cargo | Should -Exist
+            Should -Invoke Invoke-RunBobExternalProcess -Times 0 -Exactly
+            Should -Invoke Invoke-WebRequest -Times 0 -Exactly
+        }
+
+        It 'prefers a complete Cargo-home pair over a partial command pair' {
+            $tools = New-TestCargoHomeTools -CargoHome $env:CARGO_HOME -Rustc -Cargo
+            Mock Get-RunBobCommandPath {
+                if ($Name -eq 'rustc') { return 'C:\unrelated\rustc.exe' }
+                return $null
+            }
+            Mock Invoke-RunBobExternalProcess {
+                [void] $script:processCalls.Add([pscustomobject]@{
+                    FilePath = $FilePath
+                    ArgumentList = @($ArgumentList)
+                })
+                if ($FilePath -eq $tools.Rustc) {
+                    return New-TestProcessResult -StdOut 'rustc 1.75.0 (mock)'
+                }
+                return New-TestProcessResult -StdOut 'cargo 1.75.0 (mock)'
+            }
+
+            Invoke-RunBobBootstrap -ManifestPath $script:manifestPath `
+                -RunCargoSpecified -RunCargo @('check', '--locked')
+
+            @($script:processCalls | Where-Object {
+                $_.FilePath -eq 'C:\unrelated\rustc.exe'
+            }).Count | Should -Be 0
+            @($script:processCalls | Where-Object {
+                $_.FilePath -eq $tools.Cargo -and
+                ($_.ArgumentList -join ' ') -eq 'check --locked'
+            }).Count | Should -Be 1
+        }
+
+        It 'repairs a Cargo-home rustc proxy with owned rustup when cargo is missing' {
+            $tools = New-TestCargoHomeTools -CargoHome $env:CARGO_HOME -Rustc -Rustup
+            $sysroot = Join-Path $TestDrive 'toolchain sysroot with spaces'
+            $sysrootBin = Join-Path $sysroot 'bin'
+            New-Item -ItemType Directory -Path $sysrootBin -Force | Out-Null
+            $ownedRustc = Join-Path $sysrootBin 'rustc.exe'
+            Set-Content -LiteralPath $ownedRustc -Value 'compiler'
+            Mock Get-RunBobCommandPath { $null }
+            Mock Invoke-RunBobExternalProcess {
+                [void] $script:processCalls.Add([pscustomobject]@{
+                    FilePath = $FilePath
+                    ArgumentList = @($ArgumentList)
+                })
+                switch ($ArgumentList -join ' ') {
+                    '--print sysroot' { return New-TestProcessResult -StdOut $sysroot }
+                    'which rustc' { return New-TestProcessResult -StdOut $ownedRustc }
+                    'run stable rustc --version' {
+                        return New-TestProcessResult -StdOut 'rustc 1.76.0 (mock)'
+                    }
+                    'run stable cargo --version' {
+                        return New-TestProcessResult -StdOut 'cargo 1.76.0 (mock)'
+                    }
+                    default { return New-TestProcessResult }
+                }
+            }
+
+            Invoke-RunBobBootstrap -ManifestPath $script:manifestPath
+
+            @($script:processCalls | Where-Object {
+                $_.FilePath -eq $tools.Rustc -and
+                ($_.ArgumentList -join ' ') -eq '--print sysroot'
+            }).Count | Should -Be 1
+            @($script:processCalls | Where-Object {
+                $_.FilePath -eq $tools.Rustup -and
+                ($_.ArgumentList -join ' ') -eq 'toolchain install stable --profile minimal'
+            }).Count | Should -Be 1
+        }
+
+        It 'uses the selected home compiler for ownership instead of an unrelated command rustc' {
+            $tools = New-TestCargoHomeTools -CargoHome $env:CARGO_HOME -Rustc -Cargo -Rustup
+            $sysroot = Join-Path $TestDrive 'selected home sysroot'
+            $sysrootBin = Join-Path $sysroot 'bin'
+            New-Item -ItemType Directory -Path $sysrootBin -Force | Out-Null
+            $ownedRustc = Join-Path $sysrootBin 'rustc.exe'
+            Set-Content -LiteralPath $ownedRustc -Value 'compiler'
+            Mock Get-RunBobCommandPath {
+                if ($Name -eq 'rustc') { return 'C:\unrelated mirror\rustc.exe' }
+                return $null
+            }
+            Mock Invoke-RunBobExternalProcess {
+                [void] $script:processCalls.Add([pscustomobject]@{
+                    FilePath = $FilePath
+                    ArgumentList = @($ArgumentList)
+                })
+                $joined = $ArgumentList -join ' '
+                if ($joined -eq '--version') {
+                    if ($FilePath -eq $tools.Rustc) {
+                        return New-TestProcessResult -StdOut 'rustc 1.74.0 (mock)'
+                    }
+                    return New-TestProcessResult -StdOut 'cargo 1.74.0 (mock)'
+                }
+                switch ($joined) {
+                    '--print sysroot' { return New-TestProcessResult -StdOut $sysroot }
+                    'which rustc' { return New-TestProcessResult -StdOut $ownedRustc }
+                    'run stable rustc --version' {
+                        return New-TestProcessResult -StdOut 'rustc 1.76.0 (mock)'
+                    }
+                    'run stable cargo --version' {
+                        return New-TestProcessResult -StdOut 'cargo 1.76.0 (mock)'
+                    }
+                    default { return New-TestProcessResult }
+                }
+            }
+
+            Invoke-RunBobBootstrap -ManifestPath $script:manifestPath
+
+            @($script:processCalls | Where-Object {
+                $_.FilePath -eq 'C:\unrelated mirror\rustc.exe'
+            }).Count | Should -Be 0
+            @($script:processCalls | Where-Object {
+                $_.FilePath -eq $tools.Rustc -and
+                ($_.ArgumentList -join ' ') -eq '--print sysroot'
+            }).Count | Should -Be 1
+            @($script:processCalls | Where-Object {
+                $_.FilePath -eq $tools.Rustup -and
+                ($_.ArgumentList -join ' ') -eq 'toolchain install stable --profile minimal'
+            }).Count | Should -Be 1
+        }
+
+        It 'rejects an unowned selected home pair despite an owned unrelated command rustc' {
+            $tools = New-TestCargoHomeTools -CargoHome $env:CARGO_HOME -Rustc -Cargo -Rustup
+            $ownedSysroot = Join-Path $TestDrive 'unrelated command sysroot'
+            $ownedBin = Join-Path $ownedSysroot 'bin'
+            $unownedSysroot = Join-Path $TestDrive 'selected but unowned sysroot'
+            New-Item -ItemType Directory -Path $ownedBin, $unownedSysroot -Force | Out-Null
+            $rustupCompiler = Join-Path $ownedBin 'rustc.exe'
+            Set-Content -LiteralPath $rustupCompiler -Value 'compiler'
+            Mock Get-RunBobCommandPath {
+                if ($Name -eq 'rustc') { return 'C:\unrelated mirror\rustc.exe' }
+                return $null
+            }
+            Mock Invoke-RunBobExternalProcess {
+                [void] $script:processCalls.Add([pscustomobject]@{
+                    FilePath = $FilePath
+                    ArgumentList = @($ArgumentList)
+                })
+                $joined = $ArgumentList -join ' '
+                if ($joined -eq '--version') {
+                    if ($FilePath -eq $tools.Rustc) {
+                        return New-TestProcessResult -StdOut 'rustc 1.74.0 (mock)'
+                    }
+                    return New-TestProcessResult -StdOut 'cargo 1.74.0 (mock)'
+                }
+                if ($joined -eq '--print sysroot') {
+                    if ($FilePath -eq $tools.Rustc) {
+                        return New-TestProcessResult -StdOut $unownedSysroot
+                    }
+                    return New-TestProcessResult -StdOut $ownedSysroot
+                }
+                if ($joined -eq 'which rustc') {
+                    return New-TestProcessResult -StdOut $rustupCompiler
+                }
+                return New-TestProcessResult
+            }
+
+            { Invoke-RunBobBootstrap -ManifestPath $script:manifestPath } |
+                Should -Throw '*active compiler is not rustup-owned*'
+
+            @($script:processCalls | Where-Object {
+                $_.FilePath -eq 'C:\unrelated mirror\rustc.exe'
+            }).Count | Should -Be 0
+            @($script:processCalls | Where-Object {
+                $_.FilePath -eq $tools.Rustc -and
+                ($_.ArgumentList -join ' ') -eq '--print sysroot'
+            }).Count | Should -Be 1
+            @($script:processCalls | Where-Object {
+                $_.ArgumentList -contains 'toolchain'
+            }).Count | Should -Be 0
+        }
     }
 }

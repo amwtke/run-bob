@@ -21,6 +21,42 @@ function Get-RunBobCommandPath {
     return $command.Path
 }
 
+function Get-RunBobCargoHomeTools {
+    $cargoHome = $null
+    if (-not [string]::IsNullOrWhiteSpace($env:CARGO_HOME)) {
+        $cargoHome = $env:CARGO_HOME
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+        $cargoHome = Join-Path $env:USERPROFILE '.cargo'
+    }
+
+    $rustcPath = $null
+    $cargoPath = $null
+    $rustupPath = $null
+    if ($cargoHome) {
+        $cargoHome = [System.IO.Path]::GetFullPath($cargoHome)
+        $rustcCandidate = Join-Path $cargoHome 'bin\rustc.exe'
+        $cargoCandidate = Join-Path $cargoHome 'bin\cargo.exe'
+        $rustupCandidate = Join-Path $cargoHome 'bin\rustup.exe'
+        if (Test-Path -LiteralPath $rustcCandidate -PathType Leaf) {
+            $rustcPath = $rustcCandidate
+        }
+        if (Test-Path -LiteralPath $cargoCandidate -PathType Leaf) {
+            $cargoPath = $cargoCandidate
+        }
+        if (Test-Path -LiteralPath $rustupCandidate -PathType Leaf) {
+            $rustupPath = $rustupCandidate
+        }
+    }
+
+    return [pscustomobject]@{
+        CargoHomePath = $cargoHome
+        RustcPath = $rustcPath
+        CargoPath = $cargoPath
+        RustupPath = $rustupPath
+    }
+}
+
 function Get-RunBobArchitecture {
     if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
             [System.Runtime.InteropServices.OSPlatform]::Windows)) {
@@ -220,17 +256,11 @@ function Install-RunBobRustupStable {
 }
 
 function Get-RunBobInstalledRustupPath {
-    $cargoHome = $env:CARGO_HOME
-    if (-not $cargoHome -and $env:USERPROFILE) {
-        $cargoHome = Join-Path $env:USERPROFILE '.cargo'
+    $commandRustupPath = Get-RunBobCommandPath -Name 'rustup'
+    if ($commandRustupPath) {
+        return $commandRustupPath
     }
-    if ($cargoHome) {
-        $candidate = Join-Path $cargoHome 'bin\rustup.exe'
-        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-            return $candidate
-        }
-    }
-    return Get-RunBobCommandPath -Name 'rustup'
+    return (Get-RunBobCargoHomeTools).RustupPath
 }
 
 function New-RunBobInstallerPath {
@@ -319,9 +349,43 @@ function Invoke-RunBobBootstrap {
 
     $manifest = Get-RunBobManifestRequirement -ManifestPath $ManifestPath
     $requiredVersion = $manifest.RequiredVersion
-    $rustcPath = Get-RunBobCommandPath -Name 'rustc'
-    $cargoPath = Get-RunBobCommandPath -Name 'cargo'
-    $rustupPath = Get-RunBobCommandPath -Name 'rustup'
+    $commandRustcPath = Get-RunBobCommandPath -Name 'rustc'
+    $commandCargoPath = Get-RunBobCommandPath -Name 'cargo'
+    $commandRustupPath = Get-RunBobCommandPath -Name 'rustup'
+    $cargoHomeTools = Get-RunBobCargoHomeTools
+
+    $rustcPath = $null
+    $cargoPath = $null
+    if ($commandRustcPath -and $commandCargoPath) {
+        $rustcPath = $commandRustcPath
+        $cargoPath = $commandCargoPath
+    }
+    elseif ($cargoHomeTools.RustcPath -and $cargoHomeTools.CargoPath) {
+        $rustcPath = $cargoHomeTools.RustcPath
+        $cargoPath = $cargoHomeTools.CargoPath
+    }
+
+    $rustupPath = $commandRustupPath
+    if (-not $rustupPath) {
+        $rustupPath = $cargoHomeTools.RustupPath
+    }
+
+    $partialToolchainDetected = $false
+    if (-not $rustcPath -and -not $cargoPath -and
+        ($commandRustcPath -or $commandCargoPath -or
+            $cargoHomeTools.RustcPath -or $cargoHomeTools.CargoPath)) {
+        $partialToolchainDetected = $true
+    }
+
+    $ownershipRustcPath = $rustcPath
+    if (-not $ownershipRustcPath) {
+        if ($commandRustcPath) {
+            $ownershipRustcPath = $commandRustcPath
+        }
+        elseif ($cargoHomeTools.RustcPath) {
+            $ownershipRustcPath = $cargoHomeTools.RustcPath
+        }
+    }
     $mode = $null
 
     if ($rustcPath -and $cargoPath) {
@@ -341,18 +405,21 @@ function Invoke-RunBobBootstrap {
             $mode = 'rustup'
         }
     }
-    elseif (-not $rustcPath -and -not $cargoPath) {
+    elseif (-not $rustcPath -and -not $cargoPath -and -not $partialToolchainDetected) {
         if ($rustupPath) {
             Install-RunBobRustupStable -RustupPath $rustupPath
         }
         else {
+            if (-not $cargoHomeTools.CargoHomePath) {
+                throw 'CARGO_HOME and USERPROFILE are unavailable'
+            }
             $rustupPath = Install-RunBobOfficialRust
         }
         $mode = 'rustup'
     }
     else {
-        if ($rustcPath -and $rustupPath -and
-            (Test-RunBobActiveCompilerRustupOwned -RustcPath $rustcPath -RustupPath $rustupPath)) {
+        if ($ownershipRustcPath -and $rustupPath -and
+            (Test-RunBobActiveCompilerRustupOwned -RustcPath $ownershipRustcPath -RustupPath $rustupPath)) {
             Install-RunBobRustupStable -RustupPath $rustupPath
             $mode = 'rustup'
         }

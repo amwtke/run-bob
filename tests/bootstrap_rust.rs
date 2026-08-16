@@ -23,6 +23,12 @@ fn bootstrap_rust_powershell_has_safe_equivalent_contract() {
         "--version",
         "[version]",
         "Get-RunBobCommandPath",
+        "Get-RunBobCargoHomeTools",
+        "$env:CARGO_HOME",
+        "$env:USERPROFILE",
+        "bin\\rustc.exe",
+        "bin\\cargo.exe",
+        "bin\\rustup.exe",
         "Get-RunBobArchitecture",
         "Invoke-WebRequest",
         "[guid]::NewGuid()",
@@ -54,6 +60,17 @@ fn bootstrap_rust_powershell_has_safe_equivalent_contract() {
             "PowerShell bootstrap contains forbidden behavior {forbidden:?}"
         );
     }
+    assert!(
+        !lowered.contains("$env:path"),
+        "PowerShell bootstrap must not read or mutate the process PATH through environment state"
+    );
+
+    assert!(
+        script.contains("if ($commandRustcPath -and $commandCargoPath)")
+            && script
+                .contains("elseif ($cargoHomeTools.RustcPath -and $cargoHomeTools.CargoPath)",),
+        "PowerShell bootstrap must select complete command or Cargo-home tool pairs"
+    );
 
     assert!(
         lowered
