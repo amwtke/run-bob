@@ -3259,6 +3259,14 @@ fn bob_model_stop_helper_derives_session_dir() {
     ] {
         assert!(model.contains(expected), "bob-model is missing {expected}");
     }
+    assert!(
+        model.contains("`stop-server.sh` 可能报告 `not_running`，工作流继续"),
+        "bob-model idle-stop fallback must match the active stop helper"
+    );
+    assert!(
+        !model.contains("SIGTERM no-op"),
+        "bob-model must not describe its removed direct-SIGTERM behavior"
+    );
 }
 
 #[test]
@@ -3380,7 +3388,9 @@ fn document_skills_define_reading_for_both_hosts() {
             "当前可用的 PDF/文档读取能力",
             "| 任一宿主 | `.md`、`.txt`、`.markdown` |",
             "当前宿主等价的文本读取能力",
-            "| 任一宿主 | 其他格式，或当前宿主无法读取 |",
+            "| 任一宿主 | 其他不支持格式 |",
+            "跳过该输入",
+            "| 任一宿主 | 已支持格式但当前宿主无法读取、文件损坏或权限拒绝 |",
             "立即停止并报告",
             "不得切换宿主",
         ] {
@@ -3411,6 +3421,37 @@ fn document_skills_define_reading_for_both_hosts() {
     let nfr = include_str!("../src/templates/skills/bob-nfr.md");
     assert!(nfr.contains("`superpowers:test-driven-development`"));
     assert!(nfr.contains("`$test-driven-development`"));
+}
+
+#[test]
+fn compliance_unreadable_sources_fail_closed_without_locking() {
+    let compliance = include_str!("../src/templates/skills/bob-compliance.md");
+    let boundary_cases = compliance
+        .split_once("### 1.5 边界情况")
+        .expect("bob-compliance Stage 1.5")
+        .1
+        .split_once("## Stage 2")
+        .expect("bob-compliance Stage 1.5 end")
+        .0;
+
+    for expected in [
+        "源文件不可读(损坏 / 权限)",
+        "立即停止整个运行",
+        "报告具体源文件路径与原因",
+        "不得切换宿主",
+        "不得猜测规则",
+        "lock 不记录该文件",
+        "下次重跑时仍按\"漂移\"处理",
+    ] {
+        assert!(
+            boundary_cases.contains(expected),
+            "bob-compliance Stage 1.5 is missing {expected}"
+        );
+    }
+    assert!(
+        !boundary_cases.contains("跳过该文件继续"),
+        "bob-compliance must not continue after an unreadable managed source"
+    );
 }
 
 #[test]
