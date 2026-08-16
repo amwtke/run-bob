@@ -312,7 +312,7 @@ else
     fi
 fi
 
-ownership_rustc_path=$path_rustc
+ownership_rustc_path=$rustc_path
 if [ -z "$ownership_rustc_path" ]; then
     ownership_rustc_path=$cargo_home_rustc
 fi

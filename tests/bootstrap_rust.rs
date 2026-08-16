@@ -679,6 +679,58 @@ fn bootstrap_rust_posix_uses_complete_cargo_home_pair_over_partial_path() {
 
 #[cfg(unix)]
 #[test]
+fn bootstrap_rust_posix_checks_selected_home_pair_ownership_over_partial_path_rustc() {
+    let sandbox = Sandbox::new();
+    let path_sysroot = sandbox.root.join("toolchains/path");
+    let home_sysroot = sandbox.root.join("toolchains/home");
+    fs::create_dir_all(&path_sysroot).expect("create PATH sysroot");
+    fs::create_dir_all(home_sysroot.join("bin")).expect("create Cargo-home sysroot");
+    fs::write(home_sysroot.join("bin/rustc"), "mock").expect("create compiler marker");
+    sandbox.rustc("1.70.0", Some(&path_sysroot));
+    sandbox.cargo_home_rustc_with_sysroot("1.70.0", &home_sysroot);
+    sandbox.cargo_home_cargo("1.70.0");
+    sandbox.cargo_home_rustup("1.80.0", Some("1.80.0"), &home_sysroot.join("bin/rustc"));
+    sandbox.fail_curl();
+
+    let output = sandbox.run(&[]);
+
+    assert!(output.status.success(), "{}", stdout_stderr(&output));
+    assert_eq!(
+        sandbox.log(),
+        concat!(
+            "rustup <which> <rustc>\n",
+            "rustup <toolchain> <install> <stable> <--profile> <minimal>\n",
+            "rustup <run> <stable> <rustc> <--version>\n",
+            "rustup <run> <stable> <cargo> <--version>\n"
+        )
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn bootstrap_rust_posix_rejects_unowned_selected_home_pair_despite_owned_path_rustc() {
+    let sandbox = Sandbox::new();
+    let path_sysroot = sandbox.root.join("toolchains/path");
+    let home_sysroot = sandbox.root.join("toolchains/home");
+    fs::create_dir_all(path_sysroot.join("bin")).expect("create PATH sysroot");
+    fs::create_dir_all(&home_sysroot).expect("create Cargo-home sysroot");
+    fs::write(path_sysroot.join("bin/rustc"), "mock").expect("create compiler marker");
+    sandbox.rustc("1.70.0", Some(&path_sysroot));
+    sandbox.cargo_home_rustc_with_sysroot("1.70.0", &home_sysroot);
+    sandbox.cargo_home_cargo("1.70.0");
+    sandbox.cargo_home_rustup("1.80.0", Some("1.80.0"), &path_sysroot.join("bin/rustc"));
+    sandbox.fail_curl();
+
+    let output = sandbox.run(&[]);
+    let diagnostics = stdout_stderr(&output);
+
+    assert!(!output.status.success(), "{diagnostics}");
+    assert!(diagnostics.contains("not rustup-owned"), "{diagnostics}");
+    assert_eq!(sandbox.log(), "rustup <which> <rustc>\n");
+}
+
+#[cfg(unix)]
+#[test]
 fn bootstrap_rust_posix_falls_back_to_home_dot_cargo_tools() {
     let sandbox = Sandbox::new();
     sandbox.cargo_home_rustc("1.80.0");
