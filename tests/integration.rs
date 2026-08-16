@@ -149,6 +149,101 @@ fn skill_frontmatter_parser_preserves_literal_block_blank_lines() {
     assert_eq!(body, "# Body");
 }
 
+#[test]
+fn repository_install_skills_are_identical_and_dual_host() {
+    use std::collections::BTreeSet;
+
+    let repository_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let claude_path = repository_root.join(".claude/skills/install/SKILL.md");
+    let codex_path = repository_root.join(".agents/skills/install/SKILL.md");
+
+    let claude_metadata = std::fs::symlink_metadata(&claude_path)
+        .expect("the original Claude Code install skill must remain available");
+    assert!(
+        claude_metadata.file_type().is_file(),
+        "the Claude Code install skill must be a regular file"
+    );
+
+    let codex_metadata = std::fs::symlink_metadata(&codex_path)
+        .expect("the Codex install skill must exist as a real file");
+    assert!(
+        codex_metadata.file_type().is_file(),
+        "the Codex install skill must be a regular file, not a symlink"
+    );
+
+    let claude_bytes = std::fs::read(&claude_path).expect("read Claude Code install skill");
+    let codex_bytes = std::fs::read(&codex_path).expect("read Codex install skill");
+    assert_eq!(
+        claude_bytes, codex_bytes,
+        "the two contributor install skills must be byte-identical"
+    );
+
+    let document = String::from_utf8(claude_bytes).expect("install skill must be UTF-8");
+    let (metadata, body) = parse_skill_document(&document);
+    assert_eq!(
+        metadata.keys().map(String::as_str).collect::<BTreeSet<_>>(),
+        BTreeSet::from(["description", "name"]),
+        "install skill frontmatter must contain exactly name and description"
+    );
+    assert_eq!(metadata.get("name").map(String::as_str), Some("install"));
+
+    let description = metadata
+        .get("description")
+        .expect("install skill must have a description");
+    assert!(
+        description.contains("/install") && description.contains("$install"),
+        "description must advertise both explicit host invocations"
+    );
+    assert!(
+        ["安装 run-bob", "编译并安装", "更新 run-bob"]
+            .iter()
+            .all(|trigger| description.contains(trigger)),
+        "description must retain natural-language triggers"
+    );
+    assert!(
+        !description.contains(['<', '>']),
+        "description must not contain angle brackets"
+    );
+    assert!(
+        description.chars().count() <= 1024,
+        "description must be at most 1024 Unicode characters"
+    );
+
+    for helper in [
+        "./scripts/bootstrap-rust.sh",
+        r".\scripts\bootstrap-rust.ps1",
+    ] {
+        assert!(body.contains(helper), "body must name source helper {helper}");
+    }
+    for command in [
+        "./scripts/bootstrap-rust.sh --run-cargo build --release --locked",
+        "./scripts/bootstrap-rust.sh --run-cargo test --locked",
+        "./scripts/bootstrap-rust.sh --run-cargo install --locked --path .",
+        r"& .\scripts\bootstrap-rust.ps1 -RunCargo @('build','--release','--locked')",
+        r"& .\scripts\bootstrap-rust.ps1 -RunCargo @('test','--locked')",
+        r"& .\scripts\bootstrap-rust.ps1 -RunCargo @('install','--locked','--path','.')",
+    ] {
+        assert!(
+            body.contains(command),
+            "body must contain locked Cargo stage: {command}"
+        );
+    }
+    for stale_or_unsafe in [
+        "15 tests",
+        "15 passed",
+        "15+ 个",
+        "! curl",
+        "rustup default",
+        "rustup update",
+        "curl --proto",
+    ] {
+        assert!(
+            !body.contains(stale_or_unsafe),
+            "body must not contain stale or unsafe instruction: {stale_or_unsafe}"
+        );
+    }
+}
+
 /// Path to the cargo-built binary under test.
 fn run_bob_bin() -> std::path::PathBuf {
     // CARGO_BIN_EXE_<name> is set by Cargo for integration tests.
