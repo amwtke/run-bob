@@ -2,6 +2,7 @@
 name = "run-bob"
 version = "0.8.0"
 edition = "2021"
+rust-version = "1.75"
 authors = ["Jin <amwtke@github>"]
 description = "A CLI to bootstrap Bob's 4-ring Clean Architecture + Superpowers harness for Claude Code projects"
 license = "MIT"
@@ -16,7 +17,8 @@ anyhow = "1.0"
 colored = "2.1"
 
 [dev-dependencies]
-tempfile = "3"
+# Pinned so Cargo 1.75 can parse every transitive dependency manifest.
+tempfile = "=3.10.1"
 
 [profile.release]
 opt-level = "z"
