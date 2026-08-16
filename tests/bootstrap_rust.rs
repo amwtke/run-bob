@@ -307,6 +307,24 @@ exit 96"#
         );
     }
 
+    fn cargo_home_rustc_with_sysroot(&self, version: &str, sysroot: &Path) {
+        self.cargo_home_mock(
+            "rustc",
+            &format!(
+                r#"if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then
+  printf '%s\n' 'rustc {version} (mock)'
+  exit 0
+fi
+if [ "$#" -eq 2 ] && [ "$1" = "--print" ] && [ "$2" = "sysroot" ]; then
+  printf '%s\n' '{}'
+  exit 0
+fi
+exit 96"#,
+                sysroot.display()
+            ),
+        );
+    }
+
     fn cargo_home_cargo(&self, version: &str) {
         self.cargo_home_mock(
             "cargo",
@@ -743,6 +761,60 @@ fn bootstrap_rust_posix_uses_cargo_home_rustup_without_official_download() {
             "rustup <run> <stable> <cargo> <--version>\n"
         )
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn bootstrap_rust_posix_repairs_partial_cargo_home_rustup_toolchain() {
+    let sandbox = Sandbox::new();
+    let active_sysroot = sandbox.root.join("toolchains/active");
+    fs::create_dir_all(active_sysroot.join("bin")).expect("create active mock sysroot");
+    fs::write(active_sysroot.join("bin/rustc"), "mock").expect("create compiler marker");
+    sandbox.cargo_home_rustc_with_sysroot("1.70.0", &active_sysroot);
+    sandbox.cargo_home_rustup("1.80.0", Some("1.80.0"), &active_sysroot.join("bin/rustc"));
+    sandbox.fail_curl();
+
+    let output = sandbox.run(&[]);
+
+    assert!(output.status.success(), "{}", stdout_stderr(&output));
+    assert_eq!(
+        sandbox.log(),
+        concat!(
+            "rustup <which> <rustc>\n",
+            "rustup <toolchain> <install> <stable> <--profile> <minimal>\n",
+            "rustup <run> <stable> <rustc> <--version>\n",
+            "rustup <run> <stable> <cargo> <--version>\n"
+        )
+    );
+    assert!(!sandbox.log().contains("curl"));
+}
+
+#[cfg(unix)]
+#[test]
+fn bootstrap_rust_posix_rejects_partial_cargo_home_with_unrelated_rustup() {
+    let sandbox = Sandbox::new();
+    let active_sysroot = sandbox.root.join("toolchains/active");
+    let unrelated_sysroot = sandbox.root.join("toolchains/unrelated");
+    fs::create_dir_all(&active_sysroot).expect("create active mock sysroot");
+    fs::create_dir_all(unrelated_sysroot.join("bin")).expect("create unrelated mock sysroot");
+    fs::write(unrelated_sysroot.join("bin/rustc"), "mock").expect("create compiler marker");
+    sandbox.cargo_home_rustc_with_sysroot("1.70.0", &active_sysroot);
+    sandbox.cargo_home_rustup(
+        "1.80.0",
+        Some("1.80.0"),
+        &unrelated_sysroot.join("bin/rustc"),
+    );
+    sandbox.fail_curl();
+
+    let output = sandbox.run(&[]);
+    let diagnostics = stdout_stderr(&output);
+
+    assert!(!output.status.success(), "{diagnostics}");
+    assert!(
+        diagnostics.contains("partial non-rustup Rust toolchain"),
+        "{diagnostics}"
+    );
+    assert_eq!(sandbox.log(), "rustup <which> <rustc>\n");
 }
 
 #[cfg(unix)]

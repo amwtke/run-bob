@@ -148,7 +148,7 @@ canonical_directory() {
 }
 
 active_compiler_is_rustup_owned() {
-    active_sysroot=$("$rustc_path" --print sysroot 2>/dev/null) || return 1
+    active_sysroot=$("$ownership_rustc_path" --print sysroot 2>/dev/null) || return 1
     rustup_compiler=$("$rustup_path" which rustc 2>/dev/null) || return 1
     [ -f "$rustup_compiler" ] || return 1
 
@@ -311,6 +311,11 @@ else
         partial_toolchain_detected=true
     fi
 fi
+
+ownership_rustc_path=$path_rustc
+if [ -z "$ownership_rustc_path" ]; then
+    ownership_rustc_path=$cargo_home_rustc
+fi
 selected_mode=
 
 if [ -n "$rustc_path" ] && [ -n "$cargo_path" ]; then
@@ -335,7 +340,7 @@ elif [ -z "$rustc_path" ] && [ -z "$cargo_path" ] && [ "$partial_toolchain_detec
         download_rustup
     fi
 else
-    if [ -n "$rustc_path" ] && [ -n "$rustup_path" ] && active_compiler_is_rustup_owned; then
+    if [ -n "$ownership_rustc_path" ] && [ -n "$rustup_path" ] && active_compiler_is_rustup_owned; then
         select_rustup_stable
     else
         fail "a partial non-rustup Rust toolchain is installed; refusing to replace it automatically"
