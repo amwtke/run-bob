@@ -1172,6 +1172,91 @@ fn generated_readme_explains_both_skill_hosts() {
 }
 
 #[test]
+fn bob_onion_conditions_java_harness_outputs() {
+    let generated_readme = include_str!("../src/templates/root/README-RUN-BOB.md");
+    let layout_section = generated_readme
+        .split_once("## 二、目录布局")
+        .expect("generated README directory layout")
+        .1;
+    let default_tree = layout_section
+        .split_once("```")
+        .expect("default directory tree opening fence")
+        .1
+        .split_once("```")
+        .expect("default directory tree closing fence")
+        .0;
+    assert!(default_tree.contains(".claude/skills/"));
+    assert!(default_tree.contains(".agents/skills/"));
+    assert!(
+        !default_tree.contains("src/"),
+        "default init tree must not contain the optional Java skeleton:\n{default_tree}"
+    );
+
+    let onion_guide = generated_readme
+        .split_once("### 4.2 `/bob-onion`")
+        .expect("generated README bob-onion guide")
+        .1
+        .split_once("### 4.3")
+        .expect("generated README bob-onion guide end")
+        .0;
+    for expected in [
+        "仅当项目已经通过 `run-bob init --with-java` 安装 Java harness",
+        "`CleanArchitectureTest.java` 存在时",
+        "`TransactionalUseCaseDecorator.java` 存在时",
+    ] {
+        assert!(
+            onion_guide.contains(expected),
+            "generated bob-onion guide is missing {expected}"
+        );
+    }
+    for unsafe_claim in [
+        "- **回写** `CleanArchitectureTest.java`",
+        "- 决定 TransactionalUseCaseDecorator 装配方式",
+    ] {
+        assert!(
+            !onion_guide.contains(unsafe_claim),
+            "generated bob-onion guide still makes an unconditional Java claim: {unsafe_claim}"
+        );
+    }
+
+    let onion = include_str!("../src/templates/skills/bob-onion.md");
+    for expected in [
+        "只有受管 Java/ArchUnit harness 的相应文件已经存在时",
+        "缺失时不得创建或假定这些 Java 文件存在",
+        "本 skill 不得自行运行 `run-bob init --with-java`",
+    ] {
+        assert!(onion.contains(expected), "bob-onion is missing {expected}");
+    }
+    for unsafe_claim in [
+        "→ skill 直接 edit 两个文件",
+        "副作用:**追加** `src/test/java/architecture/CleanArchitectureTest.java`",
+    ] {
+        assert!(
+            !onion.contains(unsafe_claim),
+            "bob-onion still contains an unconditional Java side effect: {unsafe_claim}"
+        );
+    }
+
+    let repository_readme = include_str!("../README.md");
+    for document in [generated_readme, onion, repository_readme] {
+        assert!(
+            !document.contains("R0-R12") && !document.contains("R0–R12"),
+            "stale R0-R12 contract remains"
+        );
+        assert!(
+            !document.contains("docs/compliance/*.md"),
+            "managed compliance README is hidden by an over-broad never-modified claim"
+        );
+        assert!(
+            !document.contains("Codex 会自动加载 `CLAUDE.md`")
+                && !document.contains("Codex 将自动加载 `CLAUDE.md`")
+                && !document.contains("Codex 自动加载 `CLAUDE.md`。"),
+            "document claims Codex automatically loads CLAUDE.md"
+        );
+    }
+}
+
+#[test]
 fn init_installs_archunit_test_at_correct_path() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();

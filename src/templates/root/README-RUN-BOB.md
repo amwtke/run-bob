@@ -220,12 +220,12 @@ Claude Code 保留原有 slash 调用;Codex 使用同名 dollar 调用:
 **产出**:
 - `docs/bob/02-onion-<topic>.md`(设计过程记录)
 - **更新根目录 `ARCHITECTURE.md`**(SSoT)
-- **回写** `CleanArchitectureTest.java` 的 `FORBIDDEN_IN_INNER` 黑名单
+- 仅当项目已经通过 `run-bob init --with-java` 安装 Java harness,且 `CleanArchitectureTest.java` 存在时,才回写其 `FORBIDDEN_IN_INNER` 黑名单
 
 **关键**:
 - 划出 4 环包结构 + 端口清单 + Entity 状态机 + 装配点
 - 严格遵守接口位置反转(端口在 usecase/port,不在 entity)
-- 决定 TransactionalUseCaseDecorator 装配方式
+- 仅当受管 `TransactionalUseCaseDecorator.java` 存在时,才决定其 Java/Spring 装配方式;非 Java 项目只记录宿主无关的事务边界
 - 对话式设计,每个端口 / Entity 成型后确认
 
 ### 4.3 `/bob-spec` — Spec 生成(桥接 Superpowers)

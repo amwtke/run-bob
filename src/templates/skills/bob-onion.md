@@ -3,7 +3,7 @@ name: bob-onion
 description: |
   当用户说“画 4 环架构”“设计端口”“出重构计划”或“决定状态机怎么放”时使用。Claude Code 调用 `/bob-onion 参数`，
   Codex 调用 `$bob-onion 参数`，参数语义相同；支持默认读取最新 identity、`--identity [文档路径]` 与 `--refresh`。
-  这是 `/bob-identify` 之后的正式架构设计阶段：划分 4 环包结构、列端口、提取 Entity 状态机、决定装饰器边界、回写 ArchUnit 黑名单并更新 ARCHITECTURE.md。棕地模式还产出重构计划或清洁孤岛布局；不写实现代码，主要输出供 `/bob-spec` 使用。
+  这是 `/bob-identify` 之后的正式架构设计阶段：划分 4 环包结构、列端口、提取 Entity 状态机并更新 ARCHITECTURE.md；仅在受管 Java harness 已存在时决定 Java 装饰器边界并回写 ArchUnit 黑名单。棕地模式还产出重构计划或清洁孤岛布局；不写实现代码，主要输出供 `/bob-spec` 使用。
 ---
 
 # Bob 4-Ring Architecture Design Skill
@@ -40,6 +40,12 @@ $bob-onion --refresh               # 跳过 identity,基于现有 ARCHITECTURE.m
 - `docs/bob/01-identity-*.md` 至少存在一份(否则提示先跑 `/bob-identify`)
 - 例外:`--refresh` 模式只增补 ARCHITECTURE.md,不需 identity 文档
 
+### 可选 Java harness 边界(强制)
+
+- 只有受管 Java/ArchUnit harness 的相应文件已经存在时,才讨论或更新 `TransactionalUseCaseDecorator.java`、Framework Config 和 `CleanArchitectureTest.java`。
+- 缺失时不得创建或假定这些 Java 文件存在；非 Java 项目跳过 Java/Spring 与 ArchUnit 专属步骤,只在 `ARCHITECTURE.md` 记录宿主无关的事务边界与约束。
+- 若用户明确选择启用 Java harness,先说明需要由用户另行执行 `run-bob init --with-java`,并等待用户完成后再继续。本 skill 不得自行运行 `run-bob init --with-java`,也不得把调用本 skill 视为扩写 `src/` 的授权。
+
 ## 提问规约(强制)
 
 任何需要用户选择的问题,**必须**按下面三段式输出。**禁止**抛开放问题。
@@ -61,10 +67,10 @@ $bob-onion --refresh               # 跳过 identity,基于现有 ARCHITECTURE.m
 1. 划出本上下文的 4 环包结构(具体到包名)
 2. 列出**端口清单**(每个端口名称、签名、归属包、impl 指向)
 3. 提取 **Entity 状态机**(每个 CORE/Entity 标了状态字段的对象都画状态机)
-4. 决定 **TransactionalUseCaseDecorator + Framework Config** 的装配形态
+4. 若受管 Java harness 已存在,决定 **TransactionalUseCaseDecorator + Framework Config** 的装配形态；否则只记录宿主无关的事务边界
 5. 标注 **3 个落地动作**的应用点(接口位置反转 / 框架边界外推 / 状态机上提)
 6. 棕地模式额外产出 **α→γ 重构计划**(B1)或 **清洁孤岛布局 + Legacy ACL**(B2)
-7. **更新 `ARCHITECTURE.md`**(SSoT)+ **回写 ArchUnit 黑名单**(`FORBIDDEN_IN_INNER` 数组)
+7. **更新 `ARCHITECTURE.md`**(SSoT)；仅在受管 `CleanArchitectureTest.java` 已存在时**回写 ArchUnit 黑名单**(`FORBIDDEN_IN_INNER` 数组)
 
 ## 工作流(三模式共用骨架,分支处标注)
 
@@ -181,7 +187,9 @@ UseCase 侧只判 boolean、不再 `findById/save`;adapter 里写一条 `@Modify
 >
 > 同意吗?
 
-### Step O5:决定装饰器边界(@Transactional 唯一位置)
+### Step O5(仅受管 Java harness 已存在):决定装饰器边界(@Transactional 唯一位置)
+
+先确认 `shared/framework/transaction/TransactionalUseCaseDecorator.java` 已存在。若不存在,跳过以下 Java/Spring 草案,不得创建该文件；只把已确认的宿主无关事务边界写入 `ARCHITECTURE.md`。
 
 > **assistant**:
 >
@@ -204,7 +212,7 @@ UseCase 侧只判 boolean、不再 `findById/save`;adapter 里写一条 `@Modify
 > - 在 `<feature>/framework/config/<Feature>UseCaseConfig.java` 用 `@Bean` 装配,**强制走 `TransactionalUseCaseDecorator` 包裹**
 > - 装饰器配套测试**必须覆盖**:RuntimeException 回滚 / **checked Exception 同样回滚**(Spring 默认只回滚前者,不显式声明 `rollbackFor` 会静默 commit)
 >
-> 同意吗?(由 run-bob init 已经预置 shared 骨架,只需在 framework/config 写装配)
+> 同意吗?(此分支仅适用于 `run-bob init --with-java` 已预置 shared 骨架的项目)
 
 → 这一步是**关键决策点**,记入 ADR-1。
 
@@ -231,7 +239,9 @@ UseCase 侧只判 boolean、不再 `findById/save`;adapter 里写一条 `@Modify
 
 → 这一步记入 ADR-2.5(并发策略)。漏掉这一步等于把 last-writer-wins 静默丢更埋进项目。
 
-### Step O6:回写 ArchUnit 黑名单 + ARCHITECTURE.md 配件清单
+### Step O6:更新 ARCHITECTURE.md 配件清单,条件式回写 ArchUnit
+
+始终更新 `ARCHITECTURE.md` 配件清单。只有受管的 `src/test/java/architecture/CleanArchitectureTest.java` 已存在时,才提出并执行下面的黑名单回写；文件缺失时跳过 ArchUnit 修改,不得创建或假定它存在。
 
 > **assistant**:
 >
@@ -246,11 +256,11 @@ UseCase 侧只判 boolean、不再 `findById/save`;adapter 里写一条 `@Modify
 > | **达梦驱动** | `io.dameng..` | 本次新增(身份测试发现) |
 > | **FastJSON** | `com.alibaba.fastjson..` | 本次新增 |
 >
-> **推荐**:把"达梦驱动"和"FastJSON"两条加到 `CleanArchitectureTest.java` 的 `FORBIDDEN_IN_INNER`,同时在 ARCHITECTURE.md §配件清单 增加这两行项目特化条目。
+> **推荐**:始终在 ARCHITECTURE.md §配件清单增加"达梦驱动"和"FastJSON"两行项目特化条目；若受管 `CleanArchitectureTest.java` 已存在,再把对应根包加到其 `FORBIDDEN_IN_INNER`。
 >
 > 同意吗?
 
-→ skill 直接 edit 两个文件:`src/test/java/architecture/CleanArchitectureTest.java`(数组追加)+ `ARCHITECTURE.md`(表格追加)。
+→ skill 必须 edit `ARCHITECTURE.md`(表格追加)；仅在上述文件存在性检查通过后,才 edit `src/test/java/architecture/CleanArchitectureTest.java`(数组追加)。
 
 ### Step O7(仅 B1):产出 α→γ 重构计划
 
@@ -302,7 +312,7 @@ UseCase 侧只判 boolean、不再 `findById/save`;adapter 里写一条 `@Modify
 >
 > **关键纪律**:legacy 方法签名是 `Page<OrderDTO> fetchByCustomer(Long, Date, Date)`——**绝不**让新 usecase 看到这个签名。新端口用业务领域语言(`Period` 替代 `Date,Date`,`OrderSnapshot` 替代 `OrderDTO`)。
 >
-> **ArchUnit 作用域**:
+> **ArchUnit 作用域**(仅当受管 `CleanArchitectureTest.java` 已存在):
 > ```java
 > @AnalyzeClasses(
 >     packages = {"com.example.<feature>", "com.example.shared"},
@@ -331,10 +341,10 @@ UseCase 侧只判 boolean、不再 `findById/save`;adapter 里写一条 `@Modify
 - §4 端口清单:Step O3 列出的所有端口
 - §5 UseCase 清单:每个 CORE/UseCase 一行,Command/Result/用到的端口
 - §6 配件清单:identify 表格里所有 ADAPTER/FRAMEWORK 候选 + 默认 4 项(Spring/SLF4J/Jakarta/Lombok)+ 信创预设
-- §7 装配点:照模板说明,引用 shared 骨架
+- §7 装配点:受管 Java harness 已存在时照模板说明引用 shared 骨架；否则记录宿主无关的事务边界
 - §8 α/β/γ 评级与重构计划:仅 B1/B2 填,B1 有重构表,B2 有清洁孤岛布局
-- §9 ArchUnit 作用域:G/B1 默认 `com.example`;B2 用多包数组
-- §10 ADR:**至少**记 ADR-1(UseCase + 装饰器)+ ADR-2(端口归属 usecase/port);棕地额外记 ADR-3(α→γ 路径)或 ADR-3(legacy ACL 决策)
+- §9 ArchUnit 作用域:仅受管 `CleanArchitectureTest.java` 已存在时填写；G/B1 默认 `com.example`,B2 用多包数组
+- §10 ADR:**至少**记 ADR-1(受管 Java harness 已存在时记录 UseCase + 装饰器,否则记录宿主无关事务边界)+ ADR-2(端口归属 usecase/port);棕地额外记 ADR-3(α→γ 路径)或 ADR-3(legacy ACL 决策)
 - §11 下一步:列出待跑的 `/bob-spec` 用例清单
 
 ## 反模式(skill 必须拒绝)
@@ -349,10 +359,10 @@ UseCase 侧只判 boolean、不再 `findById/save`;adapter 里写一条 `@Modify
 
 - **上游**:`docs/bob/01-identity-*.md`
 - **下游**:`/bob-spec` 读 `ARCHITECTURE.md` 的端口清单 + UseCase 清单生成 spec
-- **回写**:`CleanArchitectureTest.java` 的 `FORBIDDEN_IN_INNER` 数组(根据 §6 配件清单)
+- **条件式回写**:仅受管 `CleanArchitectureTest.java` 已存在时更新其 `FORBIDDEN_IN_INNER` 数组(根据 §6 配件清单)
 
 ## 文件落位
 
 - 设计过程记录:`docs/bob/02-onion-<topic>.md`
 - 最终产出:**更新项目根目录 `ARCHITECTURE.md`**(SSoT)
-- 副作用:**追加** `src/test/java/architecture/CleanArchitectureTest.java` 的黑名单数组
+- 条件式副作用:仅当 `src/test/java/architecture/CleanArchitectureTest.java` 已存在时追加黑名单数组；缺失时不创建
