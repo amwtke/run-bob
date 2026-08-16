@@ -136,9 +136,25 @@ fn print_next_steps(minimal: bool) {
     println!("{}", "━".repeat(60).bright_black());
 
     if minimal {
-        println!("  Skills installed. Open Claude Code and try:");
-        println!("    {} /bob-survey <your business description>   (optional sanity check)", "•".cyan());
-        println!("    {} /bob-model <doc-path>                     (mandatory — extracts the domain SSoT)", "•".cyan());
+        println!("  Skills installed. Try either host:");
+        println!("    Claude Code:");
+        println!(
+            "      {} /bob-survey <your business description>   (optional sanity check)",
+            "•".cyan()
+        );
+        println!(
+            "      {} /bob-model <doc-path>                     (mandatory — extracts the domain SSoT)",
+            "•".cyan()
+        );
+        println!("    Codex:");
+        println!(
+            "      {} $bob-survey <your business description>   (optional sanity check)",
+            "•".cyan()
+        );
+        println!(
+            "      {} $bob-model <doc-path>                     (mandatory — extracts the domain SSoT)",
+            "•".cyan()
+        );
         println!();
         println!(
             "  {} for full project integration, run without --minimal.",
@@ -153,24 +169,44 @@ fn print_next_steps(minimal: bool) {
     println!("       - ARCHITECTURE.md         (4-ring SSoT, starts empty)");
     println!("       - README-RUN-BOB.md       (how to use this harness)");
     println!();
-    println!("  2. {} open Claude Code in this directory.", "Launch".cyan());
+    println!("  2. {} open Claude Code or Codex in this directory.", "Launch".cyan());
     println!();
-    println!("  3. {} start the workflow (survey is optional; /bob-model and downstream are mandatory):", "Run".cyan());
     println!(
-        "       {}    {}",
+        "  3. {} start the workflow (survey is optional; model and downstream are mandatory):",
+        "Run".cyan()
+    );
+    println!("       Claude Code:");
+    println!(
+        "         {}    {}",
         "/bob-survey <your business description>".bold().green(),
         "(optional)".bright_black()
     );
     println!(
-        "       {}    {}",
+        "         {}    {}",
         "/bob-model <doc-path>".bold().green(),
         "(mandatory — produces the SSoT for downstream skills)".bright_black()
     );
-    println!("       {}", "/bob-stories <your business description>".bold().green());
     println!(
-        "       {}",
-        "/bob-spec <use case>".bold().green()
+        "         {}",
+        "/bob-stories <your business description>".bold().green()
     );
+    println!("         {}", "/bob-spec <use case>".bold().green());
+    println!("       Codex:");
+    println!(
+        "         {}    {}",
+        "$bob-survey <your business description>".bold().green(),
+        "(optional)".bright_black()
+    );
+    println!(
+        "         {}    {}",
+        "$bob-model <doc-path>".bold().green(),
+        "(mandatory — produces the SSoT for downstream skills)".bright_black()
+    );
+    println!(
+        "         {}",
+        "$bob-stories <your business description>".bold().green()
+    );
+    println!("         {}", "$bob-spec <use case>".bold().green());
     println!();
     println!(
         "  4. {} hand off the generated spec to Superpowers for TDD.",

@@ -1,12 +1,236 @@
 //! Integration tests for run-bob.
 //! Each test creates a tempdir, runs init/status, and verifies filesystem state.
 
+use std::collections::BTreeMap;
+use std::path::Path;
 use std::process::Command;
+
+const GENERATED_SKILLS: &[&str] = &[
+    "bob-survey",
+    "bob-model",
+    "bob-stories",
+    "bob-identify",
+    "bob-onion",
+    "bob-spec",
+    "bob-compliance",
+    "bob-nfr",
+    "visual-md",
+];
+
+const SKILL_ROOTS: &[&str] = &[".claude/skills", ".agents/skills"];
+
+fn files_below(root: &Path) -> BTreeMap<String, (Vec<u8>, Option<u32>)> {
+    fn walk(root: &Path, dir: &Path, files: &mut BTreeMap<String, (Vec<u8>, Option<u32>)>) {
+        for entry in std::fs::read_dir(dir).expect("read skill directory") {
+            let entry = entry.expect("read skill directory entry");
+            let file_type = entry.file_type().expect("read skill entry type");
+            let path = entry.path();
+
+            if file_type.is_dir() {
+                walk(root, &path, files);
+            } else if file_type.is_file() {
+                let relative = path
+                    .strip_prefix(root)
+                    .expect("skill file below root")
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                let content = std::fs::read(&path).expect("read skill file");
+
+                #[cfg(unix)]
+                let executable_mode = {
+                    use std::os::unix::fs::PermissionsExt;
+                    Some(
+                        std::fs::metadata(&path)
+                            .expect("read skill file metadata")
+                            .permissions()
+                            .mode()
+                            & 0o111,
+                    )
+                };
+
+                #[cfg(not(unix))]
+                let executable_mode = None;
+
+                files.insert(relative, (content, executable_mode));
+            }
+        }
+    }
+
+    let mut files = BTreeMap::new();
+    walk(root, root, &mut files);
+    files
+}
 
 /// Path to the cargo-built binary under test.
 fn run_bob_bin() -> std::path::PathBuf {
     // CARGO_BIN_EXE_<name> is set by Cargo for integration tests.
     std::path::PathBuf::from(env!("CARGO_BIN_EXE_run-bob"))
+}
+
+#[test]
+fn asset_registry_has_identical_claude_and_codex_skill_entries() {
+    use std::collections::BTreeSet;
+
+    use run_bob::assets::HARNESS_ASSETS;
+
+    let expected_tails = [
+        "bob-identify/SKILL.md",
+        "bob-onion/SKILL.md",
+        "bob-spec/SKILL.md",
+        "bob-survey/SKILL.md",
+        "bob-stories/SKILL.md",
+        "bob-nfr/SKILL.md",
+        "bob-compliance/SKILL.md",
+        "bob-model/SKILL.md",
+        "bob-model/scripts/server.cjs",
+        "bob-model/scripts/helper.js",
+        "bob-model/scripts/start-server.sh",
+        "bob-model/scripts/stop-server.sh",
+        "bob-model/scripts/frame-template.html",
+        "visual-md/SKILL.md",
+        "visual-md/scripts/server.cjs",
+        "visual-md/scripts/client.js",
+        "visual-md/scripts/md2html.cjs",
+        "visual-md/scripts/slugify.cjs",
+        "visual-md/scripts/frame-template.html",
+        "visual-md/scripts/start-server.sh",
+        "visual-md/scripts/stop-server.sh",
+        "visual-md/scripts/package.json",
+    ];
+
+    let entries_for = |host: &str| {
+        HARNESS_ASSETS
+            .iter()
+            .filter(|asset| asset.rel_path.starts_with(&[host, "skills"]))
+            .map(|asset| {
+                let tail = asset.rel_path[2..].join("/");
+                let shell_file = asset.rel_path.last().is_some_and(|name| name.ends_with(".sh"));
+                (
+                    tail,
+                    (
+                        asset.content.as_bytes().to_vec(),
+                        asset.included_in_minimal,
+                        asset.upgrade_safe,
+                        shell_file,
+                    ),
+                )
+            })
+            .collect::<BTreeMap<_, _>>()
+    };
+
+    let claude = entries_for(".claude");
+    let codex = entries_for(".agents");
+    let expected_tails = expected_tails.into_iter().collect::<BTreeSet<_>>();
+
+    assert_eq!(
+        claude.keys().map(String::as_str).collect::<BTreeSet<_>>(),
+        expected_tails,
+        "Claude registry tails drifted"
+    );
+    assert_eq!(
+        codex.keys().map(String::as_str).collect::<BTreeSet<_>>(),
+        expected_tails
+    );
+    assert_eq!(claude, codex, "Claude and Codex registry entries must match");
+}
+
+#[test]
+fn init_installs_byte_identical_dual_skill_trees() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    Command::new(run_bob_bin())
+        .args(["init", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let claude = files_below(&target.join(SKILL_ROOTS[0]));
+    let codex = files_below(&target.join(SKILL_ROOTS[1]));
+    assert_eq!(claude, codex, "installed skill trees must be byte- and mode-identical");
+}
+
+#[test]
+fn minimal_init_installs_all_nine_skills_for_both_hosts_only() {
+    use std::collections::BTreeSet;
+
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+
+    Command::new(run_bob_bin())
+        .args(["init", "--minimal", "--no-gitignore", "--dir"])
+        .arg(target)
+        .status()
+        .expect("minimal init");
+
+    let expected_skills = GENERATED_SKILLS.iter().copied().collect::<BTreeSet<_>>();
+    for root in SKILL_ROOTS {
+        let actual_skills = std::fs::read_dir(target.join(root))
+            .expect("read generated skill root")
+            .map(|entry| {
+                entry
+                    .expect("read generated skill")
+                    .file_name()
+                    .into_string()
+                    .expect("UTF-8 skill name")
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            actual_skills.iter().map(String::as_str).collect::<BTreeSet<_>>(),
+            expected_skills,
+            "minimal init generated the wrong skill set under {root}"
+        );
+        for skill in GENERATED_SKILLS {
+            assert!(
+                target.join(root).join(skill).join("SKILL.md").is_file(),
+                "minimal init did not install {root}/{skill}/SKILL.md"
+            );
+        }
+    }
+
+    let top_level = std::fs::read_dir(target)
+        .expect("read target")
+        .map(|entry| {
+            entry
+                .expect("read target entry")
+                .file_name()
+                .into_string()
+                .expect("UTF-8 target entry")
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(top_level, BTreeSet::from([".agents".to_string(), ".claude".to_string()]));
+}
+
+#[test]
+fn init_without_force_preserves_existing_claude_skill_and_adds_codex() {
+    use run_bob::assets::HARNESS_ASSETS;
+
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    let claude_skill = target.join(".claude/skills/bob-identify/SKILL.md");
+    std::fs::create_dir_all(claude_skill.parent().expect("Claude skill parent"))
+        .expect("create existing Claude skill directory");
+    let sentinel = b"user-owned Claude skill\n";
+    std::fs::write(&claude_skill, sentinel).expect("write Claude skill sentinel");
+
+    Command::new(run_bob_bin())
+        .args(["init", "--no-gitignore", "--dir"])
+        .arg(target)
+        .status()
+        .expect("init");
+
+    let embedded = HARNESS_ASSETS
+        .iter()
+        .find(|asset| asset.rel_path == [".claude", "skills", "bob-identify", "SKILL.md"])
+        .expect("embedded bob-identify asset")
+        .content
+        .as_bytes();
+    assert_eq!(std::fs::read(&claude_skill).expect("read Claude sentinel"), sentinel);
+    assert_eq!(
+        std::fs::read(target.join(".agents/skills/bob-identify/SKILL.md"))
+            .expect("read installed Codex skill"),
+        embedded
+    );
 }
 
 #[test]
@@ -602,7 +826,7 @@ fn status_flags_missing_after_minimal_init() {
 
 /// SSoT drift guard: every entry in HARNESS_ASSETS must have a deliberate
 /// `upgrade_safe` value matching its policy.
-///   - Skill + SharedJava → always upgrade-safe (pure generated content)
+///   - Claude/Codex skills + SharedJava → always upgrade-safe (pure generated content)
 ///   - ArchUnit          → never upgrade-safe (FORBIDDEN_IN_INNER is user-edited)
 ///   - HarnessDoc        → mixed (README is safe; CLAUDE / ARCHITECTURE are not)
 #[test]
@@ -611,12 +835,16 @@ fn upgrade_safe_field_matches_category_policy() {
 
     for asset in HARNESS_ASSETS {
         let display = asset.rel_path.join("/");
-        match asset.category {
-            Category::Skill => assert!(
+        if asset.category.is_skill() {
+            assert!(
                 asset.upgrade_safe,
-                "{} is a Skill but upgrade_safe=false",
+                "{} is a skill but upgrade_safe=false",
                 display
-            ),
+            );
+            continue;
+        }
+
+        match asset.category {
             Category::SharedJava => assert!(
                 asset.upgrade_safe,
                 "{} is a SharedJava but upgrade_safe=false",
@@ -648,6 +876,9 @@ fn upgrade_safe_field_matches_category_policy() {
                         display
                     );
                 }
+            }
+            Category::ClaudeSkill | Category::CodexSkill => {
+                unreachable!("skill categories handled above")
             }
         }
     }
