@@ -82,7 +82,7 @@ Capture the printed `server-info` JSON; remember `url`, `port`, `screen_dir`, `s
 ## Round 1: render
 
 ```bash
-node "<skill-dir>/scripts/md2html.cjs" <draft-tmp.md> $SESSION_DIR/<basename>-<date>-v1.html
+node "<skill-dir>/scripts/md2html.cjs" "<draft-tmp.md>" "$SESSION_DIR/<basename>-<date>-v1.html"
 ```
 
 Report (mandatory format, every round):

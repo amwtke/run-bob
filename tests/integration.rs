@@ -3239,10 +3239,25 @@ fn interactive_skills_resolve_scripts_from_active_skill_dir() {
         "if [ ! -f \"$START_SCRIPT\" ]; then",
         "visual-md start script not found: $START_SCRIPT",
         "\"$START_SCRIPT\" \"$SESSION_DIR\"",
-        "node \"<skill-dir>/scripts/md2html.cjs\"",
+        "node \"<skill-dir>/scripts/md2html.cjs\" \"<draft-tmp.md>\" \"$SESSION_DIR/<basename>-<date>-v1.html\"",
         "\"<skill-dir>/scripts/stop-server.sh\"",
     ] {
         assert!(visual.contains(expected), "visual-md is missing {expected}");
+    }
+}
+
+#[test]
+fn bob_model_stop_helper_derives_session_dir() {
+    let model = include_str!("../src/templates/skills/bob-model.md");
+
+    for expected in [
+        "STOP_SCRIPT=\"<skill-dir>/scripts/stop-server.sh\"",
+        "SESSION_DIR=\"$(dirname \"$STATE_DIR\")\"",
+        "if [ ! -f \"$STOP_SCRIPT\" ]; then",
+        "bob-model stop script not found: $STOP_SCRIPT",
+        "\"$STOP_SCRIPT\" \"$SESSION_DIR\"",
+    ] {
+        assert!(model.contains(expected), "bob-model is missing {expected}");
     }
 }
 
@@ -3322,6 +3337,62 @@ fn document_skills_define_reading_for_both_hosts() {
         ] {
             assert!(document.contains(expected), "{skill} is missing {expected}");
         }
+    }
+
+    let model_preconditions = model
+        .split_once("## 前置条件")
+        .expect("bob-model preconditions")
+        .1
+        .split_once("## 提问规约")
+        .expect("bob-model preconditions end")
+        .0;
+    assert!(
+        model_preconditions.contains("当前宿主"),
+        "bob-model precondition must be host-neutral"
+    );
+    assert!(
+        !model_preconditions.contains("Read 工具"),
+        "bob-model precondition must not prescribe Claude's Read tool to Codex"
+    );
+
+    let model_reading = model
+        .split_once("### 1.1 按格式读源文档")
+        .expect("bob-model reading procedure")
+        .1
+        .split_once("### 1.2")
+        .expect("bob-model reading procedure end")
+        .0;
+    let compliance_reading = compliance
+        .split_once("### 1.1 按格式读取原文")
+        .expect("bob-compliance reading procedure")
+        .1
+        .split_once("### 1.2")
+        .expect("bob-compliance reading procedure end")
+        .0;
+    for (skill, procedure) in [
+        ("bob-model", model_reading),
+        ("bob-compliance", compliance_reading),
+    ] {
+        for expected in [
+            "| Claude Code | `.pdf`、`.docx` |",
+            "Read 工具的 `pages` 参数",
+            "| Codex | `.pdf`、`.docx` |",
+            "当前可用的 PDF/文档读取能力",
+            "| 任一宿主 | `.md`、`.txt`、`.markdown` |",
+            "当前宿主等价的文本读取能力",
+            "| 任一宿主 | 其他格式，或当前宿主无法读取 |",
+            "立即停止并报告",
+            "不得切换宿主",
+        ] {
+            assert!(
+                procedure.contains(expected),
+                "{skill} detailed reading procedure is missing {expected}"
+            );
+        }
+        assert!(
+            !procedure.contains("| `.pdf` |"),
+            "{skill} still has an unconditional Claude-only PDF row"
+        );
     }
     assert!(
         !compliance.contains("Claude 唯一执行器"),

@@ -52,7 +52,7 @@ $bob-model --refresh           # 强制重写,即使源文档未变化
 
 - 项目位于 git 仓库内
 - 建议:`/bob-survey` 已完成 + 难度评估 Medium/Hard
-- 源需求文档可读(PDF/docx 需要 Read 工具的 `pages` 参数;md/txt 直读)
+- 源需求文档必须能由当前宿主读取；按“宿主文档读取约定”选择当前宿主的能力，无法读取时停止并报告。
 
 ## 提问规约(强制三段式)
 
@@ -819,12 +819,12 @@ Stage 4. 三段式收口(用户给推进信号 → dump md → 停 server)
 
 ### 1.1 按格式读源文档
 
-| 后缀 | 读取方式 |
-|---|---|
-| `.pdf` | Read 工具的 `pages` 参数分批读(每次 5-10 页),逐批抽取 |
-| `.docx` | 同 PDF,Read 工具直接处理(注:抽取质量取决于文档结构) |
-| `.md`、`.txt`、`.markdown` | 一次性 Read 全文 |
-| 其他 | 跳过,在 md/html 报告里标注"格式不支持" |
+| 宿主 | 后缀 | 读取方式 |
+|---|---|---|
+| Claude Code | `.pdf`、`.docx` | 使用 Read 工具的 `pages` 参数分批读取(每次 5-10 页),逐批抽取；DOCX 抽取质量取决于文档结构 |
+| Codex | `.pdf`、`.docx` | 使用当前可用的 PDF/文档读取能力,按相同的 5-10 页粒度分批抽取 |
+| 任一宿主 | `.md`、`.txt`、`.markdown` | 使用当前宿主等价的文本读取能力,一次性读取全文 |
+| 任一宿主 | 其他格式，或当前宿主无法读取 | 立即停止并报告具体输入与原因；不得切换宿主、回退到另一 skill 根或猜测内容 |
 
 ### 1.2 识别聚合根(必经,终端 mini-loop 多轮反馈)
 
@@ -1304,10 +1304,14 @@ Stage 3 至此结束。当前宿主代理**不主动追问**,等用户在终端�
 ### 4.4 停 server(优雅 SIGTERM)
 
 ```bash
-kill -TERM $(cat "$STATE_DIR/server.pid")
+STOP_SCRIPT="<skill-dir>/scripts/stop-server.sh"
+SESSION_DIR="$(dirname "$STATE_DIR")"
+if [ ! -f "$STOP_SCRIPT" ]; then
+  echo "bob-model stop script not found: $STOP_SCRIPT" >&2
+  exit 1
+fi
+"$STOP_SCRIPT" "$SESSION_DIR"
 ```
-
-(或调用 `"<skill-dir>/scripts/stop-server.sh" "$SESSION_DIR"` 如存在)
 
 ### 4.5 三段式收口(per §产物报告规约的 Stage 4 模板)
 
