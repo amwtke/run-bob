@@ -79,18 +79,21 @@ fn assert_command_succeeded(output: &Output, operation: &str) {
 
 fn assert_dual_host_next_steps(output: &Output, mode: &str) {
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let Some((_, next_steps)) = stdout.split_once("Next steps") else {
+        panic!("{mode} init output missing the Next steps marker\nstdout:\n{stdout}");
+    };
     for expected in [
         "Claude Code:",
         "Codex:",
-        "/bob-survey",
-        "/bob-model",
-        "$bob-survey",
-        "$bob-model",
+        "/bob-survey <your business description>",
+        "/bob-model <doc-path>",
+        "$bob-survey <your business description>",
+        "$bob-model <doc-path>",
         "optional",
         "mandatory",
     ] {
         assert!(
-            stdout.contains(expected),
+            next_steps.contains(expected),
             "{mode} init next steps missing {expected:?}\nstdout:\n{stdout}"
         );
     }
