@@ -52,61 +52,82 @@ git pull --ff-only origin "$branch"
 
 POSIX 系统：
 
+以下整段在子 shell 中执行；`set -eu` 让失败立即终止后续阶段，导出的安装根在子 shell 结束后不会泄漏到父 shell。
+
 ```bash
-if [ -n "${CARGO_INSTALL_ROOT:-}" ]; then
-    install_root=$CARGO_INSTALL_ROOT
-elif [ -n "${CARGO_HOME:-}" ]; then
-    install_root=$CARGO_HOME
-elif [ -n "${HOME:-}" ]; then
-    install_root=$HOME/.cargo
-else
-    printf '%s\n' 'error: HOME is required when Cargo install roots are unset' >&2
-    exit 1
-fi
-mkdir -p "$install_root" || exit 1
-install_root=$(CDPATH= cd -P "$install_root" && pwd) || exit 1
-export CARGO_INSTALL_ROOT="$install_root"
+(
+    set -eu
 
-./scripts/bootstrap-rust.sh --run-cargo build --release --locked
-./scripts/bootstrap-rust.sh --run-cargo test --locked
-./scripts/bootstrap-rust.sh --run-cargo install --locked --path .
+    if [ -n "${CARGO_INSTALL_ROOT:-}" ]; then
+        install_root=$CARGO_INSTALL_ROOT
+    elif [ -n "${CARGO_HOME:-}" ]; then
+        install_root=$CARGO_HOME
+    elif [ -n "${HOME:-}" ]; then
+        install_root=$HOME/.cargo
+    else
+        printf '%s\n' 'error: HOME is required when Cargo install roots are unset' >&2
+        exit 1
+    fi
+    mkdir -p "$install_root"
+    install_root=$(CDPATH= cd -P "$install_root" && pwd)
+    export CARGO_INSTALL_ROOT="$install_root"
 
-run_bob_bin="$install_root/bin/run-bob"
-test -f "$run_bob_bin" || exit 1
-installed_version=$("$run_bob_bin" --version) || exit 1
-"$run_bob_bin" --help >/dev/null || exit 1
+    ./scripts/bootstrap-rust.sh --run-cargo build --release --locked
+    ./scripts/bootstrap-rust.sh --run-cargo test --locked
+    ./scripts/bootstrap-rust.sh --run-cargo install --locked --path .
+
+    run_bob_bin="$install_root/bin/run-bob"
+    test -f "$run_bob_bin"
+    installed_version=$("$run_bob_bin" --version)
+    "$run_bob_bin" --help >/dev/null
+)
 ```
 
 Windows PowerShell：
 
 ```powershell
-if (-not [string]::IsNullOrWhiteSpace($env:CARGO_INSTALL_ROOT)) {
-    $installRoot = $env:CARGO_INSTALL_ROOT
-}
-elseif (-not [string]::IsNullOrWhiteSpace($env:CARGO_HOME)) {
-    $installRoot = $env:CARGO_HOME
-}
-elseif (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
-    $installRoot = Join-Path $env:USERPROFILE '.cargo'
-}
-else {
-    throw 'USERPROFILE is required when Cargo install roots are unset'
-}
-$installRoot = [System.IO.Path]::GetFullPath($installRoot)
-$env:CARGO_INSTALL_ROOT = $installRoot
+$hadCargoInstallRoot = Test-Path Env:CARGO_INSTALL_ROOT
+$previousCargoInstallRoot = $env:CARGO_INSTALL_ROOT
+try {
+    if (-not [string]::IsNullOrWhiteSpace($env:CARGO_INSTALL_ROOT)) {
+        $installRoot = $env:CARGO_INSTALL_ROOT
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($env:CARGO_HOME)) {
+        $installRoot = $env:CARGO_HOME
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+        $installRoot = Join-Path $env:USERPROFILE '.cargo'
+    }
+    else {
+        throw 'USERPROFILE is required when Cargo install roots are unset'
+    }
+    $installRoot = [System.IO.Path]::GetFullPath($installRoot)
+    $env:CARGO_INSTALL_ROOT = $installRoot
 
-& .\scripts\bootstrap-rust.ps1 -RunCargo @('build','--release','--locked')
-& .\scripts\bootstrap-rust.ps1 -RunCargo @('test','--locked')
-& .\scripts\bootstrap-rust.ps1 -RunCargo @('install','--locked','--path','.')
+    & .\scripts\bootstrap-rust.ps1 -RunCargo @('build','--release','--locked')
+    if ($LASTEXITCODE -ne 0) { throw 'run-bob build stage failed' }
+    & .\scripts\bootstrap-rust.ps1 -RunCargo @('test','--locked')
+    if ($LASTEXITCODE -ne 0) { throw 'run-bob test stage failed' }
+    & .\scripts\bootstrap-rust.ps1 -RunCargo @('install','--locked','--path','.')
+    if ($LASTEXITCODE -ne 0) { throw 'run-bob install stage failed' }
 
-$runBobBinary = Join-Path $installRoot 'bin\run-bob.exe'
-if (-not (Test-Path -LiteralPath $runBobBinary -PathType Leaf)) {
-    throw "installed run-bob binary not found at $runBobBinary"
+    $runBobBinary = Join-Path $installRoot 'bin\run-bob.exe'
+    if (-not (Test-Path -LiteralPath $runBobBinary -PathType Leaf)) {
+        throw "installed run-bob binary not found at $runBobBinary"
+    }
+    $installedVersion = & $runBobBinary --version
+    if ($LASTEXITCODE -ne 0) { throw 'installed run-bob --version failed' }
+    & $runBobBinary --help
+    if ($LASTEXITCODE -ne 0) { throw 'installed run-bob --help failed' }
 }
-$installedVersion = & $runBobBinary --version
-if ($LASTEXITCODE -ne 0) { throw 'installed run-bob --version failed' }
-& $runBobBinary --help
-if ($LASTEXITCODE -ne 0) { throw 'installed run-bob --help failed' }
+finally {
+    if ($hadCargoInstallRoot) {
+        $env:CARGO_INSTALL_ROOT = $previousCargoInstallRoot
+    }
+    else {
+        Remove-Item Env:CARGO_INSTALL_ROOT -ErrorAction SilentlyContinue
+    }
+}
 ```
 
 优先使用非空的 `CARGO_INSTALL_ROOT`，其次是非空的 `CARGO_HOME`，最后才是 POSIX 的 `$HOME/.cargo` 或 Windows 的 `$env:USERPROFILE\.cargo`；缺少所需用户目录变量时停止。先把选择结果规范化为绝对路径，再用导出的 `CARGO_INSTALL_ROOT` 固定当前进程及其 helper 子进程。这个环境变量有意覆盖 Cargo 配置中的 `install.root`，保证实际安装位置与后续验证位置不会分叉。
@@ -134,7 +155,7 @@ if ($LASTEXITCODE -ne 0) { throw 'installed run-bob --help failed' }
 
 ## 5. 汇报
 
-成功时简要报告 Git 同步状态、实际 Rust 版本、三个 locked 阶段均成功、绝对安装路径及已验证版本。不要硬编码测试数量，也不要粘贴完整构建日志。
+成功时简要报告 Git 同步状态、Rust 工具链验证通过、三个 locked 阶段均成功、绝对安装路径及已验证版本。不要硬编码测试数量，也不要粘贴完整构建日志。
 
 ## 边界
 

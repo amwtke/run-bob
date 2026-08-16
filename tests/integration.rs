@@ -257,6 +257,31 @@ fn repository_install_skills_are_identical_and_dual_host() {
                 .expect("POSIX build stage"),
         "POSIX must set the deterministic root before running any Cargo stage"
     );
+    assert!(
+        posix_workflow.contains("```bash\n(\n    set -eu\n")
+            && posix_workflow.contains("\n)\n```")
+            && posix_workflow.contains("子 shell")
+            && posix_workflow.contains("不会泄漏到父 shell"),
+        "POSIX workflow must use set -eu in a documented subshell scope"
+    );
+    let posix_build = posix_workflow
+        .find("./scripts/bootstrap-rust.sh --run-cargo build --release --locked")
+        .expect("POSIX build stage");
+    let posix_test = posix_workflow
+        .find("./scripts/bootstrap-rust.sh --run-cargo test --locked")
+        .expect("POSIX test stage");
+    let posix_install = posix_workflow
+        .find("./scripts/bootstrap-rust.sh --run-cargo install --locked --path .")
+        .expect("POSIX install stage");
+    let posix_scope_end = posix_workflow
+        .rfind("\n)\n```")
+        .expect("POSIX subshell closing delimiter");
+    assert!(
+        posix_build < posix_test
+            && posix_test < posix_install
+            && posix_install < posix_scope_end,
+        "set -eu must gate POSIX build, test, then install inside one subshell"
+    );
 
     let windows_install_root = windows_workflow
         .find("$env:CARGO_INSTALL_ROOT")
@@ -290,6 +315,90 @@ fn repository_install_skills_are_identical_and_dual_host() {
                 .find(r"& .\scripts\bootstrap-rust.ps1 -RunCargo @('build'")
                 .expect("Windows build stage"),
         "Windows must set the deterministic root before running any Cargo stage"
+    );
+    for contract in [
+        "$hadCargoInstallRoot = Test-Path Env:CARGO_INSTALL_ROOT",
+        "$previousCargoInstallRoot = $env:CARGO_INSTALL_ROOT",
+        "try {",
+        "finally {",
+        "$env:CARGO_INSTALL_ROOT = $previousCargoInstallRoot",
+        "Remove-Item Env:CARGO_INSTALL_ROOT -ErrorAction SilentlyContinue",
+    ] {
+        assert!(
+            windows_workflow.contains(contract),
+            "Windows workflow must save and restore process scope: {contract}"
+        );
+    }
+    assert!(
+        windows_workflow.contains(
+            "finally {\n    if ($hadCargoInstallRoot) {\n        $env:CARGO_INSTALL_ROOT = $previousCargoInstallRoot\n    }\n    else {\n        Remove-Item Env:CARGO_INSTALL_ROOT -ErrorAction SilentlyContinue\n    }\n}"
+        ),
+        "Windows must restore the exact prior value when present and remove only a newly introduced variable"
+    );
+
+    let windows_lines = windows_workflow.lines().map(str::trim).collect::<Vec<_>>();
+    for (command, gate) in [
+        (
+            r"& .\scripts\bootstrap-rust.ps1 -RunCargo @('build','--release','--locked')",
+            "if ($LASTEXITCODE -ne 0) { throw 'run-bob build stage failed' }",
+        ),
+        (
+            r"& .\scripts\bootstrap-rust.ps1 -RunCargo @('test','--locked')",
+            "if ($LASTEXITCODE -ne 0) { throw 'run-bob test stage failed' }",
+        ),
+        (
+            r"& .\scripts\bootstrap-rust.ps1 -RunCargo @('install','--locked','--path','.')",
+            "if ($LASTEXITCODE -ne 0) { throw 'run-bob install stage failed' }",
+        ),
+    ] {
+        let command_line = windows_lines
+            .iter()
+            .position(|line| *line == command)
+            .unwrap_or_else(|| panic!("missing Windows stage: {command}"));
+        let next_executable_line = windows_lines[command_line + 1..]
+            .iter()
+            .find(|line| !line.is_empty())
+            .expect("each Windows helper stage must have a following gate");
+        assert_eq!(
+            *next_executable_line, gate,
+            "Windows helper failure must throw before the next stage"
+        );
+    }
+    let windows_save = windows_workflow
+        .find("$hadCargoInstallRoot = Test-Path Env:CARGO_INSTALL_ROOT")
+        .expect("Windows prior-scope probe");
+    let windows_previous = windows_workflow
+        .find("$previousCargoInstallRoot = $env:CARGO_INSTALL_ROOT")
+        .expect("Windows prior-scope value");
+    let windows_try = windows_workflow.find("try {").expect("Windows try block");
+    let windows_build = windows_workflow
+        .find(r"& .\scripts\bootstrap-rust.ps1 -RunCargo @('build'")
+        .expect("Windows build stage");
+    let windows_test = windows_workflow
+        .find(r"& .\scripts\bootstrap-rust.ps1 -RunCargo @('test'")
+        .expect("Windows test stage");
+    let windows_install = windows_workflow
+        .find(r"& .\scripts\bootstrap-rust.ps1 -RunCargo @('install'")
+        .expect("Windows install stage");
+    let windows_finally = windows_workflow
+        .find("finally {")
+        .expect("Windows finally block");
+    let windows_restore = windows_workflow
+        .find("$env:CARGO_INSTALL_ROOT = $previousCargoInstallRoot")
+        .expect("Windows prior-scope restore");
+    let windows_remove = windows_workflow
+        .find("Remove-Item Env:CARGO_INSTALL_ROOT -ErrorAction SilentlyContinue")
+        .expect("Windows newly introduced variable cleanup");
+    assert!(
+        windows_save < windows_previous
+            && windows_previous < windows_try
+            && windows_try < windows_build
+            && windows_build < windows_test
+            && windows_test < windows_install
+            && windows_install < windows_finally
+            && windows_finally < windows_restore
+            && windows_finally < windows_remove,
+        "Windows workflow must gate ordered stages inside try and restore scope in finally"
     );
     for explanation in [
         "同一个 shell 或 PowerShell 进程",
@@ -336,6 +445,10 @@ fn repository_install_skills_are_identical_and_dual_host() {
             "body must not contain stale or unsafe instruction: {stale_or_unsafe}"
         );
     }
+    assert!(
+        body.contains("Rust 工具链验证通过") && !body.contains("实际 Rust 版本"),
+        "success output must not probe a potentially stale parent-shell rustc"
+    );
 
     let mut in_fence = false;
     let mut executable_lines = Vec::new();
@@ -360,7 +473,7 @@ fn repository_install_skills_are_identical_and_dual_host() {
             })
             .filter(|word| !word.is_empty())
             .collect::<Vec<_>>();
-        for forbidden in ["cargo", "rustup", "curl", "Invoke-WebRequest"] {
+        for forbidden in ["cargo", "rustup", "rustc", "curl", "Invoke-WebRequest"] {
             assert!(
                 !command_words.contains(&forbidden),
                 "install workflow must not execute {forbidden} directly: {line}"
