@@ -1,10 +1,97 @@
-#![cfg(unix)]
+#[test]
+fn bootstrap_rust_powershell_has_safe_equivalent_contract() {
+    let script_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("scripts")
+        .join("bootstrap-rust.ps1");
+    let script = std::fs::read_to_string(&script_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", script_path.display()));
 
+    for required in [
+        "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe",
+        "https://static.rust-lang.org/rustup/dist/aarch64-pc-windows-msvc/rustup-init.exe",
+        "--profile",
+        "minimal",
+        "--default-toolchain",
+        "stable",
+        "--no-modify-path",
+        "[string[]] $RunCargo",
+        "Invoke-RunBobExternalProcess",
+        "rustc",
+        "cargo",
+        "--version",
+        "[version]",
+        "Get-RunBobCommandPath",
+        "Get-RunBobArchitecture",
+        "Invoke-WebRequest",
+        "[guid]::NewGuid()",
+        "finally",
+    ] {
+        assert!(
+            script.contains(required),
+            "PowerShell bootstrap is missing required contract marker {required:?}"
+        );
+    }
+
+    let lowered = script.to_ascii_lowercase();
+    for forbidden in [
+        "rustup default",
+        "setenvironmentvariable",
+        "read-host",
+        "$profile",
+        "add-content",
+        "$env:path =",
+        "cargo build",
+        "cargo test",
+        "cargo install",
+        "run-bob --version",
+        "rustup_dist_server",
+        "rustup_update_root",
+    ] {
+        assert!(
+            !lowered.contains(forbidden),
+            "PowerShell bootstrap contains forbidden behavior {forbidden:?}"
+        );
+    }
+
+    assert!(
+        lowered
+            .contains("invoke-runbobexternalprocess -filepath $cargopath -argumentlist $runcargo"),
+        "PowerShell bootstrap must forward RunCargo unchanged to direct cargo"
+    );
+    assert!(
+        script.contains("@('run', 'stable', 'cargo') + $RunCargo"),
+        "PowerShell bootstrap must append exact RunCargo elements after rustup's fixed prefix"
+    );
+    assert_eq!(
+        script
+            .matches(
+                "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe",
+            )
+            .count(),
+        1,
+        "the X64 production endpoint must be one fixed constant"
+    );
+    assert_eq!(
+        script
+            .matches(
+                "https://static.rust-lang.org/rustup/dist/aarch64-pc-windows-msvc/rustup-init.exe",
+            )
+            .count(),
+        1,
+        "the Arm64 production endpoint must be one fixed constant"
+    );
+}
+
+#[cfg(unix)]
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::{symlink, PermissionsExt};
+#[cfg(unix)]
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
 use std::process::{Command, Output};
 
+#[cfg(unix)]
 struct Sandbox {
     _temp: tempfile::TempDir,
     root: PathBuf,
@@ -16,6 +103,7 @@ struct Sandbox {
     log: PathBuf,
 }
 
+#[cfg(unix)]
 impl Sandbox {
     fn new() -> Self {
         let temp = tempfile::tempdir().expect("create bootstrap sandbox");
@@ -202,12 +290,14 @@ RUN_BOB_INSTALLER"#;
     }
 }
 
+#[cfg(unix)]
 fn bootstrap_script() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("scripts")
         .join("bootstrap-rust.sh")
 }
 
+#[cfg(unix)]
 fn stdout_stderr(output: &Output) -> String {
     format!(
         "stdout:\n{}\nstderr:\n{}",
@@ -216,6 +306,7 @@ fn stdout_stderr(output: &Output) -> String {
     )
 }
 
+#[cfg(unix)]
 fn rustup_mock_body(
     rustc_version: &str,
     cargo_version: Option<&str>,
@@ -257,6 +348,7 @@ fi
     )
 }
 
+#[cfg(unix)]
 fn installer_that_creates_rustup(
     rustc_version: &str,
     cargo_version: Option<&str>,
@@ -277,6 +369,7 @@ chmod 755 "$CARGO_HOME/bin/rustup""#
     )
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_uses_supported_toolchain_and_forwards_cargo_args() {
     let sandbox = Sandbox::new();
@@ -290,6 +383,7 @@ fn bootstrap_rust_posix_uses_supported_toolchain_and_forwards_cargo_args() {
     assert_eq!(sandbox.log(), "cargo <check> <--locked> <--all-targets>\n");
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_accepts_sufficient_direct_prerelease_versions() {
     let sandbox = Sandbox::new();
@@ -303,6 +397,7 @@ fn bootstrap_rust_posix_accepts_sufficient_direct_prerelease_versions() {
     assert_eq!(sandbox.log(), "cargo <check> <--locked>\n");
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_treats_equal_core_prerelease_as_older_than_required_stable() {
     let sandbox = Sandbox::new();
@@ -325,6 +420,7 @@ fn bootstrap_rust_posix_treats_equal_core_prerelease_as_older_than_required_stab
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_installs_a_missing_toolchain() {
     let sandbox = Sandbox::new();
@@ -347,6 +443,7 @@ fn bootstrap_rust_posix_installs_a_missing_toolchain() {
     assert!(!sandbox.log().contains("default"));
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_reports_official_installer_failure() {
     let sandbox = Sandbox::new();
@@ -374,6 +471,7 @@ exit 42"#,
     assert!(!sandbox.log().contains("rustup <default>"));
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_rejects_incomplete_post_install_toolchain() {
     let sandbox = Sandbox::new();
@@ -399,6 +497,7 @@ fn bootstrap_rust_posix_rejects_incomplete_post_install_toolchain() {
     assert!(!sandbox.log().contains("rustup <default>"));
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_rejects_missing_home_after_official_installer() {
     let sandbox = Sandbox::new();
@@ -414,6 +513,7 @@ fn bootstrap_rust_posix_rejects_missing_home_after_official_installer() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_uses_stable_for_old_active_rustup_toolchain() {
     let sandbox = Sandbox::new();
@@ -441,6 +541,7 @@ fn bootstrap_rust_posix_uses_stable_for_old_active_rustup_toolchain() {
     assert!(!sandbox.log().contains("default"));
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_stops_for_old_non_rustup_toolchain() {
     let sandbox = Sandbox::new();
@@ -458,6 +559,7 @@ fn bootstrap_rust_posix_stops_for_old_non_rustup_toolchain() {
     assert_eq!(sandbox.log(), "");
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_reports_both_detected_versions_when_cargo_is_old() {
     let sandbox = Sandbox::new();
@@ -477,6 +579,7 @@ fn bootstrap_rust_posix_reports_both_detected_versions_when_cargo_is_old() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_stops_for_old_system_rust_with_unrelated_rustup() {
     let sandbox = Sandbox::new();
@@ -503,6 +606,7 @@ fn bootstrap_rust_posix_stops_for_old_system_rust_with_unrelated_rustup() {
     assert!(!sandbox.log().contains("toolchain"));
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_downloads_the_official_installer_when_all_tools_are_absent() {
     let sandbox = Sandbox::new();
@@ -550,6 +654,7 @@ fn bootstrap_rust_posix_downloads_the_official_installer_when_all_tools_are_abse
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_isolated_path_omits_host_rust_tools() {
     let sandbox = Sandbox::new();
@@ -570,6 +675,7 @@ fn bootstrap_rust_posix_isolated_path_omits_host_rust_tools() {
     assert_eq!(sandbox.log(), "");
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_stops_for_a_partial_toolchain_without_invoking_rustup() {
     let sandbox = Sandbox::new();
@@ -589,6 +695,7 @@ fn bootstrap_rust_posix_stops_for_a_partial_toolchain_without_invoking_rustup() 
     assert_eq!(sandbox.log(), "");
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_repairs_a_partial_active_rustup_toolchain() {
     let sandbox = Sandbox::new();
@@ -613,6 +720,7 @@ fn bootstrap_rust_posix_repairs_a_partial_active_rustup_toolchain() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_rejects_unknown_and_empty_public_forms() {
     let sandbox = Sandbox::new();
@@ -627,6 +735,7 @@ fn bootstrap_rust_posix_rejects_unknown_and_empty_public_forms() {
     assert_eq!(sandbox.log(), "");
 }
 
+#[cfg(unix)]
 #[test]
 fn bootstrap_rust_posix_handles_repository_and_tool_paths_with_spaces() {
     let sandbox = Sandbox::new();
