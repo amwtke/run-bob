@@ -12,3 +12,6 @@
 
 # Superpowers brainstorming visual companion (per-session mockups)
 .superpowers/
+
+# Superpowers isolated implementation worktrees
+.worktrees/
