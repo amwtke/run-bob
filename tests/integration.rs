@@ -129,6 +129,22 @@ fn command_output_text(output: &Output) -> String {
     )
 }
 
+#[cfg(unix)]
+fn assert_symlink_unchanged(path: &Path, expected_target: &Path) {
+    let metadata = std::fs::symlink_metadata(path).expect("stat preserved symlink");
+    assert!(
+        metadata.file_type().is_symlink(),
+        "{} is no longer a symlink",
+        path.display()
+    );
+    assert_eq!(
+        std::fs::read_link(path).expect("read preserved symlink"),
+        expected_target,
+        "{} now points to a different target",
+        path.display()
+    );
+}
+
 #[test]
 fn asset_registry_has_identical_claude_and_codex_skill_entries() {
     use std::collections::BTreeSet;
@@ -1351,6 +1367,78 @@ fn upgrade_backs_up_stale_files_for_both_skill_hosts() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn upgrade_refuses_symlinked_backup_root_without_following() {
+    use std::os::unix::fs::symlink;
+
+    for dangling in [false, true] {
+        let tmp = tempfile::tempdir().expect("backup symlink tempdir");
+        let target = tmp.path().join("project");
+        std::fs::create_dir(&target).expect("create project target");
+        let output = Command::new(run_bob_bin())
+            .args(["init", "--dir"])
+            .arg(&target)
+            .output()
+            .expect("init backup fixture");
+        assert_command_succeeded(&output, "backup fixture init");
+
+        let stale_skill = target.join(".claude/skills/bob-identify/SKILL.md");
+        std::fs::write(&stale_skill, b"STALE-BEFORE-BACKUP\n").expect("write stale skill");
+
+        let external = tmp.path().join(if dangling {
+            "missing-external-backup-root"
+        } else {
+            "external-backup-root"
+        });
+        let external_before = if dangling {
+            None
+        } else {
+            std::fs::create_dir(&external).expect("create external backup root");
+            std::fs::write(external.join("sentinel"), b"EXTERNAL-BACKUP\n")
+                .expect("write external backup sentinel");
+            Some(files_below(&external))
+        };
+        let backup_link = target.join(".run-bob-backup");
+        symlink(&external, &backup_link).expect("create backup-root symlink");
+        let original_link_target = std::fs::read_link(&backup_link).expect("read backup symlink");
+
+        let output = Command::new(run_bob_bin())
+            .args(["upgrade", "--no-gitignore", "--dir"])
+            .arg(&target)
+            .output()
+            .expect("upgrade with symlinked backup root");
+        assert!(
+            !output.status.success(),
+            "upgrade followed the backup-root symlink: {}",
+            command_output_text(&output)
+        );
+        assert!(
+            command_output_text(&output).contains(".run-bob-backup"),
+            "upgrade error omitted the backup-root conflict: {}",
+            command_output_text(&output)
+        );
+        assert_symlink_unchanged(&backup_link, &original_link_target);
+        if let Some(external_before) = external_before {
+            assert_eq!(
+                files_below(&external),
+                external_before,
+                "upgrade wrote through the backup-root symlink"
+            );
+        } else {
+            assert!(
+                !external.exists(),
+                "upgrade created the dangling backup-root target"
+            );
+        }
+        assert_eq!(
+            std::fs::read(&stale_skill).expect("read stale skill after failed upgrade"),
+            b"STALE-BEFORE-BACKUP\n",
+            "upgrade overwrote a managed file after backup preflight failed"
+        );
+    }
+}
+
 #[test]
 fn upgrade_missing_shell_scripts_are_executable_for_both_hosts() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -1492,6 +1580,7 @@ fn init_force_and_upgrade_refuse_symlinked_destinations_without_following() {
         std::fs::create_dir_all(conflict.parent().expect("conflict parent"))
             .expect("create managed parent");
         symlink(&external, &conflict).expect("create init symlink conflict");
+        let original_link_target = std::fs::read_link(&conflict).expect("read init symlink");
 
         let output = Command::new(run_bob_bin())
             .args(["init", "--force", "--no-gitignore", "--dir"])
@@ -1508,6 +1597,7 @@ fn init_force_and_upgrade_refuse_symlinked_destinations_without_following() {
             "forced init error omitted symlink path: {}",
             command_output_text(&output)
         );
+        assert_symlink_unchanged(&conflict, &original_link_target);
         if dangling {
             assert!(
                 !external.exists(),
@@ -1542,6 +1632,7 @@ fn init_force_and_upgrade_refuse_symlinked_destinations_without_following() {
         let conflict = target.join(".claude/skills/bob-identify/SKILL.md");
         std::fs::remove_file(&conflict).expect("remove managed file for symlink");
         symlink(&external, &conflict).expect("create upgrade symlink conflict");
+        let original_link_target = std::fs::read_link(&conflict).expect("read upgrade symlink");
 
         let output = Command::new(run_bob_bin())
             .args(["upgrade", "--no-gitignore", "--dir"])
@@ -1558,6 +1649,7 @@ fn init_force_and_upgrade_refuse_symlinked_destinations_without_following() {
             "upgrade error omitted symlink path: {}",
             command_output_text(&output)
         );
+        assert_symlink_unchanged(&conflict, &original_link_target);
         if dangling {
             assert!(!external.exists(), "upgrade created a dangling link target");
         } else {
@@ -1578,6 +1670,140 @@ fn init_force_and_upgrade_refuse_symlinked_destinations_without_following() {
             actual_claude, expected_claude,
             "failed upgrade changed other Claude files"
         );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn init_force_and_upgrade_refuse_symlinked_ancestor_directories() {
+    use std::os::unix::fs::symlink;
+
+    for host in [".claude", ".agents"] {
+        for dangling in [false, true] {
+            let tmp = tempfile::tempdir().expect("init ancestor-symlink tempdir");
+            let target = tmp.path().join("project");
+            std::fs::create_dir(&target).expect("create init target");
+            let external = tmp.path().join(format!(
+                "{}-{}-init-ancestor",
+                host.trim_start_matches('.'),
+                if dangling { "missing" } else { "external" }
+            ));
+            let external_before = if dangling {
+                None
+            } else {
+                std::fs::create_dir(&external).expect("create external init directory");
+                std::fs::write(external.join("sentinel"), b"EXTERNAL-INIT-DIR\n")
+                    .expect("write external init sentinel");
+                Some(files_below(&external))
+            };
+            let conflict = target.join(host).join("skills/bob-identify");
+            std::fs::create_dir_all(conflict.parent().expect("ancestor conflict parent"))
+                .expect("create managed init parent");
+            symlink(&external, &conflict).expect("create init ancestor symlink");
+            let original_link_target =
+                std::fs::read_link(&conflict).expect("read init ancestor symlink");
+
+            let output = Command::new(run_bob_bin())
+                .args(["init", "--force", "--no-gitignore", "--dir"])
+                .arg(&target)
+                .output()
+                .expect("forced init with ancestor symlink");
+            assert!(
+                !output.status.success(),
+                "forced init accepted {host} ancestor symlink: {}",
+                command_output_text(&output)
+            );
+            assert!(
+                command_output_text(&output).contains(&format!("{host}/skills/bob-identify")),
+                "forced init error omitted ancestor symlink: {}",
+                command_output_text(&output)
+            );
+            assert_symlink_unchanged(&conflict, &original_link_target);
+            if let Some(external_before) = external_before {
+                assert_eq!(files_below(&external), external_before);
+            } else {
+                assert!(
+                    !external.exists(),
+                    "forced init created dangling directory target"
+                );
+            }
+            for root in SKILL_ROOTS {
+                assert!(
+                    !target.join(root).join("bob-onion/SKILL.md").exists(),
+                    "forced init partially wrote {root} before rejecting {host} ancestor symlink"
+                );
+            }
+        }
+    }
+
+    for host in [".claude", ".agents"] {
+        for dangling in [false, true] {
+            let tmp = tempfile::tempdir().expect("upgrade ancestor-symlink tempdir");
+            let target = tmp.path().join("project");
+            std::fs::create_dir(&target).expect("create upgrade target");
+            let claude_before = legacy_claude_only_fixture(&target);
+            let external = tmp.path().join(format!(
+                "{}-{}-upgrade-ancestor",
+                host.trim_start_matches('.'),
+                if dangling { "missing" } else { "external" }
+            ));
+            let external_before = if dangling {
+                None
+            } else {
+                std::fs::create_dir(&external).expect("create external upgrade directory");
+                std::fs::write(external.join("sentinel"), b"EXTERNAL-UPGRADE-DIR\n")
+                    .expect("write external upgrade sentinel");
+                Some(files_below(&external))
+            };
+            let conflict = target.join(host).join("skills/bob-identify");
+            if conflict.is_dir() {
+                std::fs::remove_dir_all(&conflict).expect("remove managed skill directory");
+            } else {
+                std::fs::create_dir_all(conflict.parent().expect("ancestor conflict parent"))
+                    .expect("create managed upgrade parent");
+            }
+            symlink(&external, &conflict).expect("create upgrade ancestor symlink");
+            let original_link_target =
+                std::fs::read_link(&conflict).expect("read upgrade ancestor symlink");
+
+            let output = Command::new(run_bob_bin())
+                .args(["upgrade", "--no-gitignore", "--dir"])
+                .arg(&target)
+                .output()
+                .expect("upgrade with ancestor symlink");
+            assert!(
+                !output.status.success(),
+                "upgrade accepted {host} ancestor symlink: {}",
+                command_output_text(&output)
+            );
+            assert!(
+                command_output_text(&output).contains(&format!("{host}/skills/bob-identify")),
+                "upgrade error omitted ancestor symlink: {}",
+                command_output_text(&output)
+            );
+            assert_symlink_unchanged(&conflict, &original_link_target);
+            if let Some(external_before) = external_before {
+                assert_eq!(files_below(&external), external_before);
+            } else {
+                assert!(
+                    !external.exists(),
+                    "upgrade created dangling directory target"
+                );
+            }
+            assert!(
+                !target.join(".agents/skills/bob-onion/SKILL.md").exists(),
+                "upgrade installed a missing Codex asset before rejecting {host} ancestor symlink"
+            );
+            let mut expected_claude = claude_before.clone();
+            if host == ".claude" {
+                expected_claude.remove("bob-identify/SKILL.md");
+            }
+            assert_eq!(
+                files_below(&target.join(SKILL_ROOTS[0])),
+                expected_claude,
+                "failed upgrade changed another Claude file"
+            );
+        }
     }
 }
 

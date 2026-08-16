@@ -111,6 +111,7 @@ pub fn run(target_dir: &str, dry_run: bool, no_backup: bool, no_gitignore: bool)
 
     if !no_backup && !outdated.is_empty() {
         let ts = utc_timestamp();
+        preflight_backup_destinations(&target, &ts, &outdated)?;
         let backup_root = target.join(".run-bob-backup").join(&ts);
         // Step A: back up every OUTDATED file FIRST.
         for (asset, original_content) in &outdated {
@@ -175,6 +176,21 @@ fn preflight(target: &Path, applicable_assets: &[&Asset], no_gitignore: bool) ->
     }
     if !no_gitignore {
         inspect_managed_path(target, &[".gitignore"], ExpectedPathKind::File)?;
+    }
+    Ok(())
+}
+
+fn preflight_backup_destinations(
+    target: &Path,
+    timestamp: &str,
+    outdated: &[(&Asset, String)],
+) -> Result<()> {
+    for (asset, _) in outdated {
+        let mut rel_path = Vec::with_capacity(asset.rel_path.len() + 2);
+        rel_path.push(".run-bob-backup");
+        rel_path.push(timestamp);
+        rel_path.extend_from_slice(asset.rel_path);
+        inspect_managed_path(target, &rel_path, ExpectedPathKind::File)?;
     }
     Ok(())
 }
