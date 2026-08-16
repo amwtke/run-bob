@@ -398,7 +398,7 @@ class OrderController {
 
 ## 10. 交给 Superpowers 的开放问题(技术实施层面)
 
-本 spec **不回答**以下问题,留给 `superpowers:brainstorming` 在进入 `writing-plans` 之前回答,并写回 `CLAUDE.md ## 技术栈约定`:
+本 spec **不回答**以下问题,留给 `superpowers:brainstorming` 在进入 `writing-plans` 之前回答,并写回 `CLAUDE.md ## 技术栈约定`。任一宿主都维护这份显式 Bob 项目规则文档；Codex 不依赖自动加载，而是在流程中显式读取和更新它:
 
 - 语言/运行时(Java 17 / Kotlin / Go / ...)
 - 应用框架(Spring Boot / Ktor / ...)
@@ -410,6 +410,15 @@ class OrderController {
 - 非功能(并发量级 / 延迟预算 / 数据规模)
 
 > 首次进入实现阶段必答;若 `CLAUDE.md ## 技术栈约定` 已填,跳过直接进 `writing-plans`。
+
+双宿主 Superpowers handoff 映射（Claude Code 序列保持不变，Codex 使用等价 skill）:
+
+| Stage | Claude Code | Codex |
+|---|---|---|
+| Brainstorm | `superpowers:brainstorming` | `$brainstorming` |
+| Plan | `superpowers:writing-plans` | `$writing-plans` |
+| Execute | `superpowers:executing-plans` | `$executing-plans` |
+| Finish branch | `superpowers:finishing-a-development-branch` | `$finishing-a-development-branch` |
 
 ## 11. 下一步
 

@@ -3180,10 +3180,166 @@ fn init_creates_bob_model_skill() {
         "md 是 SSoT",
         // bob-review (post-internalization, v0.5.0)
         "window.bobReview",
-        ".claude/skills/bob-model/scripts/start-server.sh",
+        "<skill-dir>/scripts/start-server.sh",
     ] {
         assert!(content.contains(token), "bob-model must mention {}", token);
     }
+}
+
+#[test]
+fn interactive_skills_resolve_scripts_from_active_skill_dir() {
+    let model = include_str!("../src/templates/skills/bob-model.md");
+    let visual = include_str!("../src/templates/skills/visual-md.md");
+
+    for (skill, document) in [("bob-model", model), ("visual-md", visual)] {
+        assert!(
+            document.contains(
+                "`<skill-dir>` 是当前宿主实际加载的 `SKILL.md` 所在目录的绝对路径"
+            ),
+            "{skill} must define <skill-dir> from the active SKILL.md"
+        );
+        assert!(
+            document.contains("禁止回退到另一个宿主的 skill 根"),
+            "{skill} must prohibit cross-host fallback"
+        );
+
+        for line in document.lines().filter(|line| line.contains("/scripts/")) {
+            assert!(
+                line.contains("<skill-dir>/scripts/"),
+                "{skill} has a non-active script reference: {line}"
+            );
+        }
+    }
+
+    for forbidden in [
+        ".claude/skills/bob-model/scripts",
+        ".agents/skills/bob-model/scripts",
+    ] {
+        assert!(!model.contains(forbidden), "bob-model contains {forbidden}");
+    }
+    for expected in [
+        "SCRIPT=\"<skill-dir>/scripts/start-server.sh\"",
+        "if [ ! -f \"$SCRIPT\" ]; then",
+        "bob-model start script not found: $SCRIPT",
+        "\"$SCRIPT\" --project-dir \"<project-root>\"",
+    ] {
+        assert!(model.contains(expected), "bob-model is missing {expected}");
+    }
+
+    for forbidden in [
+        ".claude/skills/visual-md/scripts",
+        ".agents/skills/visual-md/scripts",
+    ] {
+        assert!(!visual.contains(forbidden), "visual-md contains {forbidden}");
+    }
+    for expected in [
+        "node \"<skill-dir>/scripts/slugify.cjs\"",
+        "SCRIPTS_DIR=\"<skill-dir>/scripts\"",
+        "START_SCRIPT=\"<skill-dir>/scripts/start-server.sh\"",
+        "if [ ! -f \"$START_SCRIPT\" ]; then",
+        "visual-md start script not found: $START_SCRIPT",
+        "\"$START_SCRIPT\" \"$SESSION_DIR\"",
+        "node \"<skill-dir>/scripts/md2html.cjs\"",
+        "\"<skill-dir>/scripts/stop-server.sh\"",
+    ] {
+        assert!(visual.contains(expected), "visual-md is missing {expected}");
+    }
+}
+
+#[test]
+fn survey_accepts_either_managed_skill_root_without_double_counting() {
+    let survey = include_str!("../src/templates/skills/bob-survey.md");
+
+    for expected in [
+        ".claude/skills/bob-*",
+        ".agents/skills/bob-*",
+        "任一根完整即视为成熟",
+        "双宿主安装只计一次，不重复计数",
+    ] {
+        assert!(survey.contains(expected), "bob-survey is missing {expected}");
+    }
+
+    for skill in [
+        "bob-survey",
+        "bob-model",
+        "bob-stories",
+        "bob-identify",
+        "bob-onion",
+        "bob-spec",
+        "bob-compliance",
+        "bob-nfr",
+    ] {
+        assert!(
+            survey.contains(skill),
+            "bob-survey mature-install contract omits {skill}"
+        );
+    }
+}
+
+#[test]
+fn bob_spec_preserves_claude_and_adds_codex_superpowers_handoffs() {
+    let spec = include_str!("../src/templates/skills/bob-spec.md");
+
+    for claude_step in [
+        "1. superpowers:brainstorming(首次)",
+        "2. superpowers:writing-plans",
+        "3. superpowers:executing-plans + TDD",
+        "4. superpowers:finishing-a-development-branch",
+    ] {
+        assert!(
+            spec.contains(claude_step),
+            "bob-spec lost Claude sequence {claude_step}"
+        );
+    }
+
+    for mapping in [
+        "| Brainstorm | `superpowers:brainstorming` | `$brainstorming` |",
+        "| Plan | `superpowers:writing-plans` | `$writing-plans` |",
+        "| Execute | `superpowers:executing-plans` | `$executing-plans` |",
+        "| Finish branch | `superpowers:finishing-a-development-branch` | `$finishing-a-development-branch` |",
+    ] {
+        assert!(spec.contains(mapping), "bob-spec is missing {mapping}");
+    }
+
+    assert!(spec.contains("`CLAUDE.md ## 技术栈约定`"));
+    assert!(
+        spec.contains("任一宿主都维护这份显式 Bob 项目规则文档"),
+        "bob-spec must define who maintains confirmed stack decisions"
+    );
+}
+
+#[test]
+fn document_skills_define_reading_for_both_hosts() {
+    let model = include_str!("../src/templates/skills/bob-model.md");
+    let compliance = include_str!("../src/templates/skills/bob-compliance.md");
+
+    for (skill, document) in [("bob-model", model), ("bob-compliance", compliance)] {
+        for expected in [
+            "Claude Code：使用 `Read` 工具的 `pages` 参数",
+            "Codex：使用当前可用的 PDF/文档读取能力",
+            "当前所选宿主无法读取输入文档时，立即停止",
+            "当前宿主代理",
+        ] {
+            assert!(document.contains(expected), "{skill} is missing {expected}");
+        }
+    }
+    assert!(
+        !compliance.contains("Claude 唯一执行器"),
+        "bob-compliance must not describe a generic executor as Claude-only"
+    );
+
+    let onion = include_str!("../src/templates/skills/bob-onion.md");
+    for expected in [
+        "CLAUDE.md R8",
+        "Claude Code 与 Codex 都必须显式读取",
+        "不假定 Codex 自动加载",
+    ] {
+        assert!(onion.contains(expected), "bob-onion is missing {expected}");
+    }
+
+    let nfr = include_str!("../src/templates/skills/bob-nfr.md");
+    assert!(nfr.contains("`superpowers:test-driven-development`"));
+    assert!(nfr.contains("`$test-driven-development`"));
 }
 
 #[test]

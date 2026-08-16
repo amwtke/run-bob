@@ -35,6 +35,19 @@ $bob-model --refresh           # 强制重写,即使源文档未变化
 - 向用户给出下一步命令时，使用当前宿主的调用形式。
 - 不从一个宿主的 skill 根回退到另一个宿主。
 
+## 当前技能目录
+
+- `<skill-dir>` 是当前宿主实际加载的 `SKILL.md` 所在目录的绝对路径，由当前宿主提供。
+- 所有交互脚本只从 `<skill-dir>/scripts` 解析；找不到时报告已解析的完整路径并停止。
+- 禁止回退到另一个宿主的 skill 根，也不得用另一个宿主的脚本副本补救。
+
+## 宿主文档读取约定
+
+- Claude Code：使用 `Read` 工具的 `pages` 参数分批读取 PDF/DOCX，保留现有分页读取流程。
+- Codex：使用当前可用的 PDF/文档读取能力读取同一输入，保持相同的分批抽取目标。
+- 当前所选宿主无法读取输入文档时，立即停止并清楚报告该输入无法由当前宿主读取；不得切换宿主或猜测内容。
+- 后续抽取、建模与产物生成均由当前宿主代理执行。
+
 ## 前置条件
 
 - 项目位于 git 仓库内
@@ -95,7 +108,7 @@ $bob-model --refresh           # 强制重写,即使源文档未变化
 
 ### Stage 1 抽取过程内自检(强制)
 
-在写 §1 术语表之前,Claude 对每一个候选名做三项自检:
+在写 §1 术语表之前,当前宿主代理对每一个候选名做三项自检:
 
 1. **金额 / 比率 / 数量 / 时间字段**:有没有光秃名词?有就**直接重命名**,不抛 Q——这类歧义本规约已解决。
 2. **类型名**:只表达"归属"或裸"概念"?如是,问自己"它是什么**状态 / 角色 / 结果**?",加形容词或语义后缀。
@@ -202,7 +215,7 @@ $bob-model --refresh           # 强制重写,即使源文档未变化
 
 ### Widget DOM 模板
 
-每个 widget 必须有 4 个 data-* 属性:`data-comment-id`(唯一,= `<kind>:<target>` 或 'general')、`data-kind`、`data-target`、`data-comment-count`(会话累计已提交评论数,Claude compose 时从 events 反查注入,默认 `"0"`),以及一个 `.comment-input` textarea。
+每个 widget 必须有 4 个 data-* 属性:`data-comment-id`(唯一,= `<kind>:<target>` 或 'general')、`data-kind`、`data-target`、`data-comment-count`(会话累计已提交评论数,当前宿主代理 compose 时从 events 反查注入,默认 `"0"`),以及一个 `.comment-input` textarea。
 
 Widget 形态(按 §1 合并后的结构):
 
@@ -217,7 +230,7 @@ Widget 形态(按 §1 合并后的结构):
 
 **所有 widget 在每一轮 push html 时都必须重置为「空草稿,可写,可提交」状态,任何情况下都不允许 lock / disabled / readonly / pointer-events:none / 点不开**:
 
-- 上一轮提交并被 Claude 应用的反馈 → 本轮该 widget 的 textarea **清空 + 计数归 0 + 按钮可点击**,允许用户继续提新反馈
+- 上一轮提交并被当前宿主代理应用的反馈 → 本轮该 widget 的 textarea **清空 + 计数归 0 + 按钮可点击**,允许用户继续提新反馈
 - localStorage 草稿在"本轮提交完成"后清掉,但 widget 本身保持可写
 - 视觉上"曾在第 N 轮被修改过"的痕迹**只是提示**(可用 `data-modified-round="N"` + 浅色虚线边框 / 角标),**不影响交互**:点击仍展开 textarea,仍能输入,仍能提交
 - **禁止**任何"已应用,不可再改"的 UI 状态;建模阶段的本质是多轮逼近,任何字段都可能在第 N 轮才稳定
@@ -233,7 +246,7 @@ Widget 形态(按 §1 合并后的结构):
 | 整体替换为静态文本 | 把 widget DOM 整个换成 `<span>已应用 ✓</span>` | 用户彻底失去交互入口 |
 | user-select 屏蔽 | `.comment-input { user-select: none; }` | 能点开但选不到文字 |
 
-#### 可拷贝的 canonical 实现(Claude compose 时**直接抄,不要重写**)
+#### 可拷贝的 canonical 实现(当前宿主代理 compose 时**直接抄,不要重写**)
 
 **CSS**(visual hint only,不动 interaction):
 
@@ -330,7 +343,7 @@ function resetWidgetsForNewRound() {
 
 #### Stage 2 自检清单(compose 完 HTML 必须自查 + 在 Stage 3 通报里显式承诺)
 
-Claude 在 Stage 3 启 server / push html 时,通报段必须包含以下 3 行勾选(用真实结果填):
+当前宿主代理在 Stage 3 启 server / push html 时,通报段必须包含以下 3 行勾选(用真实结果填):
 
 ```
 ✓ 已检查:所有 widget 的 click handler 都来自 canonical 片段,无 modified-round 分支
@@ -415,8 +428,8 @@ Claude 在 Stage 3 启 server / push html 时,通报段必须包含以下 3 行�
 #### 状态切换规约
 
 - Stage 1.3 §E 表里 unresolved 行 → 渲染未决议态;resolved 行 → 渲染已决议态(用表里的"决议 / 决议轮次 / 决议反链到"字段填模板)
-- Stage 3.5.2 用户对某 Q 给出明确决议(kind=`q` 反馈,语义清晰非"再想想")→ Claude 内部模型快照更新 `resolved=true` + 三字段 → 下一轮 compose 时该 Q 自动切到已决议态
-- 用户后续若反悔 / 推翻决议 → 通过 💬 widget 再提反馈 → Claude 可把 resolved 回退到 unresolved(`resolved=false`,清空决议字段),也可保持 resolved 但更新 resolution 内容
+- Stage 3.5.2 用户对某 Q 给出明确决议(kind=`q` 反馈,语义清晰非"再想想")→ 当前宿主代理内部模型快照更新 `resolved=true` + 三字段 → 下一轮 compose 时该 Q 自动切到已决议态
+- 用户后续若反悔 / 推翻决议 → 通过 💬 widget 再提反馈 → 当前宿主代理可把 resolved 回退到 unresolved(`resolved=false`,清空决议字段),也可保持 resolved 但更新 resolution 内容
 
 ### Mermaid 图清单(每节用什么类型)
 
@@ -647,7 +660,7 @@ Claude 在 Stage 3 启 server / push html 时,通报段必须包含以下 3 行�
     
           document.querySelectorAll('.state-draft').forEach(w => setState(w, 'submitted'));
           updateCounter();
-          showToast(`已提交 ${envelope.comments.length} 条反馈,等 Claude 处理`);
+          showToast(`已提交 ${envelope.comments.length} 条反馈,等当前宿主代理处理`);
         } catch (e) {
           showToast(`提交失败: ${e.message}`);
         }
@@ -696,7 +709,7 @@ Claude 在 Stage 3 启 server / push html 时,通报段必须包含以下 3 行�
 ### 不变量
 
 - 每个 widget 必有 `data-comment-id` / `data-kind` / `data-target` / `data-section`
-- 所有 cross-ref 必须是 `<a href="#br-001">BR-001</a>` 格式(自动生成,Claude compose 时正则替换)
+- 所有 cross-ref 必须是 `<a href="#br-001">BR-001</a>` 格式(自动生成,当前宿主代理 compose 时正则替换)
 - Stage 4 dump md 时,**自动 strip** 所有 widget DOM(只保留语义内容)→ md 干净
 
 ## 评论协议与 schema(Stage 3.5 必照)
@@ -719,9 +732,9 @@ Claude 在 Stage 3 启 server / push html 时,通报段必须包含以下 3 行�
       ]
     }
 
-### 6 种 kind × Claude 处理
+### 6 种 kind × 当前宿主代理处理
 
-| kind | target 格式 | Claude 处理 |
+| kind | target 格式 | 当前宿主代理处理 |
 |---|---|---|
 | `term` | 英文名 e.g. `discountRate` | 改术语行(改名/改定义/加同义词);改名 → 自动级联所有 BR / Entity / Q 引用 |
 | `entity-field` | `Entity.field` e.g. `Order.totalAmount` | 改字段(改名/改类型/改必填/加不变量);改名 → 级联 |
@@ -732,7 +745,7 @@ Claude 在 Stage 3 启 server / push html 时,通报段必须包含以下 3 行�
 
 ### 幂等与增量
 
-- `last_processed_event_timestamp`(Claude 内部 model snapshot 状态)
+- `last_processed_event_timestamp`(当前宿主代理内部 model snapshot 状态)
 - `processed_comment_ids` set(兜底防 timestamp 错位)
 - 每轮处理完更新两者
 
@@ -760,7 +773,7 @@ Stage 1. 抽取(领域核心)
   1.2 识别聚合根(终端 mini-loop 多轮反馈,纯文本,不写盘 / 不出 html)— ★ model 阶段最重要的工作
   1.3 基于已确认聚合根展开完整抽取(按聚合根分组的术语+Entity 一体 / BR / UC / Q)
   1.4 三段式确认完整抽取结果
-Stage 2. 生成 interactive html 内容(Claude 在内存里 compose,按聚合根组织)
+Stage 2. 生成 interactive html 内容(当前宿主代理在内存里 compose,按聚合根组织)
 Stage 3. 启 visual companion server + push html + 给用户 URL
 Stage 3.5. 多轮修改循环(event-driven,默认进入)
 Stage 4. 三段式收口(用户给推进信号 → dump md → 停 server)
@@ -791,7 +804,7 @@ Stage 4. 三段式收口(用户给推进信号 → dump md → 停 server)
 > **不变量**:**短路**分支 → Stage 0 立刻写一份**占位 md**(`docs/bob/03-model-<slug>-<date>.md`)+ 退出;**常规**分支 → md 不在此处写,会在 **Stage 4 推进**时从最终 html 状态 dump。无论哪条路径,最终都会落 md;下游 `/bob-stories` 在 Stage 0 硬校验本文件存在。"短路"≠"跳过 model" —— 它只是把内容压缩到占位 md。
 
 输出文件名计算:
-- `<slug>` = Claude 从源文档名 + 业务语义生成的 3-5 字符 kebab-case 标识符(如 "ycb需求.md" + 业务"创建订单" → "create-order");**同一 slug 贯穿 Stage 0/2/3/4 所有阶段**(短路占位 md / 交互式 html / Stage 4 dump 都用此值)
+- `<slug>` = 当前宿主代理从源文档名 + 业务语义生成的 3-5 字符 kebab-case 标识符(如 "ycb需求.md" + 业务"创建订单" → "create-order");**同一 slug 贯穿 Stage 0/2/3/4 所有阶段**(短路占位 md / 交互式 html / Stage 4 dump 都用此值)
 - `<date>` = `YYYYMMDD`(UTC)
 - 输出:`docs/bob/03-model-<slug>-<date>.md` + `docs/bob/03-model-<slug>-<date>.html`
 - **同一天再跑** → 覆盖同名文件;**跨天** → 新文件,旧文件保留(团队可手动清理)
@@ -819,7 +832,7 @@ Stage 4. 三段式收口(用户给推进信号 → dump md → 停 server)
 
 #### 1.2.1 首轮抽取(候选聚合根列表)
 
-读完源文档后,Claude 输出**候选聚合根列表 + 跨聚合根关系**:
+读完源文档后,当前宿主代理输出**候选聚合根列表 + 跨聚合根关系**:
 
 ```
 候选聚合根(初步):
@@ -851,10 +864,10 @@ Stage 4. 三段式收口(用户给推进信号 → dump md → 停 server)
 
 #### 1.2.3 多轮 mini-loop 规约
 
-- 用户给出"加 X / 删 Y / 把 Z 从聚合根降级为值对象 / 把 W 从值对象升级为聚合根"等指令 → Claude 重新输出聚合根列表 + 关系 + 排除项 → 再次三段式
+- 用户给出"加 X / 删 Y / 把 Z 从聚合根降级为值对象 / 把 W 从值对象升级为聚合根"等指令 → 当前宿主代理重新输出聚合根列表 + 关系 + 排除项 → 再次三段式
 - **没有轮数上限**,但每轮必须是**纯文本**(无 html / 无 md 落盘)
-- Claude **不主动**追问"是否进入下一步";**只在用户回答 "确认无误" / "OK 推进 1.3" / 等明确推进信号时**才进入 Stage 1.3
-- 用户如说"先这样,但 X 我后面在 html 里再调",Claude 标注该项为"tentative,Stage 3.5 可再改"后即可进入 1.3
+- 当前宿主代理**不主动**追问"是否进入下一步";**只在用户回答 "确认无误" / "OK 推进 1.3" / 等明确推进信号时**才进入 Stage 1.3
+- 用户如说"先这样,但 X 我后面在 html 里再调",当前宿主代理标注该项为"tentative,Stage 3.5 可再改"后即可进入 1.3
 
 #### 1.2.4 为什么这步独立成 mini-loop
 
@@ -864,7 +877,7 @@ Stage 4. 三段式收口(用户给推进信号 → dump md → 停 server)
 
 ### 1.3 基于已确认聚合根展开完整抽取
 
-Stage 1.2 用户 confirm 之后,Claude 按下列顺序展开 5 段内容,**每段三段式追问填空**(不抛开放问题)。**所有内容都按 Stage 1.2 确认的聚合根列表组织**。
+Stage 1.2 用户 confirm 之后,当前宿主代理按下列顺序展开 5 段内容,**每段三段式追问填空**(不抛开放问题)。**所有内容都按 Stage 1.2 确认的聚合根列表组织**。
 
 #### A. 按聚合根分组的术语 + Entity 一体表(Glossary + Entity merged)
 
@@ -1044,7 +1057,7 @@ classDiagram
 | Q3 | 订单超时未支付是否自动取消? | onion / spec | 不实现 | resolved | **不取消**(本需求 + 后续 story 均不实现自动 / 手动取消) | Round 4 | — |
 | Q4 | 配送地址校验?(手机号格式) | spec | 不校验 | resolved | 仅校验 `recipientPhoneNumber` 11 位数字格式;name/address 仅非空 | Round 4 | BR-019(新增) |
 
-**状态切换契机**:Stage 3.5 用户在 kind=`q` widget 上给出明确回答 → Claude 应用反馈时更新 `resolved=true` + `resolvedRound=<N>` + `resolution=<文本>` + 可选 `resolutionLinksTo=<BR-ID/Entity/字段>`。下一轮重 compose html 时,该 Q 自动切到 resolved 视觉态(详见 §HTML §Q 卡两态)。
+**状态切换契机**:Stage 3.5 用户在 kind=`q` widget 上给出明确回答 → 当前宿主代理应用反馈时更新 `resolved=true` + `resolvedRound=<N>` + `resolution=<文本>` + 可选 `resolutionLinksTo=<BR-ID/Entity/字段>`。下一轮重 compose html 时,该 Q 自动切到 resolved 视觉态(详见 §HTML §Q 卡两态)。
 
 下游 `/bob-spec` 的"交给 Superpowers 的开放问题"段会进一步消化这些 Q;**未 resolved 的 Q 才是真正交给下游的待办**,resolved 的属于"已沉淀"。
 
@@ -1060,9 +1073,9 @@ classDiagram
 
 ---
 
-## Stage 2. 生成 interactive html 内容(Claude 在内存里 compose)
+## Stage 2. 生成 interactive html 内容(当前宿主代理在内存里 compose)
 
-**重要变化**:本阶段**不再写 md**(md 推迟到 Stage 4);本阶段 Claude **在内存里 compose 完整的 html 字符串**,Stage 3 才把它写盘 + 启 server。
+**重要变化**:本阶段**不再写 md**(md 推迟到 Stage 4);本阶段当前宿主代理**在内存里 compose 完整的 html 字符串**,Stage 3 才把它写盘 + 启 server。
 
 ### 2.1 html 必含组件(详见 §html widget 规范)
 
@@ -1074,7 +1087,7 @@ classDiagram
 - **§1 内部结构**:可选顶部 overview classDiagram(聚合根 ≥ 3 时)+ 每个聚合根 H3 块(块内固定 8 子段 + **强制内嵌一张 Entity `classDiagram` 类图**,见 §1.3 A.2)
 - 嵌入 inline CSS(状态色标 / 布局)
 - 嵌入 inline JS(localStorage / 提交 / 自动保存,详见 §html widget 规范的 page-helper)
-- 顶部 `<script>window.BOB_MODEL_SLUG='<slug>'; window.BOB_MODEL_ROUND=1;</script>`(Claude 按当次会话填)
+- 顶部 `<script>window.BOB_MODEL_SLUG='<slug>'; window.BOB_MODEL_ROUND=1;</script>`(当前宿主代理按当次会话填)
 
 ### 2.2 文件名计算(与旧版相同)
 
@@ -1095,13 +1108,17 @@ classDiagram
 ### 3.1 启 server
 
 ```bash
-SCRIPT="<project-root>/.claude/skills/bob-model/scripts/start-server.sh"
-"$SCRIPT" --project-dir <project-root>
+SCRIPT="<skill-dir>/scripts/start-server.sh"
+if [ ! -f "$SCRIPT" ]; then
+  echo "bob-model start script not found: $SCRIPT" >&2
+  exit 1
+fi
+"$SCRIPT" --project-dir "<project-root>"
 ```
 
-返回 JSON 包含 `port` / `url` / `screen_dir` / `state_dir`。Claude 在内部记下 `screen_dir` 与 `state_dir`。
+返回 JSON 包含 `port` / `url` / `screen_dir` / `state_dir`。当前宿主代理在内部记下 `screen_dir` 与 `state_dir`。
 
-> **失败兜底**:若 start-server.sh 返回非 0,Claude 终端报错并降级 — 把 Stage 2 的 html 直接写到 `docs/bob/03-model-<slug>-<date>.html`(只读 fallback),并告知用户"interactive review 不可用,可作为只读 review"。
+> **失败兜底**:若 start-server.sh 返回非 0,当前宿主代理在终端报错并降级 — 把 Stage 2 的 html 直接写到 `docs/bob/03-model-<slug>-<date>.html`(只读 fallback),并告知用户"interactive review 不可用,可作为只读 review"。
 
 ### 3.2 写 html 到 screen_dir
 
@@ -1133,13 +1150,13 @@ server 会自动检测新文件并 broadcast `{type: 'reload'}` 到所有连接�
 
 ### 3.4 进入 Stage 3.5 等待
 
-Stage 3 至此结束。Claude **不主动追问**,等用户在终端发推进信号。
+Stage 3 至此结束。当前宿主代理**不主动追问**,等用户在终端发推进信号。
 
 ---
 
 ## Stage 3.5 · 多轮修改循环(event-driven,默认进入)
 
-**仍是默认进入,Claude 不主动追问 Stage 4**(per commit `6e21e53` 不变量);区别于旧版,本阶段改为 event-driven:用户在 browser 提交 → server 写 events → Claude 在终端被叫"继续" → 读 events → 应用 → 重写 html。
+**仍是默认进入,当前宿主代理不主动追问 Stage 4**(per commit `6e21e53` 不变量);区别于旧版,本阶段改为 event-driven:用户在 browser 提交 → server 写 events → 当前宿主代理在终端被叫"继续" → 读 events → 应用 → 重写 html。
 
 ### 3.5.1 触发(用户在终端给出推进/继续/查反馈信号)
 
@@ -1157,7 +1174,7 @@ Stage 3 至此结束。Claude **不主动追问**,等用户在终端发推进信
    ```bash
    tail -n+1 "$STATE_DIR/events"
    ```
-   Claude 内部 filter 出 `type === 'bob-model-feedback'` 且 `timestamp > last_processed_event_timestamp` 的行;得到本轮 `incoming_events` 列表。
+   当前宿主代理内部 filter 出 `type === 'bob-model-feedback'` 且 `timestamp > last_processed_event_timestamp` 的行;得到本轮 `incoming_events` 列表。
 
 2. **打印「本轮反馈 overview」到终端**(强制,先打印再继续):
 
@@ -1183,7 +1200,7 @@ Stage 3 至此结束。Claude **不主动追问**,等用户在终端发推进信
    是否开始应用?(回 "继续" / "先调整" / "跳过 N/M/K")
    ```
 
-   **为什么强制 overview**:用户提交后只有这一刻能 sanity check 自己提了什么、Claude 看到了什么 —— 错过这一刻,后面 Claude 静默丢一两条反馈就再也不可能被察觉。
+   **为什么强制 overview**:用户提交后只有这一刻能 sanity check 自己提了什么、当前宿主代理看到了什么 —— 错过这一刻,后面当前宿主代理静默丢一两条反馈就再也不可能被察觉。
 
 3. **校验数量与页面状态一致**(强制,Stage 3.5 第二必经步骤):
 
@@ -1191,7 +1208,7 @@ Stage 3 至此结束。Claude **不主动追问**,等用户在终端发推进信
    assert len(incoming_events) === expected_count
    ```
 
-   `expected_count` 来源:页面顶部 `submitted-counter` 在用户点提交后会 +N,Claude 应记录"上次 compose 时该数值 = old_total";本轮收到 events 后应满足 `new_total - old_total === len(incoming_events)`。
+   `expected_count` 来源:页面顶部 `submitted-counter` 在用户点提交后会 +N,当前宿主代理应记录"上次 compose 时该数值 = old_total";本轮收到 events 后应满足 `new_total - old_total === len(incoming_events)`。
 
    不一致(events 落盘缺漏 / 用户多次点提交去重失败 / server 抖动)→ **立即中止 + 三段式问用户**:
 
@@ -1231,7 +1248,7 @@ Stage 3 至此结束。Claude **不主动追问**,等用户在终端发推进信
 
 5. **写盘新 html**:**新文件名**(不覆盖旧版)避免 server 把它当 update 而 broadcast reload 之外的副作用。例如 `screen_dir/03-model-<slug>-<date>-v2.html`、`v3.html` 等。
 
-> server.cjs:287 新文件触发 `{type: 'screen-added'}` + **清空 events 文件**(server.cjs:290)。Claude 必须**先读完本批 events** 再写新文件;否则新提交事件会丢。
+> server.cjs:287 新文件触发 `{type: 'screen-added'}` + **清空 events 文件**(server.cjs:290)。当前宿主代理必须**先读完本批 events** 再写新文件;否则新提交事件会丢。
 
 6. **报告改动 + 列 URL**(per §产物报告规约):
    ```
@@ -1267,7 +1284,7 @@ Stage 3 至此结束。Claude **不主动追问**,等用户在终端发推进信
 ### 4.1 触发(用户显式给出退循环信号)
 
 - "OK 推进" / "可以了" / "继续 stories" / "/bob-stories" / "done with model" / 类似
-- 若用户多轮未动,Claude **可一次**主动问 "还有改动吗?",收到 "没了" 再进 Stage 4
+- 若用户多轮未动,当前宿主代理**可一次**主动问 "还有改动吗?",收到 "没了" 再进 Stage 4
 
 ### 4.2 dump md(从最终内部模型快照)
 
@@ -1290,7 +1307,7 @@ Stage 3 至此结束。Claude **不主动追问**,等用户在终端发推进信
 kill -TERM $(cat "$STATE_DIR/server.pid")
 ```
 
-(或调用 stop-server.sh 如存在)
+(或调用 `"<skill-dir>/scripts/stop-server.sh" "$SESSION_DIR"` 如存在)
 
 ### 4.5 三段式收口(per §产物报告规约的 Stage 4 模板)
 
@@ -1311,7 +1328,7 @@ kill -TERM $(cat "$STATE_DIR/server.pid")
 ### 4.6 失败兜底
 
 - md dump 失败(磁盘 / 权限)→ 不停 server,允许用户继续 review
-- final html 复制失败 → 用户从 screen_dir 手动复制,Claude 给出明确路径
+- final html 复制失败 → 用户从 screen_dir 手动复制,当前宿主代理给出明确路径
 - server 已 idle 自杀 → SIGTERM no-op,跳过
 
 ---
@@ -1325,14 +1342,14 @@ kill -TERM $(cat "$STATE_DIR/server.pid")
 - **关系标注 inline,顶部 overview 仅鸟瞰** —— 各聚合根块内必须有「与其他聚合根的关系」子段(文字 + 基数 + 包含/引用);顶部 overview `classDiagram` 仅作鸟瞰(聚合根 ≥ 3 时可选),**关系细节不靠它传递**。
 - **每个聚合根块强制内嵌 Entity 类图(画法按尺寸分流)** —— 每个 `### <AggregateName>` H3 块内**必须**出 Mermaid `classDiagram`。**画法决策**:class 总数(聚合根 + entity + VO + enum 展平计)≤ 10 → 单图全展开;> 10 → 切「骨架 + 详图」两层(骨架仅画名字,深度=1,自身 class ≤ 10;每个**非平凡 VO**——字段 ≥ 2——一张详图,深度=1)。**省略规则**:平凡 VO(单字段包装如 `OrderNumber { String value }`)只在骨架 class 块上标 `<<value object>>` + 类型 inline,不开详图;enum 类图里只出现名字 + `<<enum>>`,取值交给状态机 / 字段表。**Why**:聚合体量在域里差异大(3 class vs 30 class),一刀切单图会让大聚合糊作一团反而看不清,违背「让用户一眼看到结构」的初衷;两层制让骨架永远 ≤ 10 class 一屏看完,细节按需钻进对应详图。**How to apply**:Stage 2 compose 时按 §1.3 A.2 第 2 项的决策表与示例;Stage 2 自检清单第 4 行勾选(尺寸阈值 + `<<value object>>` 出现次数 = 详图数 + 单字段 inline 数,机械化校验);Stage 4 dump md 时所有 mermaid 代码块(骨架 + 全部详图)原样保留,不要剥成纯文本也不要只留骨架丢详图。
 - **评论 widget 永远可编辑(跨轮)** —— 任意 widget 在任意轮都不得 lock / disabled / readonly / pointer-events:none / click-no-op;每轮 push html 时所有 widget 重置为空草稿可写状态;视觉留痕(`data-modified-round` / `data-comment-count`)允许,但**绝对不影响交互**。**这条 skill 反复被违反**(产线 /bob-model 曾两次产出虚线锁死的 widget),所以 §Widget 跨轮可编辑性 配置了"反模式黑名单 + canonical 代码 + Stage 2 自检清单"三重保险。Stage 3 通报必须显式 3 行勾选,任一勾不上视为本阶段未完成。
-- **Stage 3.5 必经 Step 0:先打印 overview + 校验数量** —— 收到 events 后,Claude **第一动作**是按 kind 分组打印「本轮反馈 overview」到终端,让用户 sanity check 自己提了什么;**第二动作**是 `assert len(incoming_events) === new_submitted_total − old_submitted_total`,不一致立即中止 + 三段式问用户。这两步任一跳过都视为 skill 违规,会让"Claude 静默漏掉一两条反馈"的事故无法被发现。详见 §3.5.2 Step 0。
-- **widget 角标累计可视化** —— 每个 `.bob-widget` 必须有 `data-comment-count="N"` 属性,N = 该 widget 跨整个会话累计的已提交评论数,Claude 在每轮 compose html 时从 events 反查注入。CSS 状态机:空态灰虚线 / 本轮草稿蓝实线 / 累计 ≥1 绿实底 + 显示 count 数字 / 既累计又新加草稿则绿底 + 蓝边。无论哪种状态,点击都仍可展开 textarea 继续提交新反馈。顶部 sticky header 显示会话累计 `submitted-counter` 与本轮 `draft-counter` 两个数字。
+- **Stage 3.5 必经 Step 0:先打印 overview + 校验数量** —— 收到 events 后,当前宿主代理**第一动作**是按 kind 分组打印「本轮反馈 overview」到终端,让用户 sanity check 自己提了什么;**第二动作**是 `assert len(incoming_events) === new_submitted_total − old_submitted_total`,不一致立即中止 + 三段式问用户。这两步任一跳过都视为 skill 违规,会让"当前宿主代理静默漏掉一两条反馈"的事故无法被发现。详见 §3.5.2 Step 0。
+- **widget 角标累计可视化** —— 每个 `.bob-widget` 必须有 `data-comment-count="N"` 属性,N = 该 widget 跨整个会话累计的已提交评论数,当前宿主代理在每轮 compose html 时从 events 反查注入。CSS 状态机:空态灰虚线 / 本轮草稿蓝实线 / 累计 ≥1 绿实底 + 显示 count 数字 / 既累计又新加草稿则绿底 + 蓝边。无论哪种状态,点击都仍可展开 textarea 继续提交新反馈。顶部 sticky header 显示会话累计 `submitted-counter` 与本轮 `draft-counter` 两个数字。
 - **Q 卡两态强制** —— §4 开放问题区每张 Q 卡必须按 `resolved` 状态切换视觉:未决议态 = 红/橙左边框 + 浅蓝 `暂定:` 块;已决议态 = 绿左边框 + 标题 ✅ 前缀 + 绿底 `✅ 决议(Round N): <文本>` 块,可选反链到新 BR/字段。两态都保留 💬 widget 完全交互(per 评论 widget 永远可编辑)。Stage 3.5.2 对 kind=`q` 反馈必须显式分流"明确决议 / 改暂定 / 拆分到 BR / 含糊先追问",含糊不可默认按"维持暂定"吞掉。详见 §Q 卡两态 + §3.5.2。
-- **多轮修改是默认** —— Stage 3(html 落盘)与 Stage 4(收口)之间**默认进入修改循环**,3-8 轮迭代是常态。Claude **不主动**追问"是否进入下一步";**只在用户显式给推进信号**("OK 推进" / "继续 stories" / 等)时才发 Stage 4 三段式。详见 §Stage 3.5。
+- **多轮修改是默认** —— Stage 3(html 落盘)与 Stage 4(收口)之间**默认进入修改循环**,3-8 轮迭代是常态。当前宿主代理**不主动**追问"是否进入下一步";**只在用户显式给推进信号**("OK 推进" / "继续 stories" / 等)时才发 Stage 4 三段式。详见 §Stage 3.5。
 - **报告必含文件链接** —— 每次产物落盘 / 改动报告 / Stage 4 收口都必须**显式列出 md 与 html 绝对路径**,方便用户直接打开 review。**每轮都要列**(即使路径没变),不要省略,不要藏在散文里。详见 §产物报告规约。
 - **html 是 review canvas(非只读)** —— Stage 2 起 html 含 widget / 状态机 / localStorage / WebSocket 提交;不再是只读视图。详见 §html widget 规范。
 - **md 仅 Stage 4 生成** —— Stage 2 不写 md;Stage 3.5 只动 html;md 在用户给 Stage 4 推进信号后从最终 html 状态 dump。下游 `/bob-stories` 通过"是否有 md"自然判断 model 是否 final。
-- **server 自启自停** —— Stage 3 自动 spawn visual companion server;Stage 4 自动 SIGTERM。idle 30 min 自杀由 server 自管;Claude 检测到 server-stopped 后自动重启。
+- **server 自启自停** —— Stage 3 自动 spawn visual companion server;Stage 4 自动 SIGTERM。idle 30 min 自杀由 server 自管;当前宿主代理检测到 server-stopped 后自动重启。
 - **md 是 SSoT(Stage 4 起)** —— Stage 4 dump 后,md 即为下游消费的 final;html 仅是视图,每次 `/bob-model` 运行重写
 - **html 入 git** —— 团队 PR review 用,差异可见
 - **Mermaid via CDN** —— 单 `<script>` 标签;离线时优雅降级为代码块

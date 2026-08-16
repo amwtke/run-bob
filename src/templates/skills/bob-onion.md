@@ -32,6 +32,8 @@ $bob-onion --refresh               # 跳过 identity,基于现有 ARCHITECTURE.m
 - 本文保留 slash 形式以保护 Claude Code 兼容性。
 - 向用户给出下一步命令时，使用当前宿主的调用形式。
 - 不从一个宿主的 skill 根回退到另一个宿主。
+- `CLAUDE.md`（包括 `CLAUDE.md R8`）仍是显式的 Bob 项目规则文档；Claude Code 与 Codex 都必须显式读取并遵守它。
+- 不假定 Codex 自动加载 `CLAUDE.md`；Codex 执行本 skill 时要主动读取这份文档。
 
 ## 前置条件
 

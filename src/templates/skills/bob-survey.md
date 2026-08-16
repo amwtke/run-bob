@@ -85,13 +85,15 @@ Stage 5. 追加 ARCHITECTURE.md §12 一行(除非 --no-record)
 |---|---|---|
 | **G(绿地)** | 无 `src/main/java` 或目录为空 | 跳过 Stage 1,直接做 Stage 2-3 |
 | **β(棕地未跑过 bob)** | 有 `src/main/java`,但无 ARCHITECTURE.md 或 §4-§7 是占位符 | 跑 Stage 1(预期低分) |
-| **γ(成熟 bob)** | 有 `src/main/java` + ARCHITECTURE.md §4-§7 填好 + `.claude/skills/bob-*` 存在 | 跑 Stage 1(预期高分) |
+| **γ(成熟 bob)** | 有 `src/main/java` + ARCHITECTURE.md §4-§7 填好 + `.claude/skills/bob-*` 或 `.agents/skills/bob-*` 任一根具备完整集合 | 跑 Stage 1(预期高分) |
 
 判定 sentinels(无 LLM judgment):
 
 - `ls src/main/java/` 是否存在且非空 → G 与否
 - `grep -c '^## 4\.' ARCHITECTURE.md` 与 §4 段下是否有非占位符内容 → β vs γ
-- `ls .claude/skills/bob-*` 是否齐 → 辅助判 γ
+- 完整集合是 `bob-survey`、`bob-model`、`bob-stories`、`bob-identify`、`bob-onion`、`bob-spec`、`bob-compliance`、`bob-nfr`。
+- 分别检查 `.claude/skills/bob-*` 与 `.agents/skills/bob-*` 是否齐；任一根完整即视为成熟。
+- 双宿主安装只计一次，不重复计数；两个根都完整仍只是同一个成熟 Bob 安装。
 
 向用户**三段式**通报判定结果。
 

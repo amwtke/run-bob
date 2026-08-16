@@ -32,6 +32,7 @@ $bob-nfr --refresh                # 已有 04-nfr-*.md 时强制重跑
 - 本文保留 slash 形式以保护 Claude Code 兼容性。
 - 向用户给出下一步命令时，使用当前宿主的调用形式。
 - 不从一个宿主的 skill 根回退到另一个宿主。
+- 上游 TDD 保持加法式双宿主映射：Claude Code 使用 Superpowers 的 `superpowers:test-driven-development`，Codex 使用等价的 `$test-driven-development`；两者都必须先红、后绿、再重构。
 
 ## 前置条件
 

@@ -31,6 +31,12 @@ $visual-md [参数] --out [new-path]   # explicit output path
 - 向用户给出下一步命令时，使用当前宿主的调用形式。
 - 不从一个宿主的 skill 根回退到另一个宿主。
 
+## Active skill directory
+
+- `<skill-dir>` 是当前宿主实际加载的 `SKILL.md` 所在目录的绝对路径，由当前宿主提供。
+- Resolve every bundled script from `<skill-dir>/scripts`; report the resolved path and stop if a required script is missing.
+- 禁止回退到另一个宿主的 skill 根，也不得跨宿主复用脚本。
+
 ## Mode detection
 
 1. Parse args: first non-flag = `<arg>`, optional `--out <path>`
@@ -45,11 +51,11 @@ $visual-md [参数] --out [new-path]   # explicit output path
 
 - **MODIFY mode**: `SESSION_DIR = <dirname-of-source>/.visual-md/<basename>-<date>/`
 - **GENERATE mode**: `SESSION_DIR = <cwd>/.visual-md/<slug>-<date>/`
-  where `<slug>` = `node <project-root>/.claude/skills/visual-md/scripts/slugify.cjs "<prompt>"`
+  where `<slug>` = `node "<skill-dir>/scripts/slugify.cjs" "<prompt>"`
 
 **First-run bootstrap** (idempotent — costs ~10s once per project, no-op after):
 ```bash
-SCRIPTS_DIR="<project-root>/.claude/skills/visual-md/scripts"
+SCRIPTS_DIR="<skill-dir>/scripts"
 if [ ! -d "$SCRIPTS_DIR/node_modules/markdown-it" ]; then
   (cd "$SCRIPTS_DIR" && npm install --no-audit --no-fund)
 fi
@@ -58,20 +64,25 @@ If `npm` is missing, abort with a three-segment Q&A telling the user to install 
 
 Start server (background):
 ```bash
-<project-root>/.claude/skills/visual-md/scripts/start-server.sh "$SESSION_DIR"
+START_SCRIPT="<skill-dir>/scripts/start-server.sh"
+if [ ! -f "$START_SCRIPT" ]; then
+  echo "visual-md start script not found: $START_SCRIPT" >&2
+  exit 1
+fi
+"$START_SCRIPT" "$SESSION_DIR"
 ```
 Capture the printed `server-info` JSON; remember `url`, `port`, `screen_dir`, `state_dir`.
 
 ## Initial draft
 
 - **MODIFY mode**: `current_draft = fs.read(<source>)` (keep source file untouched)
-- **GENERATE mode**: Claude composes a skeleton md from `<prompt>` (headings + placeholder
+- **GENERATE mode**: the current host agent composes a skeleton md from `<prompt>` (headings + placeholder
   paragraphs + necessary list/table scaffolds if prompt implies them)
 
 ## Round 1: render
 
 ```bash
-node <project-root>/.claude/skills/visual-md/scripts/md2html.cjs <draft-tmp.md> $SESSION_DIR/<basename>-<date>-v1.html
+node "<skill-dir>/scripts/md2html.cjs" <draft-tmp.md> $SESSION_DIR/<basename>-<date>-v1.html
 ```
 
 Report (mandatory format, every round):
@@ -130,7 +141,7 @@ Report (mandatory format, every round):
 
 > **Q: [question]**
 >
-> **推测**: <Claude's guess>
+> **推测**: <current host agent's guess>
 > **理由**: <one-line reason>
 > **推荐选择**: `<one concrete option>`
 >
@@ -155,7 +166,7 @@ When user types `/export`, `导出`, `done`, or `ok 收口`:
      - MODIFY mode default: `<source-dir>/<basename>-revised-<date>.md`
      - GENERATE mode default: `<cwd>/visual-md-<slug>-<date>.md`
      - `--out <path>` overrides
-   - Stop the server: `<project-root>/.claude/skills/visual-md/scripts/stop-server.sh "$SESSION_DIR"`
+   - Stop the server: `"<skill-dir>/scripts/stop-server.sh" "$SESSION_DIR"`
    - Final report:
      > 已导出。
      >
