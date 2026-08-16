@@ -13,7 +13,9 @@ description: |
 - Claude Code 中的显式调用是 `/install`。
 - Codex 中的显式调用是 `$install`。
 - 自然语言请求也可触发本 skill。后续提示使用当前宿主的调用形式，不建议用户切换到另一宿主的形式。
-- 用户显式调用 `/install` 或 `$install`，即授权在 Rust 缺失时由仓库 helper 自动运行 Rust 官方 rustup 安装程序。操作系统、网络代理、安全软件或 Visual C++ 安装提示仍须展示并由用户处理。
+- 用户显式调用 `/install`、`$install`，或明确要求安装、更新或重新安装 run-bob，都授权完成整个源码安装；Rust 缺失时无需再次确认 Rust 自动引导。
+- “可以安装吗”“会下载什么”“能否更新”等探索性或疑问式表达不构成授权。先回答问题，并在任何安装或网络变更之前取得明确确认。
+- 获得授权后，仓库 helper 可以在 Rust 缺失时自动运行 Rust 官方 rustup 安装程序。操作系统、网络代理、安全软件或 Visual C++ 安装提示仍须展示并由用户处理。
 
 ## 1. 验证仓库
 
@@ -46,23 +48,68 @@ git pull --ff-only origin "$branch"
 
 ## 3. 通过源码 helper 构建、测试、安装
 
-按当前平台只选择一个 helper，并依次执行三个阶段。每一阶段成功后才能进入下一阶段，任何失败都停止，不安装未经测试的二进制。
+按当前平台只选择一个 helper。在同一个 shell 或 PowerShell 进程中先确定唯一安装根，再依次执行三个阶段和验证。每一阶段成功后才能进入下一阶段，任何失败都停止，不安装未经测试的二进制。
 
 POSIX 系统：
 
 ```bash
+if [ -n "${CARGO_INSTALL_ROOT:-}" ]; then
+    install_root=$CARGO_INSTALL_ROOT
+elif [ -n "${CARGO_HOME:-}" ]; then
+    install_root=$CARGO_HOME
+elif [ -n "${HOME:-}" ]; then
+    install_root=$HOME/.cargo
+else
+    printf '%s\n' 'error: HOME is required when Cargo install roots are unset' >&2
+    exit 1
+fi
+mkdir -p "$install_root" || exit 1
+install_root=$(CDPATH= cd -P "$install_root" && pwd) || exit 1
+export CARGO_INSTALL_ROOT="$install_root"
+
 ./scripts/bootstrap-rust.sh --run-cargo build --release --locked
 ./scripts/bootstrap-rust.sh --run-cargo test --locked
 ./scripts/bootstrap-rust.sh --run-cargo install --locked --path .
+
+run_bob_bin="$install_root/bin/run-bob"
+test -f "$run_bob_bin" || exit 1
+installed_version=$("$run_bob_bin" --version) || exit 1
+"$run_bob_bin" --help >/dev/null || exit 1
 ```
 
 Windows PowerShell：
 
 ```powershell
+if (-not [string]::IsNullOrWhiteSpace($env:CARGO_INSTALL_ROOT)) {
+    $installRoot = $env:CARGO_INSTALL_ROOT
+}
+elseif (-not [string]::IsNullOrWhiteSpace($env:CARGO_HOME)) {
+    $installRoot = $env:CARGO_HOME
+}
+elseif (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+    $installRoot = Join-Path $env:USERPROFILE '.cargo'
+}
+else {
+    throw 'USERPROFILE is required when Cargo install roots are unset'
+}
+$installRoot = [System.IO.Path]::GetFullPath($installRoot)
+$env:CARGO_INSTALL_ROOT = $installRoot
+
 & .\scripts\bootstrap-rust.ps1 -RunCargo @('build','--release','--locked')
 & .\scripts\bootstrap-rust.ps1 -RunCargo @('test','--locked')
 & .\scripts\bootstrap-rust.ps1 -RunCargo @('install','--locked','--path','.')
+
+$runBobBinary = Join-Path $installRoot 'bin\run-bob.exe'
+if (-not (Test-Path -LiteralPath $runBobBinary -PathType Leaf)) {
+    throw "installed run-bob binary not found at $runBobBinary"
+}
+$installedVersion = & $runBobBinary --version
+if ($LASTEXITCODE -ne 0) { throw 'installed run-bob --version failed' }
+& $runBobBinary --help
+if ($LASTEXITCODE -ne 0) { throw 'installed run-bob --help failed' }
 ```
+
+优先使用非空的 `CARGO_INSTALL_ROOT`，其次是非空的 `CARGO_HOME`，最后才是 POSIX 的 `$HOME/.cargo` 或 Windows 的 `$env:USERPROFILE\.cargo`；缺少所需用户目录变量时停止。先把选择结果规范化为绝对路径，再用导出的 `CARGO_INSTALL_ROOT` 固定当前进程及其 helper 子进程。这个环境变量有意覆盖 Cargo 配置中的 `install.root`，保证实际安装位置与后续验证位置不会分叉。
 
 只通过所选 helper 调用 Cargo，不在外层 shell 直接运行 Cargo，也不提供或运行独立的 Rust 安装命令。helper 的工具链策略是：
 
@@ -74,20 +121,14 @@ Windows PowerShell：
 
 ## 4. 用绝对路径验证
 
-安装成功后按以下优先级确定安装根：
-
-1. 非空的 `CARGO_INSTALL_ROOT`
-2. 非空的 `CARGO_HOME`
-3. POSIX 下用户主目录的 `.cargo`，Windows 下用户配置目录的 `.cargo`
-
-将根目录规范化为绝对路径。POSIX 二进制是 `bin/run-bob`，Windows 二进制是 `bin/run-bob.exe`。先确认它是常规文件，再以这个绝对路径运行 `--version` 和 `--help`；不要依赖 PATH 中可能存在的旧版本。
+使用步骤 3 中保存的同一个绝对根和二进制变量；不要重新读取环境变量或重新计算优先级。POSIX 使用 `$run_bob_bin`，Windows 使用 `$runBobBinary`。先确认它是常规文件，再以这个绝对路径运行 `--version` 和 `--help`；不要依赖 PATH 中可能存在的旧版本。
 
 同时读取 `Cargo.toml` 的 `[package].version`，要求绝对路径输出的 `run-bob X.Y.Z` 与其完全一致。若找不到文件、任一命令失败或版本不一致，停止并报告：
 
 - 解析出的绝对安装路径；
 - manifest 版本与实际版本；
 - 失败阶段及关键 stderr；
-- 建议用户检查 Cargo 安装根、文件权限或前一阶段输出后重试当前宿主的 `/install` 或 `$install`。
+- 建议用户检查 Cargo 安装根、文件权限或前一阶段输出；Claude Code 中重试 `/install`，Codex 中重试 `$install`。
 
 不要自动修改用户的 shell 启动文件。若安装目录不在 PATH，只说明绝对路径已经可用，并让用户自行决定是否配置 PATH。
 

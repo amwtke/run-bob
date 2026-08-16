@@ -208,6 +208,100 @@ fn repository_install_skills_are_identical_and_dual_host() {
         description.chars().count() <= 1024,
         "description must be at most 1024 Unicode characters"
     );
+    assert!(
+        body.contains("明确要求安装、更新或重新安装 run-bob")
+            && body.contains("无需再次确认 Rust 自动引导")
+            && body.contains("探索性或疑问式")
+            && body.contains("任何安装或网络变更之前"),
+        "direct natural-language requests must authorize bootstrap, while exploratory wording must require confirmation"
+    );
+
+    let posix_start = body.find("POSIX 系统：").expect("POSIX workflow heading");
+    let windows_start = body
+        .find("Windows PowerShell：")
+        .expect("Windows workflow heading");
+    let posix_workflow = &body[posix_start..windows_start];
+    let windows_workflow = &body[windows_start..];
+
+    let posix_install_root = posix_workflow
+        .find("${CARGO_INSTALL_ROOT:-}")
+        .expect("POSIX must inspect CARGO_INSTALL_ROOT");
+    let posix_cargo_home = posix_workflow
+        .find("${CARGO_HOME:-}")
+        .expect("POSIX must inspect CARGO_HOME");
+    let posix_user_home = posix_workflow
+        .find("${HOME:-}")
+        .expect("POSIX must explicitly require HOME for its fallback");
+    assert!(
+        posix_install_root < posix_cargo_home && posix_cargo_home < posix_user_home,
+        "POSIX install root precedence must be CARGO_INSTALL_ROOT, CARGO_HOME, then HOME/.cargo"
+    );
+    for contract in [
+        "install_root=$CARGO_INSTALL_ROOT",
+        "install_root=$CARGO_HOME",
+        "install_root=$HOME/.cargo",
+        "export CARGO_INSTALL_ROOT=\"$install_root\"",
+        "run_bob_bin=\"$install_root/bin/run-bob\"",
+    ] {
+        assert!(
+            posix_workflow.contains(contract),
+            "POSIX workflow must contain deterministic install-root contract: {contract}"
+        );
+    }
+    assert!(
+        posix_workflow
+            .find("export CARGO_INSTALL_ROOT=\"$install_root\"")
+            .expect("POSIX process-scoped install root")
+            < posix_workflow
+                .find("./scripts/bootstrap-rust.sh --run-cargo build")
+                .expect("POSIX build stage"),
+        "POSIX must set the deterministic root before running any Cargo stage"
+    );
+
+    let windows_install_root = windows_workflow
+        .find("$env:CARGO_INSTALL_ROOT")
+        .expect("Windows must inspect CARGO_INSTALL_ROOT");
+    let windows_cargo_home = windows_workflow
+        .find("$env:CARGO_HOME")
+        .expect("Windows must inspect CARGO_HOME");
+    let windows_user_profile = windows_workflow
+        .find("$env:USERPROFILE")
+        .expect("Windows must explicitly use USERPROFILE");
+    assert!(
+        windows_install_root < windows_cargo_home
+            && windows_cargo_home < windows_user_profile,
+        "Windows install root precedence must be CARGO_INSTALL_ROOT, CARGO_HOME, then USERPROFILE/.cargo"
+    );
+    for contract in [
+        "Join-Path $env:USERPROFILE '.cargo'",
+        "$env:CARGO_INSTALL_ROOT = $installRoot",
+        "$runBobBinary = Join-Path $installRoot 'bin\\run-bob.exe'",
+    ] {
+        assert!(
+            windows_workflow.contains(contract),
+            "Windows workflow must contain deterministic install-root contract: {contract}"
+        );
+    }
+    assert!(
+        windows_workflow
+            .find("$env:CARGO_INSTALL_ROOT = $installRoot")
+            .expect("Windows process-scoped install root")
+            < windows_workflow
+                .find(r"& .\scripts\bootstrap-rust.ps1 -RunCargo @('build'")
+                .expect("Windows build stage"),
+        "Windows must set the deterministic root before running any Cargo stage"
+    );
+    for explanation in [
+        "同一个 shell 或 PowerShell 进程",
+        "install.root",
+        "有意覆盖",
+        "不要重新读取环境变量或重新计算优先级",
+    ] {
+        assert!(
+            body.contains(explanation),
+            "install workflow must explain deterministic-root behavior: {explanation}"
+        );
+    }
 
     for helper in [
         "./scripts/bootstrap-rust.sh",
@@ -240,6 +334,67 @@ fn repository_install_skills_are_identical_and_dual_host() {
         assert!(
             !body.contains(stale_or_unsafe),
             "body must not contain stale or unsafe instruction: {stale_or_unsafe}"
+        );
+    }
+
+    let mut in_fence = false;
+    let mut executable_lines = Vec::new();
+    for line in body.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") {
+            in_fence = !in_fence;
+        } else if in_fence && !trimmed.is_empty() && !trimmed.starts_with('#') {
+            executable_lines.push(trimmed);
+        }
+    }
+    assert!(!in_fence, "all Markdown code fences must be closed");
+
+    for line in &executable_lines {
+        let command_words = line
+            .split_whitespace()
+            .map(|word| {
+                word.trim_matches(|character: char| {
+                    !character.is_ascii_alphanumeric()
+                        && !matches!(character, '-' | '.' | '/' | '\\')
+                })
+            })
+            .filter(|word| !word.is_empty())
+            .collect::<Vec<_>>();
+        for forbidden in ["cargo", "rustup", "curl", "Invoke-WebRequest"] {
+            assert!(
+                !command_words.contains(&forbidden),
+                "install workflow must not execute {forbidden} directly: {line}"
+            );
+        }
+        assert!(
+            !line.contains("cargo install --force"),
+            "install workflow must not execute cargo install --force: {line}"
+        );
+        for forbidden_git in ["reset", "checkout", "stash", "merge", "rebase"] {
+            assert!(
+                !command_words
+                    .windows(2)
+                    .any(|words| words == ["git", forbidden_git]),
+                "install workflow must not execute git {forbidden_git}: {line}"
+            );
+        }
+    }
+    assert!(
+        body.contains("`cargo install --force`")
+            && ["stash", "reset", "checkout", "merge", "rebase"]
+                .iter()
+                .all(|command| body.contains(command)),
+        "the prose must retain explicit warnings about forbidden commands"
+    );
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+
+        assert_ne!(
+            claude_metadata.ino(),
+            codex_metadata.ino(),
+            "the two install skills must be distinct regular files, not hardlinks"
         );
     }
 }
