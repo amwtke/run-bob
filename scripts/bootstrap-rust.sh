@@ -10,7 +10,7 @@ fail() {
     exit 1
 }
 
-normalize_version() {
+normalize_required_version() {
     version=$1
     case "$version" in
         ''|*[!0-9.]*|.*|*.|*..*) return 1 ;;
@@ -36,31 +36,98 @@ normalize_version() {
     printf '%s.%s.%s\n' "$major" "$minor" "$patch"
 }
 
+validate_prerelease() {
+    prerelease_remaining=$1
+    [ -n "$prerelease_remaining" ] || return 1
+    while :; do
+        case "$prerelease_remaining" in
+            *.*)
+                prerelease_identifier=${prerelease_remaining%%.*}
+                prerelease_remaining=${prerelease_remaining#*.}
+                ;;
+            *)
+                prerelease_identifier=$prerelease_remaining
+                prerelease_remaining=
+                ;;
+        esac
+        case "$prerelease_identifier" in
+            ''|*[!0-9A-Za-z-]*) return 1 ;;
+        esac
+        case "$prerelease_identifier" in
+            *[!0-9]*) ;;
+            0|[1-9]|[1-9][0-9]*) ;;
+            *) return 1 ;;
+        esac
+        [ -n "$prerelease_remaining" ] || return 0
+    done
+}
+
+normalize_tool_semver() {
+    tool_candidate=$1
+    case "$tool_candidate" in
+        *-*)
+            tool_core=${tool_candidate%%-*}
+            tool_prerelease=${tool_candidate#*-}
+            validate_prerelease "$tool_prerelease" || return 1
+            ;;
+        *)
+            tool_core=$tool_candidate
+            tool_prerelease=
+            ;;
+    esac
+    case "$tool_core" in
+        *.*.*) ;;
+        *) return 1 ;;
+    esac
+    tool_core=$(normalize_required_version "$tool_core") || return 1
+    if [ -n "$tool_prerelease" ]; then
+        printf '%s-%s\n' "$tool_core" "$tool_prerelease"
+    else
+        printf '%s\n' "$tool_core"
+    fi
+}
+
 tool_version() {
     tool=$1
+    expected_tool=$2
     version_line=$("$tool" --version 2>/dev/null) || return 1
-    set -- $version_line
-    [ "$#" -ge 2 ] || return 1
-    normalize_version "$2"
+    case "$version_line" in
+        "$expected_tool "*) version_text=${version_line#"$expected_tool "} ;;
+        *) return 1 ;;
+    esac
+    version_candidate=${version_text%%[[:space:]]*}
+    normalize_tool_semver "$version_candidate"
 }
 
 rustup_tool_version() {
     rustup_tool=$1
     rustup_version_line=$("$rustup_path" run stable "$rustup_tool" --version 2>/dev/null) || return 1
-    set -- $rustup_version_line
-    [ "$#" -ge 2 ] || return 1
-    normalize_version "$2"
+    case "$rustup_version_line" in
+        "$rustup_tool "*) rustup_version_text=${rustup_version_line#"$rustup_tool "} ;;
+        *) return 1 ;;
+    esac
+    rustup_version_candidate=${rustup_version_text%%[[:space:]]*}
+    normalize_tool_semver "$rustup_version_candidate"
 }
 
 version_at_least() {
     actual=$1
     required=$2
-    actual_major=${actual%%.*}
-    actual_rest=${actual#*.}
+    actual_core=${actual%%-*}
+    if [ "$actual_core" = "$actual" ]; then
+        actual_prerelease=
+    else
+        actual_prerelease=${actual#*-}
+    fi
+    # Cargo.toml requirements are deliberately restricted to stable numeric cores.
+    required_core=$required
+
+    actual_major=${actual_core%%.*}
+    actual_rest=${actual_core#*.}
     actual_minor=${actual_rest%%.*}
     actual_patch=${actual_rest#*.}
-    required_major=${required%%.*}
-    required_rest=${required#*.}
+    required_major=${required_core%%.*}
+    required_rest=${required_core#*.}
     required_minor=${required_rest%%.*}
     required_patch=${required_rest#*.}
 
@@ -68,7 +135,11 @@ version_at_least() {
     [ "$actual_major" -lt "$required_major" ] && return 1
     [ "$actual_minor" -gt "$required_minor" ] && return 0
     [ "$actual_minor" -lt "$required_minor" ] && return 1
-    [ "$actual_patch" -ge "$required_patch" ]
+    [ "$actual_patch" -gt "$required_patch" ] && return 0
+    [ "$actual_patch" -lt "$required_patch" ] && return 1
+
+    # A prerelease is lower than a stable release with the same numeric core.
+    [ -z "$actual_prerelease" ]
 }
 
 canonical_directory() {
@@ -132,8 +203,13 @@ download_rustup() {
     sh "$installer_file" -y --profile minimal --default-toolchain stable --no-modify-path ||
         fail "official Rust installer failed"
 
-    cargo_home=${CARGO_HOME:-${HOME:-}/.cargo}
-    [ -n "$cargo_home" ] || fail "CARGO_HOME and HOME are unavailable"
+    if [ -n "${CARGO_HOME:-}" ]; then
+        cargo_home=$CARGO_HOME
+    elif [ -n "${HOME:-}" ]; then
+        cargo_home=$HOME/.cargo
+    else
+        fail "CARGO_HOME and HOME are unavailable"
+    fi
     if [ -x "$cargo_home/bin/rustup" ]; then
         rustup_path=$cargo_home/bin/rustup
     else
@@ -191,7 +267,7 @@ required_version=$(awk '
         exit
     }
 ' "$manifest")
-required_version=$(normalize_version "$required_version") ||
+required_version=$(normalize_required_version "$required_version") ||
     fail "Cargo.toml rust-version must be a complete numeric major.minor or major.minor.patch version"
 
 rustc_path=$(command -v rustc 2>/dev/null || true)
@@ -200,16 +276,17 @@ rustup_path=$(command -v rustup 2>/dev/null || true)
 selected_mode=
 
 if [ -n "$rustc_path" ] && [ -n "$cargo_path" ]; then
-    rustc_version=$(tool_version "$rustc_path") || fail "could not read a complete rustc semantic version"
-    cargo_version=$(tool_version "$cargo_path") || fail "could not read a complete cargo semantic version"
+    rustc_version=$(tool_version "$rustc_path" rustc) || fail "could not read a complete rustc semantic version"
+    cargo_version=$(tool_version "$cargo_path" cargo) || fail "could not read a complete cargo semantic version"
     if version_at_least "$rustc_version" "$required_version" &&
         version_at_least "$cargo_version" "$required_version"; then
         selected_mode=direct
     else
+        insufficient_toolchain="detected rustc $rustc_version and cargo $cargo_version; requires rustc and cargo >= $required_version"
         [ -n "$rustup_path" ] ||
-            fail "installed Rust $rustc_version is too old and is not rustup-owned; refusing to replace it"
+            fail "$insufficient_toolchain; active compiler is not rustup-owned; refusing to replace it"
         active_compiler_is_rustup_owned ||
-            fail "installed Rust $rustc_version is too old and is not rustup-owned; refusing to replace it"
+            fail "$insufficient_toolchain; active compiler is not rustup-owned; refusing to replace it"
         select_rustup_stable
     fi
 elif [ -z "$rustc_path" ] && [ -z "$cargo_path" ]; then
@@ -228,8 +305,8 @@ fi
 
 if [ "$selected_mode" = direct ]; then
     # Re-read both commands after selection so no unchecked tool is executed.
-    rustc_version=$(tool_version "$rustc_path") || fail "could not re-verify rustc"
-    cargo_version=$(tool_version "$cargo_path") || fail "could not re-verify cargo"
+    rustc_version=$(tool_version "$rustc_path" rustc) || fail "could not re-verify rustc"
+    cargo_version=$(tool_version "$cargo_path" cargo) || fail "could not re-verify cargo"
     version_at_least "$rustc_version" "$required_version" || fail "rustc changed during verification"
     version_at_least "$cargo_version" "$required_version" || fail "cargo changed during verification"
     if [ "$run_cargo" = true ]; then

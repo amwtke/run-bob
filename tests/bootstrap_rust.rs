@@ -1,7 +1,7 @@
 #![cfg(unix)]
 
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -9,6 +9,7 @@ struct Sandbox {
     _temp: tempfile::TempDir,
     root: PathBuf,
     mock_bin: PathBuf,
+    utility_bin: PathBuf,
     home: PathBuf,
     cargo_home: PathBuf,
     rustup_home: PathBuf,
@@ -20,19 +21,39 @@ impl Sandbox {
         let temp = tempfile::tempdir().expect("create bootstrap sandbox");
         let root = temp.path().to_path_buf();
         let mock_bin = root.join("mock bin");
+        let utility_bin = root.join("basic utilities");
         let home = root.join("home with spaces");
         let cargo_home = root.join("cargo home");
         let rustup_home = root.join("rustup home");
         let log = root.join("commands.log");
 
-        for directory in [&mock_bin, &home, &cargo_home, &rustup_home] {
+        for directory in [&mock_bin, &utility_bin, &home, &cargo_home, &rustup_home] {
             fs::create_dir_all(directory).expect("create isolated directory");
+        }
+        for (name, candidates) in [
+            ("sh", &["/bin/sh", "/usr/bin/sh"][..]),
+            ("awk", &["/usr/bin/awk", "/bin/awk"][..]),
+            ("dirname", &["/usr/bin/dirname", "/bin/dirname"][..]),
+            ("mktemp", &["/usr/bin/mktemp", "/bin/mktemp"][..]),
+            ("rm", &["/bin/rm", "/usr/bin/rm"][..]),
+            ("cat", &["/bin/cat", "/usr/bin/cat"][..]),
+            ("mkdir", &["/bin/mkdir", "/usr/bin/mkdir"][..]),
+            ("chmod", &["/bin/chmod", "/usr/bin/chmod"][..]),
+            ("pwd", &["/bin/pwd", "/usr/bin/pwd"][..]),
+        ] {
+            let source = candidates
+                .iter()
+                .map(Path::new)
+                .find(|candidate| candidate.is_file())
+                .unwrap_or_else(|| panic!("required basic utility {name} is unavailable"));
+            symlink(source, utility_bin.join(name)).expect("link isolated basic utility");
         }
 
         Self {
             _temp: temp,
             root,
             mock_bin,
+            utility_bin,
             home,
             cargo_home,
             rustup_home,
@@ -125,22 +146,55 @@ RUN_BOB_INSTALLER"#;
     }
 
     fn run(&self, arguments: &[&str]) -> Output {
-        self.run_script(&bootstrap_script(), arguments)
+        self.run_script_with_homes(
+            &bootstrap_script(),
+            arguments,
+            Some(&self.home),
+            Some(&self.cargo_home),
+        )
     }
 
     fn run_script(&self, script: &Path, arguments: &[&str]) -> Output {
-        let path = format!("{}:/usr/bin:/bin", self.mock_bin.display());
-        Command::new(script)
+        self.run_script_with_homes(script, arguments, Some(&self.home), Some(&self.cargo_home))
+    }
+
+    fn run_script_with_homes(
+        &self,
+        script: &Path,
+        arguments: &[&str],
+        home: Option<&Path>,
+        cargo_home: Option<&Path>,
+    ) -> Output {
+        let path = format!("{}:{}", self.mock_bin.display(), self.utility_bin.display());
+        let mut command = Command::new(script);
+        command
             .args(arguments)
             .env_clear()
             .env("PATH", path)
-            .env("HOME", &self.home)
-            .env("CARGO_HOME", &self.cargo_home)
             .env("RUSTUP_HOME", &self.rustup_home)
             .env("RUN_BOB_TEST_LOG", &self.log)
-            .env("TMPDIR", &self.root)
+            .env("TMPDIR", &self.root);
+        if let Some(home) = home {
+            command.env("HOME", home);
+        }
+        if let Some(cargo_home) = cargo_home {
+            command.env("CARGO_HOME", cargo_home);
+        }
+        command.output().expect("execute POSIX Rust bootstrap")
+    }
+
+    fn assert_rust_tools_are_omitted_from_isolated_path(&self) {
+        let path = format!("{}:{}", self.mock_bin.display(), self.utility_bin.display());
+        let output = Command::new(self.utility_bin.join("sh"))
+            .arg("-c")
+            .arg(
+                "for tool in rustc cargo rustup; do if command -v \"$tool\" >/dev/null 2>&1; then exit 91; fi; done; exit 0",
+            )
+            .env_clear()
+            .env("PATH", path)
             .output()
-            .expect("execute POSIX Rust bootstrap")
+            .expect("probe isolated command path");
+        assert!(output.status.success(), "{}", stdout_stderr(&output));
     }
 
     fn log(&self) -> String {
@@ -237,6 +291,41 @@ fn bootstrap_rust_posix_uses_supported_toolchain_and_forwards_cargo_args() {
 }
 
 #[test]
+fn bootstrap_rust_posix_accepts_sufficient_direct_prerelease_versions() {
+    let sandbox = Sandbox::new();
+    sandbox.rustc("1.90.0-nightly-2026-01-01", None);
+    sandbox.cargo("1.90.0-beta.1");
+    sandbox.fail_curl();
+
+    let output = sandbox.run(&["--run-cargo", "check", "--locked"]);
+
+    assert!(output.status.success(), "{}", stdout_stderr(&output));
+    assert_eq!(sandbox.log(), "cargo <check> <--locked>\n");
+}
+
+#[test]
+fn bootstrap_rust_posix_treats_equal_core_prerelease_as_older_than_required_stable() {
+    let sandbox = Sandbox::new();
+    sandbox.rustc("1.75.0-nightly", None);
+    sandbox.cargo("1.75.0-beta.2");
+    sandbox.fail_curl();
+
+    let output = sandbox.run(&[]);
+    let diagnostics = stdout_stderr(&output);
+
+    assert!(!output.status.success(), "{diagnostics}");
+    assert!(
+        diagnostics.contains("rustc 1.75.0-nightly"),
+        "{diagnostics}"
+    );
+    assert!(diagnostics.contains("cargo 1.75.0-beta.2"), "{diagnostics}");
+    assert!(
+        diagnostics.contains("requires rustc and cargo >= 1.75.0"),
+        "{diagnostics}"
+    );
+}
+
+#[test]
 fn bootstrap_rust_posix_installs_a_missing_toolchain() {
     let sandbox = Sandbox::new();
     let stable_sysroot = sandbox.root.join("toolchains/stable");
@@ -311,13 +400,28 @@ fn bootstrap_rust_posix_rejects_incomplete_post_install_toolchain() {
 }
 
 #[test]
+fn bootstrap_rust_posix_rejects_missing_home_after_official_installer() {
+    let sandbox = Sandbox::new();
+    sandbox.download_curl("exit 0");
+
+    let output = sandbox.run_script_with_homes(&bootstrap_script(), &[], None, None);
+    let diagnostics = stdout_stderr(&output);
+
+    assert!(!output.status.success(), "{diagnostics}");
+    assert!(
+        diagnostics.contains("CARGO_HOME and HOME are unavailable"),
+        "{diagnostics}"
+    );
+}
+
+#[test]
 fn bootstrap_rust_posix_uses_stable_for_old_active_rustup_toolchain() {
     let sandbox = Sandbox::new();
     let old_sysroot = sandbox.root.join("toolchains/old");
     fs::create_dir_all(old_sysroot.join("bin")).expect("create old mock sysroot");
     fs::write(old_sysroot.join("bin/rustc"), "mock").expect("create rustup compiler marker");
-    sandbox.rustc("1.74.1", Some(&old_sysroot));
-    sandbox.cargo("1.74.1");
+    sandbox.rustc("1.70.0-nightly", Some(&old_sysroot));
+    sandbox.cargo("1.70.0-nightly");
     sandbox.rustup("1.76.0", Some("1.76.0"), &old_sysroot.join("bin/rustc"));
     sandbox.fail_curl();
 
@@ -355,6 +459,25 @@ fn bootstrap_rust_posix_stops_for_old_non_rustup_toolchain() {
 }
 
 #[test]
+fn bootstrap_rust_posix_reports_both_detected_versions_when_cargo_is_old() {
+    let sandbox = Sandbox::new();
+    sandbox.rustc("1.80.0", None);
+    sandbox.cargo("1.74.9");
+    sandbox.fail_curl();
+
+    let output = sandbox.run(&[]);
+    let diagnostics = stdout_stderr(&output);
+
+    assert!(!output.status.success(), "{diagnostics}");
+    assert!(diagnostics.contains("rustc 1.80.0"), "{diagnostics}");
+    assert!(diagnostics.contains("cargo 1.74.9"), "{diagnostics}");
+    assert!(
+        diagnostics.contains("requires rustc and cargo >= 1.75.0"),
+        "{diagnostics}"
+    );
+}
+
+#[test]
 fn bootstrap_rust_posix_stops_for_old_system_rust_with_unrelated_rustup() {
     let sandbox = Sandbox::new();
     let system_sysroot = sandbox.root.join("system-rust");
@@ -383,6 +506,7 @@ fn bootstrap_rust_posix_stops_for_old_system_rust_with_unrelated_rustup() {
 #[test]
 fn bootstrap_rust_posix_downloads_the_official_installer_when_all_tools_are_absent() {
     let sandbox = Sandbox::new();
+    sandbox.assert_rust_tools_are_omitted_from_isolated_path();
     let stable_sysroot = sandbox.root.join("toolchains/stable");
     fs::create_dir_all(stable_sysroot.join("bin")).expect("create stable mock sysroot");
     sandbox.download_curl(&installer_that_creates_rustup(
@@ -405,6 +529,12 @@ fn bootstrap_rust_posix_downloads_the_official_installer_when_all_tools_are_abse
     assert!(log.contains("rustup <run> <stable> <rustc> <--version>\n"));
     assert!(log.contains("rustup <run> <stable> <cargo> <--version>\n"));
     assert!(!log.contains("rustup <default>"));
+    assert!(
+        log.lines().all(|line| line.starts_with("curl ")
+            || line.starts_with("installer ")
+            || line.starts_with("rustup ")),
+        "unexpected command escaped the mock boundary: {log}"
+    );
     let leaked_temporary_directory = fs::read_dir(&sandbox.root)
         .expect("read sandbox root")
         .filter_map(Result::ok)
@@ -418,6 +548,26 @@ fn bootstrap_rust_posix_downloads_the_official_installer_when_all_tools_are_abse
         !leaked_temporary_directory,
         "installer temp directory leaked"
     );
+}
+
+#[test]
+fn bootstrap_rust_posix_isolated_path_omits_host_rust_tools() {
+    let sandbox = Sandbox::new();
+    sandbox.fail_curl();
+
+    let host_rustc = Command::new("rustc")
+        .arg("--version")
+        .output()
+        .expect("the cargo test host provides rustc");
+    let host_cargo = Command::new("cargo")
+        .arg("--version")
+        .output()
+        .expect("the cargo test host provides cargo");
+    assert!(host_rustc.status.success());
+    assert!(host_cargo.status.success());
+
+    sandbox.assert_rust_tools_are_omitted_from_isolated_path();
+    assert_eq!(sandbox.log(), "");
 }
 
 #[test]
