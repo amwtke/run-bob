@@ -1,4 +1,4 @@
-//! run-bob: A CLI to bootstrap Bob's 4-ring Clean Architecture + Superpowers harness for Claude Code projects.
+//! run-bob: A CLI to bootstrap Bob's 4-ring Clean Architecture + Superpowers harness for Claude Code and Codex projects.
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -7,7 +7,7 @@ use run_bob::commands;
 
 #[derive(Parser, Debug)]
 #[command(name = "run-bob")]
-#[command(about = "Bootstrap Bob's 4-ring Clean Architecture + Superpowers harness for Claude Code projects", long_about = None)]
+#[command(about = "Bootstrap Bob's 4-ring Clean Architecture + Superpowers harness for Claude Code and Codex projects", long_about = None)]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]

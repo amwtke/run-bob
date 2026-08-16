@@ -1015,6 +1015,23 @@ fn binary_prints_version() {
 }
 
 #[test]
+fn cli_help_names_codex_and_claude_code() {
+    let output = Command::new(run_bob_bin())
+        .arg("--help")
+        .output()
+        .expect("run run-bob --help");
+    assert_command_succeeded(&output, "run-bob --help");
+
+    let stdout = String::from_utf8(output.stdout).expect("UTF-8 help output");
+    for host in ["Claude Code", "Codex"] {
+        assert!(
+            stdout.contains(host),
+            "run-bob --help must name {host}; got:\n{stdout}"
+        );
+    }
+}
+
+#[test]
 fn init_help_lists_flags() {
     let output = Command::new(run_bob_bin())
         .args(["init", "--help"])
@@ -1105,6 +1122,36 @@ fn init_creates_readme_run_bob_with_3_modes() {
         "B2",     // B2 mode
     ] {
         assert!(content.contains(token), "README-RUN-BOB.md must contain {}", token);
+    }
+}
+
+#[test]
+fn generated_readme_explains_both_skill_hosts() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp.path();
+    let output = Command::new(run_bob_bin())
+        .args(["init", "--no-gitignore", "--dir"])
+        .arg(target)
+        .output()
+        .expect("run run-bob init");
+    assert_command_succeeded(&output, "run-bob init");
+
+    let content = std::fs::read_to_string(target.join("README-RUN-BOB.md"))
+        .expect("read generated README-RUN-BOB.md");
+    for token in [
+        "Claude Code",
+        "Codex",
+        ".claude/skills",
+        ".agents/skills",
+        "/bob-model",
+        "$bob-model",
+        "8 Bob",
+        "visual-md",
+    ] {
+        assert!(
+            content.contains(token),
+            "generated README-RUN-BOB.md must contain {token}; got:\n{content}"
+        );
     }
 }
 

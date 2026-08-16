@@ -1,7 +1,7 @@
 # Codex + Claude Code Dual-Skill Support Design
 
 **Date:** 2026-08-16  
-**Status:** Approved in conversation; awaiting written-spec review
+**Status:** Approved
 
 ## 1. Context
 

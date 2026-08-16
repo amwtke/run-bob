@@ -68,13 +68,13 @@ CI 必须将这个测试设为合并门槛。
 
 ## 一、这套 harness 是什么?
 
-当你使用 Claude Code / Cursor 等 AI 工具开发时,最常见的问题是:
+当你使用 Claude Code 或 Codex 等 AI 工具开发时,最常见的问题是:
 - AI 直接产出"能跑但架构不对"的代码(贫血模型、跨层调用)
 - 术语不一致,同一个概念有三四种命名
 - 一次性生成一大坨代码,难以迭代
 
-本 harness 通过**三个 Claude Code skills + 两份锚点文档 + 两个 shared Java 骨架 + 一个 ArchUnit 守卫**,把 Bob 4 环架构原则
-和 Superpowers 的 TDD 实现流程串起来,让 AI 产出**符合架构意图**的代码。
+本 harness 通过**8 Bob 工作流 skills + 辅助 `visual-md` skill + 两份锚点文档 + 两个 shared Java 骨架 + 一个 ArchUnit 守卫**,把 Bob 4 环架构原则
+和 Superpowers 的 TDD 实现流程串起来,让 Claude Code 与 Codex 产出**符合架构意图**的代码。
 
 ### 三种入口模式
 
@@ -88,13 +88,28 @@ CI 必须将这个测试设为合并门槛。
 
 ```
 your-project/
-├── .claude/
-│   └── skills/
-│       ├── bob-identify/SKILL.md     # 🔍 身份测试 — 5 问决策树
-│       ├── bob-onion/SKILL.md        # 🧅 4 环设计 — 维护 ARCHITECTURE.md
-│       └── bob-spec/SKILL.md         # 📝 用例 spec → Superpowers 桥接
-├── CLAUDE.md                          # 🛡 项目级硬约束(R0-R12)
-├── ARCHITECTURE.md                    # 📘 4 环架构 SSoT
+├── .claude/skills/
+│   ├── bob-survey/SKILL.md           # 🩺 架构与难度健康检查
+│   ├── bob-model/SKILL.md            # 🗺 领域建模(含 scripts/)
+│   ├── bob-stories/SKILL.md          # 🧩 UseCase story 拆分
+│   ├── bob-identify/SKILL.md         # 🔍 身份测试 — 5 问决策树
+│   ├── bob-onion/SKILL.md            # 🧅 4 环设计 — 维护 ARCHITECTURE.md
+│   ├── bob-spec/SKILL.md             # 📝 用例 spec → Superpowers 桥接
+│   ├── bob-compliance/SKILL.md       # 🛡 规则符合度检查
+│   ├── bob-nfr/SKILL.md              # ⚖️ NFR 评审
+│   └── visual-md/SKILL.md            # 🖼 辅助可视化(含 scripts/)
+├── .agents/skills/
+│   ├── bob-survey/SKILL.md           # 🩺 架构与难度健康检查
+│   ├── bob-model/SKILL.md            # 🗺 领域建模(含 scripts/)
+│   ├── bob-stories/SKILL.md          # 🧩 UseCase story 拆分
+│   ├── bob-identify/SKILL.md         # 🔍 身份测试 — 5 问决策树
+│   ├── bob-onion/SKILL.md            # 🧅 4 环设计 — 维护 ARCHITECTURE.md
+│   ├── bob-spec/SKILL.md             # 📝 用例 spec → Superpowers 桥接
+│   ├── bob-compliance/SKILL.md       # 🛡 规则符合度检查
+│   ├── bob-nfr/SKILL.md              # ⚖️ NFR 评审
+│   └── visual-md/SKILL.md            # 🖼 辅助可视化(含 scripts/)
+├── CLAUDE.md                          # 🛡 项目级硬约束(R0-R12,user-owned)
+├── ARCHITECTURE.md                    # 📘 4 环架构 SSoT(user-owned)
 ├── README-RUN-BOB.md                  # 📖 本文档
 ├── docs/
 │   ├── bob/                           # identify/onion 中间产物
@@ -108,12 +123,13 @@ your-project/
         └── CleanArchitectureTest.java                  # ArchUnit 守卫
 ```
 
+`.claude/skills` 与 `.agents/skills` 都包含真实文件,不是链接;它们由同一套嵌入模板生成且字节一致。Claude Code 用 `/bob-model` 显式调用, Codex 用 `$bob-model`,两者执行相同工作流。
+
 ## 三、两份锚点文档
 
 ### 3.1 `CLAUDE.md` — 项目级硬约束
 
-这份文档是 Claude Code 的**最高优先级规则**。Claude Code 在本项目的每一次操作
-都会读这份文档。它定义:
+这份文档是 Bob 项目的规则文档。Claude Code 按其项目约定读取它;Codex 工作流会在各阶段**显式查阅**它,不能假定 Codex 自动加载该文件。本 harness 不生成或管理额外的代理规则文件。它定义:
 
 - 技术栈(由 `superpowers:brainstorming` 决定后写回)
 - 分层架构(Bob 4 环:entity / usecase / adapter / framework)
@@ -146,7 +162,22 @@ your-project/
 **修改权限**:`ARCHITECTURE.md` 由 `/bob-onion` 管理,其他 skill 和 Superpowers **不得擅自修改**。
 如果实现过程中发现 ARCHITECTURE.md 有缺失,要**停下来回到 `/bob-onion` 修正**。
 
-## 四、三个 Skill 的使用
+## 四、8 个 Bob Skill 与辅助 visual-md
+
+Claude Code 保留原有 slash 调用;Codex 使用同名 dollar 调用:
+
+| 阶段 | Claude Code | Codex |
+|---|---|---|
+| 健康检查 | `/bob-survey` | `$bob-survey` |
+| 领域建模 | `/bob-model` | `$bob-model` |
+| Story 拆分 | `/bob-stories` | `$bob-stories` |
+| 身份测试 | `/bob-identify` | `$bob-identify` |
+| 4 环设计 | `/bob-onion` | `$bob-onion` |
+| Spec | `/bob-spec` | `$bob-spec` |
+| 符合度检查 | `/bob-compliance` | `$bob-compliance` |
+| NFR 评审 | `/bob-nfr` | `$bob-nfr` |
+
+`visual-md` 是交互评审使用的辅助 skill,不计入 8 个 Bob 工作流阶段。以下保留三个架构核心 skill 的详细用法;其余 skill 会在对应阶段引导输入与产出。
 
 ### 4.1 `/bob-identify` — 身份测试(第一步)
 
@@ -204,6 +235,15 @@ your-project/
 - 包含:用例描述、前置/后置条件、Entity 不变量、**Given-When-Then 测试场景**、纯 POJO usecase + framework Config 接口约定、Guardrails、交给 Superpowers 的开放问题
 
 **关键**:产出的 spec **严格使用 ARCHITECTURE.md 中的术语**,可直接喂给 Superpowers。
+
+双宿主 Superpowers handoff 映射(Claude Code 序列保持不变,Codex 使用等价 skill):
+
+| Stage | Claude Code | Codex |
+|---|---|---|
+| Brainstorm | `superpowers:brainstorming` | `$brainstorming` |
+| Plan | `superpowers:writing-plans` | `$writing-plans` |
+| Execute | `superpowers:executing-plans` | `$executing-plans` |
+| Finish branch | `superpowers:finishing-a-development-branch` | `$finishing-a-development-branch` |
 
 ## 五、完整工作流
 

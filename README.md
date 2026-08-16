@@ -1,8 +1,8 @@
 # run-bob
 
-> A tiny Rust CLI that bootstraps a **Bob's 4-ring Clean Architecture + Superpowers harness** for Claude Code projects in one command.
+> A tiny Rust CLI that bootstraps a **Bob's 4-ring Clean Architecture + Superpowers harness** for Claude Code and Codex projects in one command.
 
-`run-bob init` installs 8 Claude Code skills (`bob-survey`, `bob-model`, `bob-stories`, `bob-identify`, `bob-onion`, `bob-spec`, `bob-nfr`, `bob-compliance`) plus anchor documents (`CLAUDE.md` with hard rules R0–R13, `ARCHITECTURE.md`, `README-RUN-BOB.md`) plus shared Java skeletons + an ArchUnit guard + a managed `.gitignore` block. Together they give Claude Code a structured pipeline from **fuzzy business need / α legacy → architecture survey → domain modeling → story split → identity test → 4-ring design → spec → TDD implementation → compliance & NFR review**.
+`run-bob init` installs 8 Bob workflow skills (`bob-survey`, `bob-model`, `bob-stories`, `bob-identify`, `bob-onion`, `bob-spec`, `bob-nfr`, `bob-compliance`) plus the auxiliary `visual-md` skill into both `.claude/skills` and `.agents/skills`. It also installs anchor documents (`CLAUDE.md` with hard rules R0–R13, `ARCHITECTURE.md`, `README-RUN-BOB.md`), optional shared Java skeletons + an ArchUnit guard, and a managed `.gitignore` block. Together they give Claude Code and Codex a structured pipeline from **fuzzy business need / α legacy → architecture survey → domain modeling → story split → identity test → 4-ring design → spec → TDD implementation → compliance & NFR review**.
 
 ```
    business need / α legacy code / new feature
@@ -36,7 +36,7 @@
 
 ## Dependencies
 
-- **Rust ≥ 1.75** — to build from source (not required if you use a prebuilt binary)
+- **Rust ≥ 1.75** — only to build from source. The repository contributor install skill and bootstrap helpers install missing Rust automatically; prebuilt users do not need Rust.
 - **(Optional) Node.js ≥14** — required by `/bob-model` interactive review canvas. Without it, the skill falls back to read-only HTML automatically.
 
 ---
@@ -57,7 +57,7 @@ curl -fsSL https://raw.githubusercontent.com/amwtke/run-bob/master/install.sh | 
 iwr -useb https://raw.githubusercontent.com/amwtke/run-bob/master/install.ps1 | iex
 ```
 
-The installer detects your OS/arch, fetches the matching prebuilt binary from the latest [GitHub Release](https://github.com/amwtke/run-bob/releases), and drops `run-bob` into your install dir.
+The installer detects your OS/arch, fetches the matching prebuilt binary from the latest [GitHub Release](https://github.com/amwtke/run-bob/releases), and drops `run-bob` into your install dir. This prebuilt path does **not** require or install Rust.
 
 Defaults:
 
@@ -93,7 +93,7 @@ macOS first-run note: the installer auto-strips the quarantine attribute. If Gat
 ### Manual / source install
 
 - **Tarball:** grab from the [Releases page](https://github.com/amwtke/run-bob/releases), unpack into any directory on your PATH.
-- **From source (Rust ≥ 1.75):** `cargo install --git https://github.com/amwtke/run-bob` or clone + `cargo install --path .`.
+- **From source:** clone the repository and invoke its contributor `/install` (Claude Code) or `$install` (Codex) skill. The repository-local helper verifies Rust ≥ 1.75 and automatically bootstraps the official minimal stable toolchain when Rust is absent. Direct `cargo install --git https://github.com/amwtke/run-bob` or `cargo install --path .` remains available when a suitable Rust toolchain is already installed.
 
 ---
 
@@ -133,14 +133,17 @@ A project initialized by an older `run-bob` has older skill content baked in. Af
 cd your-project/
 run-bob upgrade --dry-run   # preview what would change
 run-bob upgrade             # apply
+run-bob status              # verify both host trees
 ```
+
+This is also the supported migration for a legacy Claude-only project. The dry run reports the missing `.agents/skills` files without writing them; the apply step installs the Codex tree and updates managed assets only under the normal backup contract.
 
 What `upgrade` does:
 
 - **Compares** the on-disk content of every upgrade-safe asset (skills, `README-RUN-BOB.md`, `UseCase.java`, `TransactionalUseCaseDecorator.java`, `docs/compliance/README.md`) against the binary's embedded version (byte-for-byte).
-- **Backs up** any file that differs to `.run-bob-backup/<UTC-timestamp>/<original-path>`, then **overwrites** with the embedded version. The backup directory is auto-added to `.gitignore`.
+- **Backs up** any managed file that differs to `.run-bob-backup/<UTC-timestamp>/<original-path>`, then **overwrites** with the embedded version. Existing Claude Code skill customizations therefore remain recoverable at their full `.claude/skills/...` paths. The backup directory is auto-added to `.gitignore`.
 - **Installs** any upgrade-safe asset that's missing (e.g. you upgraded across a release that introduced a new skill — `upgrade` will drop it in).
-- **Never touches** user-owned files: `CLAUDE.md` (your project rules + tech-stack decisions), `ARCHITECTURE.md` (the 4-ring SSoT), `CleanArchitectureTest.java` (your `FORBIDDEN_IN_INNER` list), and anything under `docs/compliance/sources/`, `docs/compliance/*.md` (generated), `docs/compliance/.compliance.lock`, `docs/bob/`, `docs/specs/`. Use `run-bob init --force` if you really want to reset the user-owned anchors.
+- **Never touches** user-owned files: `CLAUDE.md` (your project rules + tech-stack decisions), `ARCHITECTURE.md` (the 4-ring SSoT), `CleanArchitectureTest.java` (your `FORBIDDEN_IN_INNER` list), and anything under `docs/compliance/sources/`, `docs/compliance/*.md` (generated), `docs/compliance/.compliance.lock`, `docs/bob/`, `docs/specs/`. Use `run-bob init --force` only if you explicitly want to reset the user-owned anchors.
 
 ### Step 3 — Verify
 
@@ -166,7 +169,7 @@ run-bob init [--dir <path>] [--force] [--minimal] [--with-java] [--no-gitignore]
 |---|---|---|
 | `-d`, `--dir <path>` | Target directory (default `.`) | Bootstrapping a sibling subdirectory (e.g. `--dir ./api`) without `cd` |
 | `-f`, `--force` | Overwrite existing files **including user-owned anchors** (`CLAUDE.md`, `ARCHITECTURE.md`, `CleanArchitectureTest.java`) | You explicitly want to reset the harness — destroys local edits to those files |
-| `-m`, `--minimal` | **Only** install the 8 skills under `.claude/skills/`. Skip anchor docs, ArchUnit guard, shared Java skeletons, `docs/bob/`, `docs/specs/`, `docs/compliance/` | Adding bob skills to an existing project that already has its own architecture conventions / Java layout |
+| `-m`, `--minimal` | **Only** install the same 8 Bob skills plus `visual-md` under `.claude/skills/` and `.agents/skills/`. Skip anchor docs, ArchUnit guard, shared Java skeletons, `docs/bob/`, `docs/specs/`, `docs/compliance/` | Adding Bob skills to an existing project that already has its own architecture conventions / Java layout |
 | `--with-java` | Also install the Java/Maven skeleton: ArchUnit test (`src/test/java/architecture/CleanArchitectureTest.java`) + shared interfaces (`src/main/java/com/example/shared/usecase/UseCase.java`, `…/framework/transaction/TransactionalUseCaseDecorator.java`). **Off by default** — by default `init` no longer touches `src/` at all. | The target project is a Java/Spring project ready to enforce the 4-ring architecture at test time |
 | `--no-gitignore` | Skip writing the `# run-bob` block (containing `.run-bob-backup/`) into the target directory's `.gitignore` | You manage `.gitignore` by hand or have your own ignore strategy |
 
@@ -175,14 +178,25 @@ Default behavior creates this layout (no `src/`):
 ```
 your-project/
 ├── .claude/skills/
-│   ├── bob-survey/SKILL.md       # 🩺 phase 0 — TL intake (health check + recommendation, optional)
-│   ├── bob-model/SKILL.md        # 🗺 phase 0.5 — domain modeling (mandatory, all difficulties)
-│   ├── bob-stories/SKILL.md      # 🧩 phase 1 — split into UseCase stories
-│   ├── bob-identify/SKILL.md     # 🔍 5-question identity test (G/B1/B2 mode)
-│   ├── bob-onion/SKILL.md        # 🧅 4-ring design → ARCHITECTURE.md SSoT
-│   ├── bob-spec/SKILL.md         # 📝 spec gen → Superpowers handoff
-│   ├── bob-nfr/SKILL.md          # ⚖️ phase 2 — 13-card NFR review after TDD
-│   └── bob-compliance/SKILL.md   # 🛡 phase 3 — rule-based diff compliance check
+│   ├── bob-survey/
+│   ├── bob-model/                # includes host-relative review scripts
+│   ├── bob-stories/
+│   ├── bob-identify/
+│   ├── bob-onion/
+│   ├── bob-spec/
+│   ├── bob-compliance/
+│   ├── bob-nfr/
+│   └── visual-md/                # auxiliary HTML/document viewer + scripts
+├── .agents/skills/
+│   ├── bob-survey/
+│   ├── bob-model/                # includes host-relative review scripts
+│   ├── bob-stories/
+│   ├── bob-identify/
+│   ├── bob-onion/
+│   ├── bob-spec/
+│   ├── bob-compliance/
+│   ├── bob-nfr/
+│   └── visual-md/                # auxiliary HTML/document viewer + scripts
 ├── CLAUDE.md                     # 🛡 project-level hard rules R0–R13 (user-owned)
 ├── ARCHITECTURE.md               # 📘 4-ring architecture SSoT (user-owned)
 ├── README-RUN-BOB.md             # 📖 in-project user guide (upgrade-safe)
@@ -194,6 +208,8 @@ your-project/
         ├── README.md             # how to use this folder (auto-managed)
         └── sources/              # ← drop your team standards here (PDF/docx/md)
 ```
+
+Every directory contains its own real `SKILL.md`; the two trees are independent, byte-identical outputs from one embedded template source (not links). Claude Code explicitly invokes `/bob-model`; Codex invokes the same workflow as `$bob-model`.
 
 Pass `--with-java` to additionally lay down the Maven/ArchUnit skeleton:
 
@@ -251,7 +267,7 @@ Prints `✓` / `✗` for every asset run-bob expects. Exit code is non-zero when
 
 ## The 8 skills (workflow order)
 
-After `run-bob init`, open Claude Code in that directory and use the skills in this order. Each skill writes its output into `docs/bob/` or `docs/specs/` so the next skill can pick up where the previous one stopped.
+After `run-bob init`, open Claude Code or Codex in that directory and use the skills in this order. Each skill writes its output into `docs/bob/` or `docs/specs/` so the next skill can pick up where the previous one stopped. The table keeps Claude Code's existing slash forms; in Codex, replace the leading `/` with `$` (for example `/bob-model` becomes `$bob-model`). `visual-md` is an auxiliary renderer used by interactive review rather than a ninth Bob workflow phase.
 
 | # | Skill | Phase | Output |
 |---|---|---|---|
@@ -266,6 +282,15 @@ After `run-bob init`, open Claude Code in that directory and use the skills in t
 | 6 | ⚖️ `/bob-nfr <spec-path>` | NFR review (phase 2) | `docs/bob/04-nfr-*.md` |
 
 Compliance runs **before** NFR by convention: compliance is the strict-rule gate, NFR is open-question gathering.
+
+Superpowers handoffs are host-equivalent:
+
+| Stage | Claude Code | Codex |
+|---|---|---|
+| Brainstorm | `superpowers:brainstorming` | `$brainstorming` |
+| Plan | `superpowers:writing-plans` | `$writing-plans` |
+| Execute | `superpowers:executing-plans` | `$executing-plans` |
+| Finish branch | `superpowers:finishing-a-development-branch` | `$finishing-a-development-branch` |
 
 See [`README-RUN-BOB.md`](src/templates/root/README-RUN-BOB.md) (installed by `run-bob init`) for the full per-skill detail + FAQ.
 
@@ -307,11 +332,11 @@ Both share the same engineering form: Rust CLI + embedded skill templates + anch
 
 ---
 
-## Contributor install via `/install` skill
+## Contributor install via `/install` or `$install`
 
-Open **this repo** in Claude Code and run `/install` — it does `git pull` → toolchain check → `cargo build --release` → `cargo test` → `cargo install --path .` → `run-bob --version` verify, refusing to install a binary whose tests fail.
+Open **this repo** in Claude Code and run `/install`, or in Codex and run `$install`. Both follow the same repository-scoped procedure: safe fast-forward sync when appropriate → automatic missing-Rust bootstrap → `cargo build --release --locked` → `cargo test --locked` → `cargo install --locked --path .` → exact `run-bob --version` and `--help` verification. They refuse to replace the binary when any gate fails and do not change a user's global Rust default.
 
-See [`.claude/skills/install/SKILL.md`](.claude/skills/install/SKILL.md) for the exact procedure.
+See the byte-identical [Claude Code install skill](.claude/skills/install/SKILL.md) and [Codex install skill](.agents/skills/install/SKILL.md) for the exact procedure.
 
 ---
 
