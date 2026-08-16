@@ -1,8 +1,9 @@
 //! Single source of truth for the harness assets.
 //!
 //! `init` installs from this registry; `status` verifies against it.
-//! Adding a new template means adding one entry here — `init` will install
-//! it and `status` will check it, with no further bookkeeping.
+//! Each skill source has mirrored Claude Code and Codex entries that reuse the
+//! same embedded template; non-skill templates have one entry. Both commands
+//! pick up registry additions without separate bookkeeping.
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Category {

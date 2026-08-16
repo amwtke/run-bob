@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Output};
 
 const GENERATED_SKILLS: &[&str] = &[
     "bob-survey",
@@ -65,6 +65,35 @@ fn files_below(root: &Path) -> BTreeMap<String, (Vec<u8>, Option<u32>)> {
 fn run_bob_bin() -> std::path::PathBuf {
     // CARGO_BIN_EXE_<name> is set by Cargo for integration tests.
     std::path::PathBuf::from(env!("CARGO_BIN_EXE_run-bob"))
+}
+
+fn assert_command_succeeded(output: &Output, operation: &str) {
+    assert!(
+        output.status.success(),
+        "{operation} failed with {}\nstdout:\n{}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn assert_dual_host_next_steps(output: &Output, mode: &str) {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for expected in [
+        "Claude Code:",
+        "Codex:",
+        "/bob-survey",
+        "/bob-model",
+        "$bob-survey",
+        "$bob-model",
+        "optional",
+        "mandatory",
+    ] {
+        assert!(
+            stdout.contains(expected),
+            "{mode} init next steps missing {expected:?}\nstdout:\n{stdout}"
+        );
+    }
 }
 
 #[test]
@@ -139,15 +168,20 @@ fn init_installs_byte_identical_dual_skill_trees() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
 
-    Command::new(run_bob_bin())
+    let output = Command::new(run_bob_bin())
         .args(["init", "--dir"])
         .arg(target)
-        .status()
+        .output()
         .expect("init");
+    assert_command_succeeded(&output, "full init");
+    assert_dual_host_next_steps(&output, "full");
 
     let claude = files_below(&target.join(SKILL_ROOTS[0]));
     let codex = files_below(&target.join(SKILL_ROOTS[1]));
-    assert_eq!(claude, codex, "installed skill trees must be byte- and mode-identical");
+    assert_eq!(
+        claude, codex,
+        "installed skill trees must be byte- and mode-identical"
+    );
 }
 
 #[test]
@@ -157,11 +191,13 @@ fn minimal_init_installs_all_nine_skills_for_both_hosts_only() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp.path();
 
-    Command::new(run_bob_bin())
+    let output = Command::new(run_bob_bin())
         .args(["init", "--minimal", "--no-gitignore", "--dir"])
         .arg(target)
-        .status()
+        .output()
         .expect("minimal init");
+    assert_command_succeeded(&output, "minimal init");
+    assert_dual_host_next_steps(&output, "minimal");
 
     let expected_skills = GENERATED_SKILLS.iter().copied().collect::<BTreeSet<_>>();
     for root in SKILL_ROOTS {
@@ -198,7 +234,10 @@ fn minimal_init_installs_all_nine_skills_for_both_hosts_only() {
                 .expect("UTF-8 target entry")
         })
         .collect::<BTreeSet<_>>();
-    assert_eq!(top_level, BTreeSet::from([".agents".to_string(), ".claude".to_string()]));
+    assert_eq!(
+        top_level,
+        BTreeSet::from([".agents".to_string(), ".claude".to_string()])
+    );
 }
 
 #[test]
@@ -213,11 +252,12 @@ fn init_without_force_preserves_existing_claude_skill_and_adds_codex() {
     let sentinel = b"user-owned Claude skill\n";
     std::fs::write(&claude_skill, sentinel).expect("write Claude skill sentinel");
 
-    Command::new(run_bob_bin())
+    let output = Command::new(run_bob_bin())
         .args(["init", "--no-gitignore", "--dir"])
         .arg(target)
-        .status()
+        .output()
         .expect("init");
+    assert_command_succeeded(&output, "init without force");
 
     let embedded = HARNESS_ASSETS
         .iter()
@@ -225,7 +265,10 @@ fn init_without_force_preserves_existing_claude_skill_and_adds_codex() {
         .expect("embedded bob-identify asset")
         .content
         .as_bytes();
-    assert_eq!(std::fs::read(&claude_skill).expect("read Claude sentinel"), sentinel);
+    assert_eq!(
+        std::fs::read(&claude_skill).expect("read Claude sentinel"),
+        sentinel
+    );
     assert_eq!(
         std::fs::read(target.join(".agents/skills/bob-identify/SKILL.md"))
             .expect("read installed Codex skill"),
