@@ -282,6 +282,43 @@ fn repository_install_skills_are_identical_and_dual_host() {
             && posix_install < posix_scope_end,
         "set -eu must gate POSIX build, test, then install inside one subshell"
     );
+    for contract in [
+        "manifest_version=$(awk '",
+        r#"expected_version="run-bob $manifest_version""#,
+        r#"if [ "$installed_version" != "$expected_version" ]; then"#,
+        "RUN_BOB_BIN=%s",
+        "RUN_BOB_VERSION=%s",
+    ] {
+        assert!(
+            posix_workflow.contains(contract),
+            "POSIX must verify and report the installed manifest version in scope: {contract}"
+        );
+    }
+    let posix_version_call = posix_workflow
+        .find(r#"installed_version=$("$run_bob_bin" --version)"#)
+        .expect("POSIX absolute binary version invocation");
+    let posix_version_compare = posix_workflow
+        .find(r#"if [ "$installed_version" != "$expected_version" ]; then"#)
+        .expect("POSIX exact manifest comparison");
+    let posix_help = posix_workflow
+        .find(r#""$run_bob_bin" --help"#)
+        .expect("POSIX absolute binary help invocation");
+    let posix_success_output = posix_workflow
+        .find("RUN_BOB_BIN=%s")
+        .expect("POSIX stable success output");
+    assert!(
+        posix_version_call < posix_version_compare
+            && posix_version_compare < posix_help
+            && posix_help < posix_success_output
+            && posix_success_output < posix_scope_end,
+        "POSIX must run version, compare it, run help, and emit success before leaving scope"
+    );
+    for diagnostic in ["path: %s", "expected: %s", "actual: %s"] {
+        assert!(
+            posix_workflow.contains(diagnostic),
+            "POSIX version failure must include {diagnostic}"
+        );
+    }
 
     let windows_install_root = windows_workflow
         .find("$env:CARGO_INSTALL_ROOT")
@@ -400,11 +437,54 @@ fn repository_install_skills_are_identical_and_dual_host() {
             && windows_finally < windows_remove,
         "Windows workflow must gate ordered stages inside try and restore scope in finally"
     );
+    for contract in [
+        "$expectedVersion = \"run-bob $manifestVersion\"",
+        "if ($installedVersion -cne $expectedVersion) {",
+        "Write-Output \"RUN_BOB_BIN=$runBobBinary\"",
+        "Write-Output \"RUN_BOB_VERSION=$manifestVersion\"",
+    ] {
+        assert!(
+            windows_workflow.contains(contract),
+            "Windows must verify and report the installed manifest version in scope: {contract}"
+        );
+    }
+    let windows_version_call = windows_workflow
+        .find("$installedVersionLines = @(& $runBobBinary --version)")
+        .expect("Windows absolute binary version invocation");
+    let windows_version_compare = windows_workflow
+        .find("if ($installedVersion -cne $expectedVersion) {")
+        .expect("Windows case-sensitive exact manifest comparison");
+    let windows_help = windows_workflow
+        .find("& $runBobBinary --help")
+        .expect("Windows absolute binary help invocation");
+    let windows_success_output = windows_workflow
+        .find("Write-Output \"RUN_BOB_BIN=$runBobBinary\"")
+        .expect("Windows stable success output");
+    assert!(
+        windows_version_call < windows_version_compare
+            && windows_version_compare < windows_help
+            && windows_help < windows_success_output
+            && windows_success_output < windows_finally,
+        "Windows must run version, compare it, run help, and emit success before finally"
+    );
+    assert_eq!(
+        windows_workflow
+            .matches("if (-not (Test-Path -LiteralPath $runBobBinary -PathType Leaf)) {")
+            .count(),
+        1,
+        "Windows binary existence check must not be duplicated"
+    );
+    assert!(
+        windows_workflow.contains("path=$runBobBinary")
+            && windows_workflow.contains("expected=$expectedVersion")
+            && windows_workflow.contains("actual=$installedVersion"),
+        "Windows version failure must report absolute path, expected, and actual values"
+    );
     for explanation in [
         "同一个 shell 或 PowerShell 进程",
         "install.root",
         "有意覆盖",
-        "不要重新读取环境变量或重新计算优先级",
+        "不要在作用域结束后重新读取环境变量或重新计算优先级",
     ] {
         assert!(
             body.contains(explanation),
@@ -448,6 +528,12 @@ fn repository_install_skills_are_identical_and_dual_host() {
     assert!(
         body.contains("Rust 工具链验证通过") && !body.contains("实际 Rust 版本"),
         "success output must not probe a potentially stale parent-shell rustc"
+    );
+    assert!(
+        body.contains("验证已在代码块作用域内完成")
+            && body.contains("依据已输出的 RUN_BOB_BIN 和 RUN_BOB_VERSION 记录汇报")
+            && !body.contains("使用步骤 3 中保存的同一个绝对根和二进制变量"),
+        "guidance must use stable output records rather than out-of-scope variables"
     );
 
     let mut in_fence = false;

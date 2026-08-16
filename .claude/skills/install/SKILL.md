@@ -76,10 +76,61 @@ POSIX 系统：
     ./scripts/bootstrap-rust.sh --run-cargo test --locked
     ./scripts/bootstrap-rust.sh --run-cargo install --locked --path .
 
+    manifest_version=$(awk '
+        BEGIN { in_package = 0; found = 0 }
+        /^[[:space:]]*\[package\][[:space:]]*$/ {
+            in_package = 1
+            next
+        }
+        /^[[:space:]]*\[/ {
+            if (in_package) {
+                in_package = 0
+            }
+            next
+        }
+        in_package && /^[[:space:]]*version[[:space:]]*=/ {
+            if ($0 !~ /^[[:space:]]*version[[:space:]]*=[[:space:]]*"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*"[[:space:]]*$/) {
+                exit 2
+            }
+            value = $0
+            sub(/^[[:space:]]*version[[:space:]]*=[[:space:]]*"/, "", value)
+            sub(/"[[:space:]]*$/, "", value)
+            print value
+            found++
+        }
+        END {
+            if (found != 1) {
+                exit 3
+            }
+        }
+    ' Cargo.toml) || {
+        printf '%s\n' 'error: Cargo.toml [package].version must appear exactly once as X.Y.Z' >&2
+        exit 1
+    }
+    expected_version="run-bob $manifest_version"
     run_bob_bin="$install_root/bin/run-bob"
-    test -f "$run_bob_bin"
-    installed_version=$("$run_bob_bin" --version)
-    "$run_bob_bin" --help >/dev/null
+    if [ ! -f "$run_bob_bin" ]; then
+        printf 'error: installed binary is missing\npath: %s\nexpected: %s\nactual: %s\n' \
+            "$run_bob_bin" "$expected_version" 'missing' >&2
+        exit 1
+    fi
+    installed_version=
+    if ! installed_version=$("$run_bob_bin" --version); then
+        printf 'error: installed binary --version failed\npath: %s\nexpected: %s\nactual: %s\n' \
+            "$run_bob_bin" "$expected_version" "$installed_version" >&2
+        exit 1
+    fi
+    if [ "$installed_version" != "$expected_version" ]; then
+        printf 'error: installed binary version mismatch\npath: %s\nexpected: %s\nactual: %s\n' \
+            "$run_bob_bin" "$expected_version" "$installed_version" >&2
+        exit 1
+    fi
+    if ! "$run_bob_bin" --help >/dev/null; then
+        printf 'error: installed binary --help failed\npath: %s\nexpected: %s\nactual: %s\n' \
+            "$run_bob_bin" "$expected_version" "$installed_version" >&2
+        exit 1
+    fi
+    printf 'RUN_BOB_BIN=%s\nRUN_BOB_VERSION=%s\n' "$run_bob_bin" "$manifest_version"
 )
 ```
 
@@ -111,14 +162,49 @@ try {
     & .\scripts\bootstrap-rust.ps1 -RunCargo @('install','--locked','--path','.')
     if ($LASTEXITCODE -ne 0) { throw 'run-bob install stage failed' }
 
+    $inPackage = $false
+    $manifestVersion = $null
+    $manifestVersionCount = 0
+    foreach ($manifestLine in Get-Content -LiteralPath .\Cargo.toml -ErrorAction Stop) {
+        if ($manifestLine -match '^\s*\[package\]\s*$') {
+            $inPackage = $true
+            continue
+        }
+        if ($inPackage -and $manifestLine -match '^\s*\[') {
+            $inPackage = $false
+            continue
+        }
+        if ($inPackage -and $manifestLine -match '^\s*version\s*=') {
+            if ($manifestLine -notmatch '^\s*version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"\s*$') {
+                throw 'Cargo.toml [package].version must be exactly X.Y.Z'
+            }
+            $manifestVersion = $Matches[1]
+            $manifestVersionCount++
+        }
+    }
+    if ($manifestVersionCount -ne 1) {
+        throw 'Cargo.toml [package].version must appear exactly once as X.Y.Z'
+    }
+    $expectedVersion = "run-bob $manifestVersion"
     $runBobBinary = Join-Path $installRoot 'bin\run-bob.exe'
     if (-not (Test-Path -LiteralPath $runBobBinary -PathType Leaf)) {
-        throw "installed run-bob binary not found at $runBobBinary"
+        throw "installed binary is missing: path=$runBobBinary expected=$expectedVersion actual=missing"
     }
-    $installedVersion = & $runBobBinary --version
-    if ($LASTEXITCODE -ne 0) { throw 'installed run-bob --version failed' }
-    & $runBobBinary --help
-    if ($LASTEXITCODE -ne 0) { throw 'installed run-bob --help failed' }
+    $installedVersionLines = @(& $runBobBinary --version)
+    if ($LASTEXITCODE -ne 0) {
+        $installedVersion = $installedVersionLines -join [Environment]::NewLine
+        throw "installed binary --version failed: path=$runBobBinary expected=$expectedVersion actual=$installedVersion"
+    }
+    $installedVersion = $installedVersionLines -join [Environment]::NewLine
+    if ($installedVersion -cne $expectedVersion) {
+        throw "installed binary version mismatch: path=$runBobBinary expected=$expectedVersion actual=$installedVersion"
+    }
+    $null = & $runBobBinary --help
+    if ($LASTEXITCODE -ne 0) {
+        throw "installed binary --help failed: path=$runBobBinary expected=$expectedVersion actual=$installedVersion"
+    }
+    Write-Output "RUN_BOB_BIN=$runBobBinary"
+    Write-Output "RUN_BOB_VERSION=$manifestVersion"
 }
 finally {
     if ($hadCargoInstallRoot) {
@@ -142,9 +228,9 @@ finally {
 
 ## 4. 用绝对路径验证
 
-使用步骤 3 中保存的同一个绝对根和二进制变量；不要重新读取环境变量或重新计算优先级。POSIX 使用 `$run_bob_bin`，Windows 使用 `$runBobBinary`。先确认它是常规文件，再以这个绝对路径运行 `--version` 和 `--help`；不要依赖 PATH 中可能存在的旧版本。
+验证已在代码块作用域内完成：限定读取 Cargo.toml 的 [package].version，以绝对二进制路径执行 --version 和 --help，并严格要求输出等于 run-bob X.Y.Z。不要在作用域结束后重新读取环境变量或重新计算优先级，也不要复用局部变量或依赖 PATH 中可能存在的旧版本。
 
-同时读取 `Cargo.toml` 的 `[package].version`，要求绝对路径输出的 `run-bob X.Y.Z` 与其完全一致。若找不到文件、任一命令失败或版本不一致，停止并报告：
+只有文件存在、两条命令成功且版本严格相等时，代码块才输出 RUN_BOB_BIN 和 RUN_BOB_VERSION。失败时停止并报告：
 
 - 解析出的绝对安装路径；
 - manifest 版本与实际版本；
@@ -155,7 +241,7 @@ finally {
 
 ## 5. 汇报
 
-成功时简要报告 Git 同步状态、Rust 工具链验证通过、三个 locked 阶段均成功、绝对安装路径及已验证版本。不要硬编码测试数量，也不要粘贴完整构建日志。
+宿主依据已输出的 RUN_BOB_BIN 和 RUN_BOB_VERSION 记录汇报。成功时简要报告 Git 同步状态、Rust 工具链验证通过、三个 locked 阶段均成功、绝对安装路径及已验证版本。不要硬编码测试数量，也不要粘贴完整构建日志。
 
 ## 边界
 
